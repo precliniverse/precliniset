@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import argparse
+import os
+import subprocess
+import platform
 
 def check_dependencies():
     """Check if critical dependencies are installed."""
@@ -96,10 +99,25 @@ def main():
 
     # 2. Lazy imports to avoid crashing before check
     try:
-        from app.cli.menu import InteractiveMenu
+        # Try importing from cli_core first (New architecture)
+        try:
+            from cli_core.menu import InteractiveMenu
+        except ImportError:
+            # Fallback to app.cli.menu
+            from app.cli.menu import InteractiveMenu
+            
         from app.cli.main import main as cli_main
         
-        # Interactive menu only when explicitly requested
+        # Interactive menu only when explicitly requested or no arguments provided
+        if len(sys.argv) == 1:
+            try:
+                menu = InteractiveMenu()
+                menu.run()
+                sys.exit(0)
+            except KeyboardInterrupt:
+                print("\nGoodbye!")
+                sys.exit(0)
+
         parser = argparse.ArgumentParser(description="Precliniset CLI")
         parser.add_argument('--debug', action='store_true', help='Enable debug mode')
         parser.add_argument('--interactive', action='store_true', help='Launch interactive dashboard')
@@ -117,16 +135,21 @@ def main():
     except ImportError as e:
         # FALLBACK MODE for missing dependencies (e.g. Flask)
         if "No module named 'flask'" in str(e) or "No module named 'app'" in str(e):
-            print("\n" + "!"*60)
-            print(" RUNNING IN MINIMAL FALLBACK MODE")
-            print(" Critical dependencies (Flask) are missing.")
-            print(" Only 'deploy' (Docker), 'setup' and 'logs' commands are available.")
-            print("!"*60 + "\n")
+            # Only show warning if we didn't already show the "Missing packages" banner
+            if not missing:
+                print("\n" + "!"*60)
+                print(" RUNNING IN MINIMAL FALLBACK MODE")
+                print(" Critical dependencies (Flask) are missing.")
+                print(" Only 'deploy' (Docker), 'setup' and 'logs' commands are available.")
+                print("!"*60 + "\n")
             
-            import platform
-            import subprocess
-            import os
-            
+            # Detect Architecture for RPi
+            compose_file = "docker-compose.yml"
+            arch = platform.machine().lower()
+            if arch in ['armv7l', 'armv6l']:
+                 compose_file = "docker-compose-rpi2.yml"
+                 print(f" Detected Raspberry Pi ({arch}). Using {compose_file}\n")
+
             # Support basic setup even in fallback
             try:
                 from cli_core.wizard import ConfigWizard
@@ -136,23 +159,18 @@ def main():
 
             # Simple Argument Handling
             if len(sys.argv) > 1:
-                cmd = sys.argv[1]
+                cmd = sys.argv[1].lower()
             else:
-                cmd = "--help"
+                # DEFAULT to dashboard even in minimal mode!
+                cmd = "dashboard"
 
             if cmd in ['--help', '-h']:
                 print("Available commands in Minimal Mode:")
-                print("  python manage.py setup    -> Configure environment (.env)")
-                print("  python manage.py deploy   -> Deploy using Docker")
-                print("  python manage.py logs     -> View logs")
+                print("  python manage.py dashboard -> Launch interactive dashboard (Recommended)")
+                print("  python manage.py setup     -> Configure environment (.env)")
+                print("  python manage.py deploy    -> Build and start Docker containers")
+                print("  python manage.py logs      -> View live logs")
                 sys.exit(0)
-
-            # Detect Architecture for RPi
-            compose_file = "docker-compose.yml"
-            arch = platform.machine().lower()
-            if arch in ['armv7l', 'armv6l']:
-                 compose_file = "docker-compose-rpi2.yml"
-                 print(f" Detected Raspberry Pi ({arch}). Using {compose_file}")
 
             if cmd == "setup":
                 if HAS_WIZARD:
@@ -160,6 +178,16 @@ def main():
                     wizard.run()
                 else:
                     print("[error] Could not launch configuration wizard. Missing cli_core files.")
+                    sys.exit(1)
+
+            elif cmd == "dashboard":
+                try:
+                    from cli_core.menu import InteractiveMenu
+                    menu = InteractiveMenu()
+                    menu.run()
+                except Exception as ex:
+                    print(f"[error] Could not launch dashboard: {ex}")
+                    print("Try running: python manage.py setup")
                     sys.exit(1)
 
             elif cmd == "deploy":

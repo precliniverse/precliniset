@@ -185,12 +185,13 @@ class ConfigWizard:
         elif 'SUPERADMIN_PASSWORD' not in self.config:
              self.config['SUPERADMIN_PASSWORD'] = generate_secret(12)
         
-        console.print("\n[cyan]--- Inter-App Communication Keys ---[/cyan]")
-        self.config['SERVICE_API_KEY'] = generate_secret(32)
-        console.print("[green]Generated SERVICE_API_KEY for ecosystem communication.[/green]")
+        if 'SERVICE_API_KEY' not in self.config:
+            self.config['SERVICE_API_KEY'] = generate_secret(32)
+            console.print("[green]Generated SERVICE_API_KEY for ecosystem communication.[/green]")
         
-        self.config['SSO_SECRET_KEY'] = generate_secret(32)
-        console.print("[green]Generated SSO_SECRET_KEY for seamless login.[/green]")
+        if 'SSO_SECRET_KEY' not in self.config:
+            self.config['SSO_SECRET_KEY'] = generate_secret(32)
+            console.print("[green]Generated SSO_SECRET_KEY for seamless login.[/green]")
         
         console.print("\n[cyan]--- Training Manager Integration ---[/cyan]")
         current_tm = self.config.get('TM_ENABLED', 'False') == 'True'
@@ -223,8 +224,10 @@ class ConfigWizard:
                 self.config['DB_HOST'] = 'db'
                 self.config['DB_NAME'] = 'precliniset'
                 self.config['DB_USER'] = 'appuser'
-                self.config['DB_PASSWORD'] = generate_secret(16)
-                self.config['DB_ROOT_PASSWORD'] = generate_secret(16)
+                if not self.config.get('DB_PASSWORD'):
+                    self.config['DB_PASSWORD'] = generate_secret(16)
+                if not self.config.get('DB_ROOT_PASSWORD'):
+                    self.config['DB_ROOT_PASSWORD'] = generate_secret(16)
                 
                 arch = get_architecture()
                 if arch == 'armv7l':
@@ -245,6 +248,7 @@ class ConfigWizard:
             c = Prompt.ask("Choice", choices=["1", "2"], default=default_choice)
             if c == '1':
                 self.config['DB_TYPE'] = 'sqlite'
+                if 'mysql' in profiles: profiles.remove('mysql')
             else:
                 self._ask_external_db()
         

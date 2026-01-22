@@ -1,4 +1,4 @@
-# French translations for precliniverse.
+# French translations for precliniset.
 # Copyright (C) 2025 ORGANIZATION
 # This file is distributed under the same license as the PROJECT project.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2025.
@@ -9,7 +9,7 @@ msgstr ""
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
 "POT-Creation-Date: 2026-01-21 15:08+0100\n"
 "PO-Revision-Date: 2026-01-14 10:00+0100\n"
-"Last-Translator: Precliniverse Team <dev@precliniverse.com>\n"
+"Last-Translator: Precliniset Team <dev@precliniset.com>\n"
 "Language: fr\n"
 "Language-Team: fr <LL@li.org>\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
@@ -407,8 +407,8 @@ msgstr ""
 
 #: app/main/routes.py:96 templates/email/test_email.html:5
 #: templates/email/test_email.html:45
-msgid "Precliniverse Test Email"
-msgstr "E-mail de test Precliniverse"
+msgid "Precliniset Test Email"
+msgstr "E-mail de test Precliniset"
 
 #: app/main/routes.py:100
 #, python-brace-format
@@ -621,8 +621,8 @@ msgid "Experiment App"
 msgstr "Application expérimentale"
 
 #: templates/base.html:29
-msgid "Precliniverse"
-msgstr "Precliniverse"
+msgid "Precliniset"
+msgstr "Precliniset"
 
 #: templates/base.html:31
 msgid "Toggle navigation"
@@ -3496,8 +3496,8 @@ msgid "Re-Run"
 msgstr "Relancer"
 
 #: templates/email/activate.html:5 templates/email/activate.html:68
-msgid "Welcome to Precliniverse!"
-msgstr "Bienvenue sur Precliniverse !"
+msgid "Welcome to Precliniset!"
+msgstr "Bienvenue sur Precliniset !"
 
 #: templates/email/activate.html:71 templates/email/reset_password.html:71
 #: templates/email/set_password.html:71
@@ -3507,11 +3507,11 @@ msgstr "Bonjour %(username)s,"
 
 #: templates/email/activate.html:74
 msgid ""
-"Thank you for registering for Precliniverse, your new hub for managing "
+"Thank you for registering for Precliniset, your new hub for managing "
 "preclinical research data. To get started, you need to activate your "
 "account by clicking the button below."
 msgstr ""
-"Merci de vous être inscrit à Precliniverse, votre nouvelle plateforme "
+"Merci de vous être inscrit à Precliniset, votre nouvelle plateforme "
 "pour la gestion des données de recherche préclinique. Pour commencer, "
 "vous devez activer votre compte en cliquant sur le bouton ci-dessous."
 
@@ -3554,7 +3554,7 @@ msgid ""
 " App account."
 msgstr ""
 "Vous avez demandé à changer l'adresse e-mail associée à votre compte "
-"Precliniverse."
+"Precliniset."
 
 #: templates/email/change_email.html:18
 msgid ""
@@ -3571,11 +3571,11 @@ msgstr "Confirmer la nouvelle adresse e-mail"
 
 #: templates/email/change_email.html:23
 msgid "Thanks,<br>The Experiment App Team"
-msgstr "Merci,<br>L'équipe Precliniverse"
+msgstr "Merci,<br>L'équipe Precliniset"
 
 #: templates/email/reset_password.html:5
-msgid "Reset Your Precliniverse Password"
-msgstr "Réinitialiser votre mot de passe Precliniverse"
+msgid "Reset Your Precliniset Password"
+msgstr "Réinitialiser votre mot de passe Precliniset"
 
 #: templates/email/reset_password.html:68
 msgid "Password Reset Request"
@@ -3583,11 +3583,11 @@ msgstr "Demande de réinitialisation de mot de passe"
 
 #: templates/email/reset_password.html:74
 msgid ""
-"You have requested to reset your password for your Precliniverse account."
+"You have requested to reset your password for your Precliniset account."
 " Click the button below to reset your password:"
 msgstr ""
 "Vous avez demandé à réinitialiser votre mot de passe pour votre compte "
-"Precliniverse. Cliquez sur le bouton ci-dessous pour le réinitialiser :"
+"Precliniset. Cliquez sur le bouton ci-dessous pour le réinitialiser :"
 
 #: templates/email/reset_password.html:81
 msgid ""
@@ -3598,15 +3598,15 @@ msgstr ""
 "e-mail. Votre mot de passe restera inchangé."
 
 #: templates/email/set_password.html:5 templates/email/set_password.html:68
-msgid "Set Your Precliniverse Password"
-msgstr "Définir votre mot de passe Precliniverse"
+msgid "Set Your Precliniset Password"
+msgstr "Définir votre mot de passe Precliniset"
 
 #: templates/email/set_password.html:74
 msgid ""
-"An administrator has invited you to Precliniverse. Please click the "
+"An administrator has invited you to Precliniset. Please click the "
 "button below to set your password and activate your account."
 msgstr ""
-"Un administrateur vous a invité sur Precliniverse. Veuillez cliquer sur "
+"Un administrateur vous a invité sur Precliniset. Veuillez cliquer sur "
 "le bouton ci-dessous pour définir votre mot de passe et activer votre "
 "compte."
 
@@ -3630,10 +3630,10 @@ msgstr "Bonjour,"
 
 #: templates/email/test_email.html:51
 msgid ""
-"This is a test email sent from your Precliniverse application to verify "
+"This is a test email sent from your Precliniset application to verify "
 "that the SMTP settings are configured correctly."
 msgstr ""
-"Ceci est un e-mail de test envoyé depuis votre application Precliniverse "
+"Ceci est un e-mail de test envoyé depuis votre application Precliniset "
 "pour vérifier que les paramètres SMTP sont correctement configurés."
 
 #: templates/email/test_email.html:54
@@ -3641,8 +3641,8 @@ msgid "If you have received this, your email configuration is working!"
 msgstr "Si vous avez reçu ceci, votre configuration d'e-mail fonctionne !"
 
 #: templates/email/test_email.html:57
-msgid "This is an automated message from your Precliniverse instance."
-msgstr "Ceci est un message automatisé de votre instance Precliniverse."
+msgid "This is an automated message from your Precliniset instance."
+msgstr "Ceci est un message automatisé de votre instance Precliniset."
 
 #: templates/email/workplan_update.html:5
 msgid "Workplan Update Notification"
@@ -4745,8 +4745,8 @@ msgid "Export JSON Data"
 msgstr "Exporter les données JSON"
 
 #: templates/main/documentation.html:30
-msgid "Precliniverse Documentation"
-msgstr "Documentation Precliniverse"
+msgid "Precliniset Documentation"
+msgstr "Documentation Precliniset"
 
 #: templates/main/documentation.html:32
 msgid "Full Technical Manual"
@@ -4879,8 +4879,8 @@ msgstr ""
 "les données animales via Excel pour une configuration en masse."
 
 #: templates/main/index.html:4
-msgid "Welcome to precliniverse"
-msgstr "Bienvenue sur Precliniverse"
+msgid "Welcome to precliniset"
+msgstr "Bienvenue sur Precliniset"
 
 #: templates/main/index.html:5
 msgid ""
@@ -5194,10 +5194,10 @@ msgstr "Gestion des jetons API"
 #: templates/main/settings.html:123
 msgid ""
 "API tokens allow external applications or scripts to access your "
-"Precliniverse data programmatically."
+"Precliniset data programmatically."
 msgstr ""
 "Les jetons API permettent aux applications ou scripts externes d'accéder "
-"à vos données Precliniverse de manière programmatique."
+"à vos données Precliniset de manière programmatique."
 
 #: templates/main/settings.html:127
 msgid "Your New API Token:"

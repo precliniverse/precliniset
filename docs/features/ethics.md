@@ -1,6 +1,6 @@
 # Ethical Approvals (3Rs)
 
-Precliniverse helps you stay compliant with animal welfare regulations (e.g., EU Directive 2010/63/EU, French APAFIS).
+Precliniset helps you stay compliant with animal welfare regulations (e.g., EU Directive 2010/63/EU, French APAFIS).
 
 [TOC]
 

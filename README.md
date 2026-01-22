@@ -67,7 +67,7 @@ Deployment can be done either natively (python and redis) or docker containers.
 
 ### 1. Installation
 ```bash
-git clone https://github.com/precliniverse/precliniset
+git clone https://github.com/precliniset/precliniset
 cd precliniset
 ```
 

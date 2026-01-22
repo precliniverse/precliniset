@@ -1,6 +1,6 @@
 # Project Management
 
-The **Project** is the fundamental container in Precliniverse. It organizes your research into logical scientific units, ensuring that data is traceable, secure, and accessible only to the right people.
+The **Project** is the fundamental container in Precliniset. It organizes your research into logical scientific units, ensuring that data is traceable, secure, and accessible only to the right people.
 
 [TOC]
 
@@ -46,7 +46,7 @@ Restricted to **Project Owners** and **Team Admins**.
 ---
 
 ## 3. Collaboration & Permissions
-Precliniverse uses a rigorous **Role-Based Access Control (RBAC)** system.
+Precliniset uses a rigorous **Role-Based Access Control (RBAC)** system.
 
 ### Team Ownership
 A project belongs primarily to a **Team** (e.g., "Pharmacology").

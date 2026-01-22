@@ -41,7 +41,7 @@ def test_login_logout(test_client, init_database):
     response = logout(test_client)
     assert response.status_code == 200
     assert b'You have been logged out.' in response.data
-    assert b'Welcome to precliniverse' in response.data
+    assert b'Welcome to precliniset' in response.data
 
 def test_login_with_invalid_credentials(test_client, init_database):
     """

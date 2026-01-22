@@ -9,7 +9,7 @@ msgstr ""
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
 "POT-Creation-Date: 2026-01-21 15:08+0100\n"
 "PO-Revision-Date: 2026-01-13 13:00+0100\n"
-"Last-Translator: Precliniverse Team <dev@precliniverse.com>\n"
+"Last-Translator: Precliniset Team <dev@precliniset.com>\n"
 "Language: en\n"
 "Language-Team: en <LL@li.org>\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
@@ -352,7 +352,7 @@ msgstr ""
 
 #: app/main/routes.py:96 templates/email/test_email.html:5
 #: templates/email/test_email.html:45
-msgid "Precliniverse Test Email"
+msgid "Precliniset Test Email"
 msgstr ""
 
 #: app/main/routes.py:100
@@ -549,7 +549,7 @@ msgid "Experiment App"
 msgstr ""
 
 #: templates/base.html:29
-msgid "Precliniverse"
+msgid "Precliniset"
 msgstr ""
 
 #: templates/base.html:31
@@ -3352,7 +3352,7 @@ msgid "Re-Run"
 msgstr ""
 
 #: templates/email/activate.html:5 templates/email/activate.html:68
-msgid "Welcome to Precliniverse!"
+msgid "Welcome to Precliniset!"
 msgstr ""
 
 #: templates/email/activate.html:71 templates/email/reset_password.html:71
@@ -3363,7 +3363,7 @@ msgstr ""
 
 #: templates/email/activate.html:74
 msgid ""
-"Thank you for registering for Precliniverse, your new hub for managing "
+"Thank you for registering for Precliniset, your new hub for managing "
 "preclinical research data. To get started, you need to activate your "
 "account by clicking the button below."
 msgstr ""
@@ -3420,7 +3420,7 @@ msgid "Thanks,<br>The Experiment App Team"
 msgstr ""
 
 #: templates/email/reset_password.html:5
-msgid "Reset Your Precliniverse Password"
+msgid "Reset Your Precliniset Password"
 msgstr ""
 
 #: templates/email/reset_password.html:68
@@ -3429,7 +3429,7 @@ msgstr ""
 
 #: templates/email/reset_password.html:74
 msgid ""
-"You have requested to reset your password for your Precliniverse account."
+"You have requested to reset your password for your Precliniset account."
 " Click the button below to reset your password:"
 msgstr ""
 
@@ -3440,12 +3440,12 @@ msgid ""
 msgstr ""
 
 #: templates/email/set_password.html:5 templates/email/set_password.html:68
-msgid "Set Your Precliniverse Password"
+msgid "Set Your Precliniset Password"
 msgstr ""
 
 #: templates/email/set_password.html:74
 msgid ""
-"An administrator has invited you to Precliniverse. Please click the "
+"An administrator has invited you to Precliniset. Please click the "
 "button below to set your password and activate your account."
 msgstr ""
 
@@ -3467,7 +3467,7 @@ msgstr ""
 
 #: templates/email/test_email.html:51
 msgid ""
-"This is a test email sent from your Precliniverse application to verify "
+"This is a test email sent from your Precliniset application to verify "
 "that the SMTP settings are configured correctly."
 msgstr ""
 
@@ -3476,7 +3476,7 @@ msgid "If you have received this, your email configuration is working!"
 msgstr ""
 
 #: templates/email/test_email.html:57
-msgid "This is an automated message from your Precliniverse instance."
+msgid "This is an automated message from your Precliniset instance."
 msgstr ""
 
 #: templates/email/workplan_update.html:5
@@ -4534,7 +4534,7 @@ msgid "Export JSON Data"
 msgstr ""
 
 #: templates/main/documentation.html:30
-msgid "Precliniverse Documentation"
+msgid "Precliniset Documentation"
 msgstr ""
 
 #: templates/main/documentation.html:32
@@ -4657,7 +4657,7 @@ msgid ""
 msgstr ""
 
 #: templates/main/index.html:4
-msgid "Welcome to precliniverse"
+msgid "Welcome to precliniset"
 msgstr ""
 
 #: templates/main/index.html:5
@@ -4951,7 +4951,7 @@ msgstr ""
 #: templates/main/settings.html:123
 msgid ""
 "API tokens allow external applications or scripts to access your "
-"Precliniverse data programmatically."
+"Precliniset data programmatically."
 msgstr ""
 
 #: templates/main/settings.html:127

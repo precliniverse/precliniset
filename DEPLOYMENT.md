@@ -1,8 +1,8 @@
-# Precliniverse Deployment Guide
+# Precliniset Deployment Guide
 
-This guide covers the **Installation**, **Configuration**, and **Maintenance** of Precliniverse for both development and production environments.
+This guide covers the **Installation**, **Configuration**, and **Maintenance** of Precliniset for both development and production environments.
 
-Precliniverse supports two primary deployment modes:
+Precliniset supports two primary deployment modes:
 1.  **Docker Deployment (Recommended)**: Easiest to install and upgrade. Installs everything (DB, Redis, App) in isolated containers.
 2.  **Native Deployment (Advanced)**: For servers where you want to run directly on the host OS (Linux/Windows) using Python `venv` and `systemd`.
 
@@ -53,7 +53,7 @@ python manage.py deploy
 Run `python manage.py` to launch the dashboard. Here is a breakdown of every function available in the menu.
 
 ![Application Dashboard](docs/img/dashboard.png)
-*Fig. The main landing page for Precliniverse.*
+*Fig. The main landing page for Precliniset.*
 
 ### 🟢 Status & Services
 Shows the real-time health of your stack.
@@ -84,7 +84,7 @@ Shows the real-time health of your stack.
 This section explains the professional workflow for managing database changes and releases.
 
 ### 1. Database Migrations are Code
-In Precliniverse, **database tables are NOT created automatically** by the code. They are managed by migration scripts in `migrations/versions/`.
+In Precliniset, **database tables are NOT created automatically** by the code. They are managed by migration scripts in `migrations/versions/`.
 
 *   **Rule #1**: These scripts are part of your source code. You **MUST commit them to Git**.
 *   **Rule #2**: Never modify the database schema (models) without generating a corresponding migration.
@@ -120,7 +120,7 @@ This mode is ideal for dedicated servers (Ubuntu/Debian) where you want to execu
 When you run `python manage.py deploy`, the script will:
 1.  **Check for system dependencies** (like `redis-server`) and suggest installation if missing.
 2.  **Create a virtual environment** and install Python packages.
-3.  **Generate Systemd service files**: `precliniverse.service` and `precliniverse-worker.service`.
+3.  **Generate Systemd service files**: `precliniset.service` and `precliniset-worker.service`.
 
 > [!IMPORTANT]
 > **Scientific Stack on Raspberry Pi 2/3**: 
@@ -136,15 +136,15 @@ After `deploy` finishes, you must move the generated files to the system directo
 
 ```bash
 # 1. Move service files
-sudo mv precliniverse.service /etc/systemd/system/
-sudo mv precliniverse-worker.service /etc/systemd/system/
+sudo mv precliniset.service /etc/systemd/system/
+sudo mv precliniset-worker.service /etc/systemd/system/
 
 # 2. Reload Systemd
 sudo systemctl daemon-reload
 
 # 3. Enable and Start
-sudo systemctl enable --now precliniverse
-sudo systemctl enable --now precliniverse-worker
+sudo systemctl enable --now precliniset
+sudo systemctl enable --now precliniset-worker
 ```
 
 ### Updates
@@ -158,7 +158,7 @@ This will pull code, update pip packages, run DB migrations, and restart the sys
 
 ## 🛡️ Security & Code Quality
 
-Precliniverse includes automated security scanners to ensure code quality and dependency safety.
+Precliniset includes automated security scanners to ensure code quality and dependency safety.
 
 ### Running Security Checks
 The project provides a dedicated script to run multiple scanners:
@@ -182,7 +182,7 @@ Regularly running these checks is part of a healthy GLP-ready maintenance cycle.
 To backup your database (Native MySQL or Docker Internal):
 ```bash
 # Docker
-docker compose exec db mysqldump -u root -p[ROOT_PASSWORD] precliniverse > backup.sql
+docker compose exec db mysqldump -u root -p[ROOT_PASSWORD] precliniset > backup.sql
 
 # Native
 mysqldump -u [USER] -p[PASSWORD] [DB_NAME] > backup.sql
@@ -192,7 +192,7 @@ mysqldump -u [USER] -p[PASSWORD] [DB_NAME] > backup.sql
 **Warning: This overwrites data!**
 ```bash
 # Docker
-cat backup.sql | docker compose exec -T db mysql -u root -p[ROOT_PASSWORD] precliniverse
+cat backup.sql | docker compose exec -T db mysql -u root -p[ROOT_PASSWORD] precliniset
 
 # Native
 mysql -u [USER] -p[PASSWORD] [DB_NAME] < backup.sql

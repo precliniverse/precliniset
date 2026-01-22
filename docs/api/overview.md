@@ -1,6 +1,6 @@
 # API Overview
 
-Precliniverse provides a comprehensive RESTful API for automation and integration.
+Precliniset provides a comprehensive RESTful API for automation and integration.
 
 ## Authentication
 The API uses **Header-based Authentication**.

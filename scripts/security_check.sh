@@ -1,9 +1,9 @@
 #!/bin/bash
-# Precliniverse Security Check Script
+# Precliniset Security Check Script
 # This script runs static analysis and dependency auditing.
 
 echo "========================================="
-echo "🛡️  Running Precliniverse Security Audit"
+echo "🛡️  Running Precliniset Security Audit"
 echo "========================================="
 
 # 1. Bandit (Static Analysis)

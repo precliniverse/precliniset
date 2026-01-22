@@ -1,6 +1,6 @@
 # app/models/auth.py
 """
-Authentication and RBAC models for the Precliniverse application.
+Authentication and RBAC models for the Precliniset application.
 Includes User, Role, Permission, and their associations.
 """
 import secrets

@@ -78,7 +78,7 @@ Once the table is created for a specific date (e.g., *Day 7*):
 ---
 
 ## 3. Statistical Analysis
-Precliniverse embeds a statistical engine (using `scipy` and `statsmodels`).
+Precliniset embeds a statistical engine (using `scipy` and `statsmodels`).
 
 ### One-Click-Analysis
 In any DataTable, click the **Analysis** tab.

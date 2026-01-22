@@ -9,7 +9,7 @@ from .ecosystem import test_ecosystem_link
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Precliniverse CLI",
+        description="Precliniset CLI",
         epilog="💡 TIP: Run 'python manage.py --interactive' for an interactive dashboard with visual menus."
     )
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')

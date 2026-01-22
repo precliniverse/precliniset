@@ -17,8 +17,8 @@ authorizations = {
 api = Api(
     api_bp,
     version='1.0',
-    title='Precliniverse API',
-    description='A RESTful API for Precliniverse application',
+    title='Precliniset API',
+    description='A RESTful API for Precliniset application',
     doc='/doc/',
     authorizations=authorizations,
     security='BearerAuth'

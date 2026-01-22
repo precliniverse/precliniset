@@ -1,6 +1,6 @@
 # app/models/enums.py
 """
-Enumeration classes for the Precliniverse application.
+Enumeration classes for the Precliniset application.
 """
 import enum
 

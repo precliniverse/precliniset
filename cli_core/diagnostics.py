@@ -217,7 +217,7 @@ def check_health():
         style = "[green]Available[/green]" if docker_ok else "[dim]Not Found[/dim]"
         table.add_row("Docker Engine", style, f"(Optional) {docker_msg}")
 
-    # 4. Redis (Precliniverse specific)
+    # 4. Redis (Precliniset specific)
     redis_url = config.get('CELERY_BROKER_URL')
     if redis_url:
         # Additional check for Linux Redis service

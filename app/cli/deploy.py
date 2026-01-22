@@ -164,7 +164,7 @@ class DockerDeployer:
             except FileNotFoundError:
                 tag = f"v{time.strftime('%Y.%m.%d')}"
         
-        image_name = f"precliniverse:{tag}"
+        image_name = f"precliniset:{tag}"
         console.print(f"[info]Building release image: [bold]{image_name}[/bold]...[/info]")
         
         # 1. Build the image
@@ -196,7 +196,7 @@ class DockerDeployer:
             
             # 4. Create DEPLOY.txt
             with open(os.path.join(dist_dir, "DEPLOY.txt"), 'w') as f:
-                f.write("Precliniverse Deployment Package\n")
+                f.write("Precliniset Deployment Package\n")
                 f.write("="*30 + "\n\n")
                 f.write(f"Version: {tag}\n")
                 f.write(f"Release Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
@@ -204,7 +204,7 @@ class DockerDeployer:
                 f.write("1. Copy the contents of this folder to your server.\n")
                 f.write("2. Ensure you have a .env file (you can use 'python manage.py setup' to generate one).\n")
                 f.write("3. Run: docker compose up -d\n\n")
-                f.write("Note: This package assumes the image 'precliniverse:" + tag + "' is available locally or in a registry.\n")
+                f.write("Note: This package assumes the image 'precliniset:" + tag + "' is available locally or in a registry.\n")
 
             console.print(f"[bold green]Release created successfully in '{dist_dir}/'[/bold green]")
             console.print(f"Package contains: docker-compose.yml, DEPLOY.txt")
@@ -263,7 +263,7 @@ class NativeDeployer:
              # That is a development task.
              return
         
-        # Precliniverse specific custom setup commands
+        # Precliniset specific custom setup commands
         console.print("[info]Running application setup/seed...[/info]")
         run_command(f'"{python_exec}" -m flask setup init-admin', check=False)
         run_command(f'"{python_exec}" -m flask setup static-resources', check=False)

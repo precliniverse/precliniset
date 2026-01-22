@@ -1,12 +1,12 @@
 # Import Pipelines
 
-The **Import Pipeline** feature allows you to extend the capabilities of the Precliniverse Import Wizard by using custom Python scripts. This is essential for dealing with extremely complex, unstructured, or propriety file formats that cannot be handled by standard row-skipping or text-anchor logic.
+The **Import Pipeline** feature allows you to extend the capabilities of the Precliniset Import Wizard by using custom Python scripts. This is essential for dealing with extremely complex, unstructured, or propriety file formats that cannot be handled by standard row-skipping or text-anchor logic.
 
 [TOC]
 
 ## 1. Concept
 
-An **Import Pipeline** is a small Python script stored within the system. It bridges the gap between a messy raw file and the structured data Precliniverse expects.
+An **Import Pipeline** is a small Python script stored within the system. It bridges the gap between a messy raw file and the structured data Precliniset expects.
 
 *   **Input**: The raw path to an uploaded file (Excel, CSV, txt, etc.).
 *   **Processing**: Your custom Python logic (pandas, numpy, regex, etc.).
@@ -99,7 +99,7 @@ def parse(file_path):
 
 ### The Output (Internal Data representation)
 
-The script returns this structure to Precliniverse:
+The script returns this structure to Precliniset:
 
 ```json
 [

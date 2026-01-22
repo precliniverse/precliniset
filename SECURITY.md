@@ -7,7 +7,7 @@
 | < 1.0   | :x:                |
 
 ## Reporting a Vulnerability
-If you discover a security vulnerability within Precliniverse, please do not open a public issue.
+If you discover a security vulnerability within Precliniset, please do not open a public issue.
 
 Create an issue in github
 

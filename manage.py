@@ -100,7 +100,7 @@ def main():
         from app.cli.main import main as cli_main
         
         # Interactive menu only when explicitly requested
-        parser = argparse.ArgumentParser(description="Precliniverse CLI")
+        parser = argparse.ArgumentParser(description="Precliniset CLI")
         parser.add_argument('--debug', action='store_true', help='Enable debug mode')
         parser.add_argument('--interactive', action='store_true', help='Launch interactive dashboard')
         args, unknown = parser.parse_known_args()

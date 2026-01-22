@@ -174,7 +174,7 @@ class ConfigWizard:
             self.config['SECURITY_PASSWORD_SALT'] = generate_secret(20)
         
         console.print("\n[cyan]--- Super Admin ---[/cyan]")
-        self.config['SUPERADMIN_EMAIL'] = Prompt.ask("Admin Email", default=self.config.get('SUPERADMIN_EMAIL', "admin@precliniverse.com"))
+        self.config['SUPERADMIN_EMAIL'] = Prompt.ask("Admin Email", default=self.config.get('SUPERADMIN_EMAIL', "admin@example.com"))
         
         # Don't show existing password, but allow changing
         pwd_prompt = "Admin Password (leave empty to keep current)" if 'SUPERADMIN_PASSWORD' in self.config else "Admin Password"
@@ -221,7 +221,7 @@ class ConfigWizard:
             if c == '1':
                 self.config['DB_TYPE'] = 'mysql'
                 self.config['DB_HOST'] = 'db'
-                self.config['DB_NAME'] = 'precliniverse'
+                self.config['DB_NAME'] = 'precliniset'
                 self.config['DB_USER'] = 'appuser'
                 self.config['DB_PASSWORD'] = generate_secret(16)
                 self.config['DB_ROOT_PASSWORD'] = generate_secret(16)
@@ -256,7 +256,7 @@ class ConfigWizard:
         self.config['DB_TYPE'] = 'mysql'
         self.config['DB_HOST'] = Prompt.ask("DB Host", default=self.config.get('DB_HOST', default_host))
         self.config['DB_PORT'] = Prompt.ask("DB Port", default=self.config.get('DB_PORT', "3306"))
-        self.config['DB_NAME'] = Prompt.ask("DB Name", default=self.config.get('DB_NAME', "precliniverse"))
+        self.config['DB_NAME'] = Prompt.ask("DB Name", default=self.config.get('DB_NAME', "precliniset"))
         self.config['DB_USER'] = Prompt.ask("DB User", default=self.config.get('DB_USER'))
         
         # Careful with password prompt default

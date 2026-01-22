@@ -1,6 +1,6 @@
 # app/models/__init__.py
 """
-Database models for the Precliniverse application.
+Database models for the Precliniset application.
 This module re-exports all models from their respective domain modules
 to maintain backward compatibility with existing imports.
 """

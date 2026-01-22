@@ -5,7 +5,7 @@ Tracking physical samples is critical for translational research. This module pr
 [TOC]
 
 ## 1. The Life of a Sample
-Precliniverse tracks the lineage of every biological specimen.
+Precliniset tracks the lineage of every biological specimen.
 
 ### Level 1: Primary Sample
 Collected directly from the animal.

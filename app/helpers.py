@@ -410,7 +410,7 @@ def create_super_admin(app, db):
     """Checks environment variables and creates the super admin if not exists."""
     from .models import User
 
-    super_admin_email = app.config.get('SUPERADMIN_EMAIL') or "admin@precliniverse.com"
+    super_admin_email = app.config.get('SUPERADMIN_EMAIL') or "admin@example.com"
     super_admin_password = app.config.get('SUPERADMIN_PASSWORD') or "password"
 
     if not super_admin_email or not super_admin_password:

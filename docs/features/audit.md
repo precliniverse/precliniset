@@ -1,10 +1,10 @@
 # Audit Trail & GLP Compliance
 
-Precliniverse is designed to meet the rigorous standards of **Good Laboratory Practice (GLP)**. 
+Precliniset is designed to meet the rigorous standards of **Good Laboratory Practice (GLP)**. 
 
 ## The Audit Trail System
 
-Every modification to critical data in Precliniverse is automatically recorded. Unlike standard logs, our Audit Trail captures the **state change**.
+Every modification to critical data in Precliniset is automatically recorded. Unlike standard logs, our Audit Trail captures the **state change**.
 
 ### What is tracked?
 The following entities have full version tracking:

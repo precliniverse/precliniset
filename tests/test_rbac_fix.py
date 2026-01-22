@@ -69,7 +69,7 @@ def test_user_has_permission_global_role(db_session, init_database):
     global_role = create_custom_role(db_session, "Global Designer", [('CoreModel', 'create')], team=None)
     
     # Link user to this global role (using team_id=None or some default)
-    # In precliniverse, global roles are often linked via a special mechanism or just being in the link table with team_id=None? 
+    # In precliniset, global roles are often linked via a special mechanism or just being in the link table with team_id=None? 
     # Let's check UserTeamRoleLink structure.
     
     # link = UserTeamRoleLink(user_id=user.id, team_id=None, role_id=global_role.id)

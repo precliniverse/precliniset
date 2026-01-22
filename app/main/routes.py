@@ -93,7 +93,7 @@ def settings():
             try:
                 send_email(
                     to=test_email_address,
-                    subject=_('Precliniverse Test Email'),
+                    subject=_('Precliniset Test Email'),
                     template_path='email/test_email.html',
                     user=current_user
                 )

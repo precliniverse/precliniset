@@ -151,8 +151,8 @@ def _create_super_admin(email=None, password=None):
     # But we can allow the CLI to pass them.
 
     if not email:
-        print("   [!] No SUPERADMIN_EMAIL found. Using default 'admin@precliniverse.com'")
-        email = "admin@precliniverse.com"
+        print("   [!] No SUPERADMIN_EMAIL found. Using default 'admin@example.com'")
+        email = "admin@example.com"
     if not password:
          # SECURITY FIX: Removed default 'password'
          print("   [!] No SUPERADMIN_PASSWORD found in config.")

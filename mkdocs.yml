@@ -1,6 +1,6 @@
-site_name: Precliniverse Documentation
-site_description: Technical Manual and API Guide for Precliniverse
-site_url: https://docs.precliniverse.com
+site_name: Precliniset Documentation
+site_description: Technical Manual and API Guide for Precliniset
+site_url: https://docs.precliniset.com
 
 theme:
   name: material

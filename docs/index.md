@@ -1,6 +1,6 @@
-# Welcome to Precliniverse
+# Welcome to Precliniset
 
-Precliniverse is a specialized platform designed for managing preclinical research data with a focus on **accuracy, traceability, and GLP compliance**.
+Precliniset is a specialized platform designed for managing preclinical research data with a focus on **accuracy, traceability, and GLP compliance**.
 
 ## High-Level Overview
 

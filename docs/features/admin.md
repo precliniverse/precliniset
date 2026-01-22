@@ -35,7 +35,7 @@ Teams are the security boundaries of the system.
 
 ## 2. Standardization (Static Lists)
 One of the biggest challenges in data science is "dirty data" (e.g., `bw`, `B.W.`, `Weight` all meaning the same thing).
-Precliniverse solves this by enforcing **Controlled Vocabularies**.
+Precliniset solves this by enforcing **Controlled Vocabularies**.
 
 ### Analytes (The Critical List)
 An **Analyte** is a variable you measure.

@@ -52,7 +52,7 @@ class InteractiveMenu:
         )
         
         # Header
-        title = "[bold magenta]🐳 Precliniverse CLI Manager[/bold magenta]"
+        title = "[bold magenta]🐳 Precliniset CLI Manager[/bold magenta]"
         subtitle = f"v1.0 | Mode: [bold cyan]{self.mode.upper()}[/bold cyan] | OS: {self.system}"
         layout["header"].update(Panel(subtitle, title=title, border_style="magenta"))
         
@@ -120,7 +120,7 @@ class InteractiveMenu:
     def _run_simple(self):
         """Text-based fallback menu."""
         while True:
-            print("\nPrecliniverse CLI Manager")
+            print("\nPrecliniset CLI Manager")
             print(f"Mode: {self.mode.upper()}")
             print("-" * 30)
             print("1. Setup / Configure")

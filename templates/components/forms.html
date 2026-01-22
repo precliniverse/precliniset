@@ -1,0 +1,113 @@
+{# templates/components/forms.html #}
+{# Reusable form component macros #}
+
+{# Render a form field with label, input, errors, and help text #}
+{% macro render_field(field, label_class='form-label', input_class='form-control', show_label=true, placeholder='') %}
+    <div class="mb-3">
+        {% if show_label and field.label %}
+            {{ field.label(class=label_class) }}
+        {% endif %}
+        
+        {% if field.type == 'BooleanField' %}
+            <div class="form-check">
+                {{ field(class='form-check-input') }}
+                {{ field.label(class='form-check-label') }}
+            </div>
+        {% elif field.type == 'SelectField' or field.type == 'SelectMultipleField' %}
+            {{ field(class=input_class + ' form-select') }}
+        {% elif field.type == 'TextAreaField' %}
+            {{ field(class=input_class, rows=3, placeholder=placeholder) }}
+        {% elif field.type == 'FileField' %}
+            {{ field(class=input_class + ' form-control-file') }}
+        {% else %}
+            {{ field(class=input_class, placeholder=placeholder or field.label.text) }}
+        {% endif %}
+        
+        {% if field.description %}
+            <small class="form-text text-muted">{{ field.description }}</small>
+        {% endif %}
+        
+        {% if field.errors %}
+            {% for error in field.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# Render form errors at the top #}
+{% macro render_form_errors(form) %}
+    {% if form.errors %}
+        <div class="alert alert-danger" role="alert">
+            <strong>{{ _('Please correct the following errors:') }}</strong>
+            <ul class="mb-0 mt-2">
+                {% for field_name, errors in form.errors.items() %}
+                    {% if field_name != 'csrf_token' %}
+                        {% for error in errors %}
+                            <li>{{ form[field_name].label.text }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{# Render a complete form with all fields #}
+{% macro render_form(form, action='', method='POST', btn_class='btn-primary', btn_text='Submit', show_cancel=false, cancel_url='') %}
+    <form action="{{ action }}" method="{{ method }}" enctype="multipart/form-data">
+        {{ form.hidden_tag() }}
+        
+        {{ render_form_errors(form) }}
+        
+        {% for field in form if field.type != 'SubmitField' and field.type != 'CSRFTokenField' %}
+            {{ render_field(field) }}
+        {% endfor %}
+        
+        <div class="mt-3">
+            {% if form.submit %}
+                {{ form.submit(class='btn ' + btn_class) }}
+            {% else %}
+                <button type="submit" class="btn {{ btn_class }}">{{ btn_text }}</button>
+            {% endif %}
+            
+            {% if show_cancel and cancel_url %}
+                <a href="{{ cancel_url }}" class="btn btn-secondary ms-2">{{ _('Cancel') }}</a>
+            {% endif %}
+        </div>
+    </form>
+{% endmacro %}
+
+{# Render horizontal form field (label on left, input on right) #}
+{% macro render_field_horizontal(field, label_cols=3, input_cols=9) %}
+    <div class="row mb-3">
+        {% if field.label %}
+            <label class="col-sm-{{ label_cols }} col-form-label" for="{{ field.id }}">
+                {{ field.label.text }}
+            </label>
+        {% endif %}
+        <div class="col-sm-{{ input_cols }}">
+            {% if field.type == 'BooleanField' %}
+                <div class="form-check">
+                    {{ field(class='form-check-input') }}
+                </div>
+            {% elif field.type == 'SelectField' or field.type == 'SelectMultipleField' %}
+                {{ field(class='form-control form-select') }}
+            {% elif field.type == 'TextAreaField' %}
+                {{ field(class='form-control', rows=3) }}
+            {% else %}
+                {{ field(class='form-control') }}
+            {% endif %}
+            
+            {% if field.description %}
+                <small class="form-text text-muted">{{ field.description }}</small>
+            {% endif %}
+            
+            {% if field.errors %}
+                {% for error in field.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}

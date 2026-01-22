@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ title }}</h1>
+
+    <div class="my-3">
+        <a href="{{ url_for('sampling.download_sample_list_file', sample_ids=sample_ids_csv, list_type=list_type, format='excel') }}" class="btn btn-success"><i class="fas fa-file-excel"></i> {{ _('Download as Excel') }}</a>
+        <a href="{{ url_for('sampling.download_sample_list_file', sample_ids=sample_ids_csv, list_type=list_type, format='csv') }}" class="btn btn-info"><i class="fas fa-file-csv"></i> {{ _('Download as CSV') }}</a>
+    </div>
+
+    {% if samples_data %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm">
+            <thead>
+                <tr>
+                    <th>{{ _('Sample ID') }}</th>
+                    <th>{{ _('Project') }}</th>
+                    <th>{{ _('Group') }}</th>
+                    <th>{{ _('Animal ID') }}</th>
+                    <th>{{ _('Type') }}</th>
+                    <th>{{ _('Collection Date') }}</th>
+                    <th>{{ _('Volume') }}</th>
+                    <th>{{ _('Anticoagulant') }}</th>
+                    <th>{{ _('Storage') }}</th>
+                    <th>{{ _('Partner Company') }}</th>
+                    <th>{{ _('Partner Email') }}</th>
+                    <th>{{ _('Notes') }}</th>
+                    <th>{{ _('Current Status') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sample in samples_data %}
+                <tr>
+                    <td>{{ sample.id }}</td>
+                    <td>{{ sample.project_name }}</td>
+                    <td>{{ sample.group_name }}</td>
+                    <td>{{ sample.animal_id }}</td>
+                    <td>{{ sample.sample_type }}</td>
+                    <td>{{ sample.collection_date }}</td>
+                    <td>{{ sample.volume ~ ' ' ~ sample.volume_unit if sample.volume is not none else '' }}</td>
+                    <td>{{ sample.anticoagulant }}</td>
+                    <td>{{ sample.storage_location }}</td>
+                    <td>{{ sample.partner_company }}</td>
+                    <td>{{ sample.partner_email }}</td>
+                    <td style="max-width: 200px; white-space: pre-wrap; word-break: break-word;">{{ sample.notes }}</td>
+                    <td><span class="badge bg-secondary">{{ sample.current_status }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# Action button to update status #}
+    <form method="POST" action="{{ url_for('sampling.update_samples_status_action') }}" class="mt-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="sample_ids" value="{{ sample_ids_csv }}">
+        <input type="hidden" name="new_status_name" value="{{ 'SHIPPED' if list_type == 'shipment' else 'DISCARDED' }}">
+        <input type="hidden" name="redirect_list_type" value="{{ list_type }}"> {# To know where to redirect after update #}
+        <button type="submit" class="btn btn-primary">{{ action_button_text }}</button>
+        <a href="{{ session.get('last_sample_list_url', url_for('sampling.list_group_samples', group_id=samples_data[0].group_id if samples_data else '')) }}" class="btn btn-secondary">{{ _('Cancel / Back to List') }}</a>
+    </form>
+
+    {% else %}
+    <p>{{ _('No samples to display.') }}</p>
+    {% endif %}
+</div>
+{% endblock %}

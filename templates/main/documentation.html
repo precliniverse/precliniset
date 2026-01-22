@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Sidebar Navigation -->
+        <div class="col-md-3 col-lg-2 mb-4">
+            <div class="sticky-top" style="top: 2rem; z-index: 1000;">
+                <h5 class="mb-3 text-primary">{{ _('Documentation') }}</h5>
+                <nav id="docs-nav" class="nav flex-column nav-pills small">
+                    <a class="nav-link active" href="#overview">{{ _('Overview') }}</a>
+                    <a class="nav-link" href="#core-features">{{ _('Core Features') }}</a>
+                    <a class="nav-link" href="#audit-glp">{{ _('Audit Trail & GLP') }}</a>
+                    <a class="nav-link" href="#api-reference">{{ _('API Reference') }}</a>
+                    <a class="nav-link" href="#workflow">{{ _('Example Workflow') }}</a>
+                </nav>
+                <hr>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.docs_data') }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-file-code me-2"></i>{{ _('Export JSON Data') }}
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <section id="overview" class="mb-5">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h1 class="display-5 fw-bold mb-0 text-dark">{{ _('Precliniset Documentation') }}</h1>
+                    <a href="/docs/site/" target="_blank" class="btn btn-primary">
+                        <i class="fas fa-external-link-alt me-2"></i>{{ _('Full Technical Manual') }}
+                    </a>
+                </div>
+                <p class="lead text-muted">A comprehensive guide to managing preclinical research data with precision
+                    and compliance.</p>
+                <div class="alert alert-info border-0 shadow-sm">
+                    <i class="fas fa-info-circle me-2"></i> {{ _('This documentation is dynamically generated based on
+                    the current application configuration (v1.0.0-RC).') }}
+                </div>
+            </section>
+
+            <section id="core-features" class="mb-5">
+                <h2 class="h4 mb-4 border-bottom pb-2 text-secondary">{{ _('Core Features') }}</h2>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title text-primary"><i class="fas fa-folder-open me-2"></i>{{ _('Project
+                                    Organization') }}</h5>
+                                <p class="card-text small text-muted">Structure your research into projects. Each
+                                    project acts as a secure container with its own team members, ethical approvals, and
+                                    experimental data.</p>
+                                <ul class="small mb-0">
+                                    <li>{{ _('Team-based permissions') }}</li>
+                                    <li>{{ _('Slug-based unique identification') }}</li>
+                                    <li>{{ _('Resource centralization') }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title text-success"><i class="fas fa-vials me-2"></i>{{ _('Experimental
+                                    Groups') }}</h5>
+                                <p class="card-text small text-muted">Manage animal groups with full metadata tracking.
+                                    Supports randomization, ethical oversight, and biological model linking.</p>
+                                <ul class="small mb-0">
+                                    <li>{{ _('JSON-based animal metadata') }}</li>
+                                    <li>{{ _('Automated display ID generation') }}</li>
+                                    <li>{{ _('Real-time animal status tracking') }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="audit-glp" class="mb-5 bg-light p-4 rounded-3 shadow-sm">
+                <div class="row align-items-center">
+                    <div class="col-lg-8">
+                        <h2 class="h4 mb-3 text-dark"><i class="fas fa-shield-alt me-2 text-warning"></i>{{ _('GLP
+                            Compliance & Audit Trail') }}</h2>
+                        <p class="text-muted">Precliniset is built for regulatory excellence. Every data point is
+                            tracked through a resource-efficient audit logging system.</p>
+                        <ul class="list-unstyled small">
+                            <li><i class="fas fa-check-circle text-success me-2"></i> <strong>{{ _('Immutable Logs')
+                                    }}:</strong> {{ _('All Insert, Update, and Delete operations are recorded.') }}</li>
+                            <li><i class="fas fa-check-circle text-success me-2"></i> <strong>{{ _('Change Tracking')
+                                    }}:</strong> {{ _('Before/After snapshots are stored for every modification.') }}
+                            </li>
+                            <li><i class="fas fa-check-circle text-success me-2"></i> <strong>{{ _('Accountability')
+                                    }}:</strong> {{ _('Every log is linked to a user and a precise timestamp.') }}</li>
+                        </ul>
+                    </div>
+                    <div class="col-lg-4 text-center">
+                        <i class="fas fa-history fa-5x text-secondary opacity-25"></i>
+                    </div>
+                </div>
+            </section>
+
+            <section id="api-reference" class="mb-5">
+                <h2 class="h4 mb-4 border-bottom pb-2 text-secondary">{{ _('API Reference') }}</h2>
+                <p>{{ _('All features are accessible via our RESTful API. Use your API Token from the Settings page to
+                    authenticate.') }}</p>
+
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><code class="text-info">GET</code> /api/projects/</span>
+                        <small class="text-muted text-uppercase">List Projects</small>
+                    </div>
+                    <div class="card-body bg-light">
+                        <h6 class="mb-2">{{ _('Example Request (cURL)') }}</h6>
+                        <pre class="bg-dark text-success p-3 rounded small"><code>curl -X GET "https://app.precliniset.com/api/projects/" \
+     -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
+
+                        <h6 class="mb-2 mt-4">{{ _('Response Body') }}</h6>
+                        <pre class="bg-dark text-info p-3 rounded small"><code>[
+  {
+    "id": 1,
+    "name": "Alzheimer Study 2024",
+    "slug": "alz-24",
+    "team_id": 5
+  }
+]</code></pre>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span><code class="text-warning">PATCH</code> /api/groups/{id}</span>
+                        <small class="text-muted text-uppercase">Update Group Status</small>
+                    </div>
+                    <div class="card-body bg-light">
+                        <pre class="bg-dark text-success p-3 rounded small"><code># Python Example
+import requests
+
+url = "https://app.precliniset.com/api/groups/grp-xyz"
+headers = {"Authorization": "Bearer YOUR_TOKEN"}
+data = {"status": "completed"}
+
+response = requests.patch(url, json=data, headers=headers)
+print(response.json())</code></pre>
+                    </div>
+                </div>
+            </section>
+
+            <section id="workflow" class="mb-5">
+                <h2 class="h4 mb-4 border-bottom pb-2 text-secondary">{{ _('Example Workflow') }}</h2>
+                <div class="timeline">
+                    <div class="d-flex mb-4">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-plus-square fa-2x text-primary"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="mb-1">{{ _('Step 1: Resource Setup') }}</h5>
+                            <p class="text-muted small mb-0">{{ _('Ensure you have established Ethical Approvals and
+                                Animal Models in the Resources section.') }}</p>
+                        </div>
+                    </div>
+                    <div class="d-flex mb-4">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-folder-plus fa-2x text-success"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="mb-1">{{ _('Step 2: Project Creation') }}</h5>
+                            <p class="text-muted small mb-0">{{ _('Create a new project and assign your team members.')
+                                }}</p>
+                        </div>
+                    </div>
+                    <div class="d-flex mb-4">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-users-cog fa-2x text-info"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h5 class="mb-1">{{ _('Step 3: Define Groups') }}</h5>
+                            <p class="text-muted small mb-0">{{ _('Add experimental groups to your project. Upload
+                                animal data via Excel for bulk setup.') }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<style>
+    #docs-nav .nav-link {
+        color: #495057;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    #docs-nav .nav-link:hover {
+        background-color: #f8f9fa;
+        color: var(--bs-primary);
+    }
+
+    #docs-nav .nav-link.active {
+        background-color: var(--bs-primary);
+        color: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    pre {
+        margin-bottom: 0;
+        overflow: auto;
+    }
+
+    code {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+
+    .timeline {
+        border-left: 2px solid #e9ecef;
+        padding-left: 1.5rem;
+    }
+</style>
+{% endblock %}

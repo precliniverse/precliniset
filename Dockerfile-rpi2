@@ -1,0 +1,86 @@
+# ###########################
+# STAGE 1: Builder
+# ###########################
+FROM python:3.11-slim as builder
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libmariadb-dev-compat \
+    libmariadb-dev \
+    pkg-config \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+# FIX: Removed '--no-deps'. 
+# This ensures sub-dependencies (like cachelib) are also downloaded/built.
+RUN pip install --upgrade pip && \
+    pip wheel --no-cache-dir \
+    --extra-index-url https://www.piwheels.org/simple \
+    --wheel-dir /app/wheels \
+    -r requirements.txt \
+    gunicorn
+
+# ###########################
+# STAGE 2: Final / Runtime
+# ###########################
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=run.py
+
+WORKDIR /app
+
+# Install runtime dependencies.
+RUN apt-get update && apt-get install -y \
+    netcat-openbsd \
+    libmariadb3 \
+    dos2unix \
+    logrotate \
+    mariadb-client \
+    libopenblas0-serial \
+    libgfortran5 \
+    libatomic1 \
+    libtiff6 \
+    libjpeg62-turbo \
+    libopenjp2-7 \
+    libxcb1 \
+    && (apt-get install -y libmagic1 || apt-get install -y libmagic1t64) \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy wheels from builder
+COPY --from=builder /app/wheels /wheels
+COPY --from=builder /app/requirements.txt .
+
+# Install dependencies from wheels ONLY.
+# --no-index: Tells pip NOT to check the internet.
+# --find-links=/wheels: Tells pip to find packages here.
+# This prevents it from trying to download/compile source versions like it did with Matplotlib.
+RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/*
+
+# Copy project
+COPY . .
+
+# Build documentation
+RUN mkdocs build
+
+# Make entrypoint executable
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN dos2unix /usr/local/bin/docker-entrypoint.sh && chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Create a non-root user
+RUN useradd -m appuser && \
+    mkdir -p /app/instance && \
+    chown -R appuser:appuser /app /app/instance
+USER appuser
+
+EXPOSE 5000
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "3", "run:app"]

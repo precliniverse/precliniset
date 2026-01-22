@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Teams{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Manage Teams</h2>
+    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-primary mb-3">Manage Users</a>
+    <a href="{{ url_for('resources.manage_static_lists') }}" class="btn btn-info mb-3">Manage Static Lists</a>
+
+    {% if current_user.is_super_admin %}
+        <div class="card mb-4">
+            <div class="card-header">Create New Team</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.manage_teams') }}">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        <label for="name" class="form-label">{{ form.name.label }}</label>
+                        {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.name.errors %}
+                                    <span>{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    {{ form.submit(class="btn btn-primary") }}
+                </form>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">Existing Teams</div>
+        <div class="card-body">
+            {% if teams %}
+                <ul class="list-group">
+                    {% for team in teams %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ team.name }}
+                            <span>
+                                <a href="{{ url_for('admin.manage_team_members', team_id=team.id) }}" class="btn btn-sm btn-info me-2">Manage Members</a>
+                                {% if user_has_permission(current_user, 'Team', 'manage_members', team_id=team.id) %}
+                                <button class="btn btn-sm btn-secondary me-2" type="button" data-bs-toggle="collapse" data-bs-target="#inviteMemberFormCollapse{{ team.id }}" aria-expanded="false" aria-controls="inviteMemberFormCollapse{{ team.id }}">
+                                    Invite Member
+                                </button>
+                                {% endif %}
+                                {% if user_has_permission(current_user, 'Team', 'delete') %}
+                                <form action="{{ url_for('admin.delete_team', team_id=team.id) }}" method="POST" class="d-inline">
+                                    {{ delete_form.hidden_tag() }}
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete team {{ team.name }}? This will also remove all members and their roles from this team.');">Delete Team</button>
+                                </form>
+                                {% endif %}
+                            </span>
+                        </li>
+                        {% if user_has_permission(current_user, 'Team', 'manage_members', team_id=team.id) %}
+                        <div class="collapse" id="inviteMemberFormCollapse{{ team.id }}">
+                            <div class="card card-body mt-2">
+                                <h6>Invite Member to {{ team.name }}</h6>
+                                {% set invite_form = invite_member_forms[team.id] %}
+                                <form method="POST" action="{{ url_for('admin.manage_teams') }}">
+                                    {{ invite_form.hidden_tag() }}
+                                    <input type="hidden" name="team_id_for_invite" value="{{ team.id }}">
+                                    <div class="mb-3">
+                                        <label for="email_{{ team.id }}" class="form-label">{{ invite_form.email.label }}</label>
+                                        {{ invite_form.email(class="form-control" + (" is-invalid" if invite_form.email.errors else ""), id="email_" + team.id|string) }}
+                                        {% if invite_form.email.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {% for error in invite_form.email.errors %}
+                                                    <span>{{ error }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="role_id_{{ team.id }}" class="form-label">{{ invite_form.role_id.label }}</label>
+                                        {{ invite_form.role_id(class="form-select" + (" is-invalid" if invite_form.role_id.errors else ""), id="role_id_" + team.id|string) }}
+                                        {% if invite_form.role_id.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {% for error in invite_form.role_id.errors %}
+                                                    <span>{{ error }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    {{ invite_form.submit_invite_member(class="btn btn-success btn-sm") }}
+                                </form>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No teams created yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

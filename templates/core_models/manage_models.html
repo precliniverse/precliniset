@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{{ _('Core Models') }}</h1>
+
+
+
+{# List Animal Models #}
+<h2 class="mt-5">
+    {{ _('Animal Models') }}
+    {% if can_manage %}
+    <div class="btn-group">
+        <a href="{{ url_for('core_models.edit_model', model_type='animal') }}" class="btn btn-success btn-sm" title="{{ _('Create New Animal Model') }}"><i class="fas fa-plus"></i></a>
+    </div>
+    {% endif %}
+</h2>
+{% if animal_models_data %}
+    <table id="animalModelsTable" class="table table-striped table-bordered" style="width:100%">
+        <thead>
+            <tr>
+                <th>{{ _('Name') }}</th>
+                <th>{{ _('Related Groups') }}</th>
+                <th>{{ _('Actions') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for model_data in animal_models_data %}
+                <tr class="clickable-row" data-href="{{ url_for('core_models.edit_model', model_type='animal', id=model_data.id) }}">
+                    <td>{{ model_data.name }}</td>
+                    <td>
+                        {% if model_data.related_groups_count > 0 %}
+                            <a href="{{ url_for('resources.list_groups_for_animal_model', model_id=model_data.id) }}">{{ model_data.related_groups_count }}</a>
+                        {% else %}
+                            0
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 duplicate-model-btn" data-model-type="animal" data-model-id="{{ model_data.id }}" data-model-name="{{ model_data.name }}" title="{{ _('Duplicate Model') }}"><i class="fas fa-copy"></i></button>
+                        <form method="POST" action="{{ url_for('core_models.delete_model', model_type='animal', id=model_data.id) }}" style="display:inline;" class="confirm-delete-core-model-form" data-confirm-message="{{ _('Are you sure you want to delete this Animal model? This cannot be undone.') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ _('Delete Model') }}"><i class="fas fa-trash-alt"></i></button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div class="alert alert-secondary" role="alert">
+        {{ _('No animal models found. Click the + button to create one.') }}
+    </div>
+{% endif %}
+
+{# List Protocol Models #}
+<h2 class="mt-4">
+    {{ _('Protocol Models') }}
+    {% if can_manage %}
+    <div class="btn-group">
+        <a href="{{ url_for('core_models.edit_model', model_type='protocol') }}" class="btn btn-success btn-sm" title="{{ _('Create New Protocol Model') }}"><i class="fas fa-plus"></i></a>
+        <div class="btn-group" id="bulk-actions-dropdown">
+            <button type="button" class="btn btn-info btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-file-excel"></i> {{ _('Bulk Edition') }}
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('core_models.download_protocol_template') }}">{{ _('Download Template') }}</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('core_models.bulk_upload_protocol') }}">{{ _('Upload File') }}</a></li>
+                <li><hr class="dropdown-divider"></li>
+            </ul>
+        </div>
+        <div id="selection-actions" style="display: none;" class="ms-2">
+            <button type="button" id="cancel-selection-btn" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> {{ _('Cancel') }}</button>
+        </div>
+    </div>
+    {% endif %}
+</h2>
+{% if protocol_models_data %}
+    <table id="protocolModelsTable" class="table table-striped table-bordered" style="width:100%">
+        <thead>
+            <tr>
+                <th>{{ _('Name') }}</th>
+                <th>{{ _('Severity') }}</th>
+                <th>{{ _('Related DataTables') }}</th>
+                <th>{{ _('Actions') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for model_data in protocol_models_data %}
+                <tr class="clickable-row" data-href="{{ url_for('core_models.edit_model', model_type='protocol', id=model_data.id) }}">
+                    <td>{{ model_data.name }}</td>
+                    <td>{{ model_data.severity }}</td>
+                    <td>
+                        {% if model_data.related_datatables_count > 0 %}
+                            <a href="{{ url_for('resources.list_datatables_for_protocol_model', model_id=model_data.id) }}">{{ model_data.related_datatables_count }}</a>
+                        {% else %}
+                            0
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary me-2 duplicate-model-btn" data-model-type="protocol" data-model-id="{{ model_data.id }}" data-model-name="{{ model_data.name }}" title="{{ _('Duplicate Model') }}"><i class="fas fa-copy"></i></button>
+                        <a href="{{ url_for('core_models.download_protocol_data', id=model_data.id) }}" class="btn btn-sm btn-outline-success me-2" title="{{ _('Download All Data') }}"><i class="fas fa-download"></i></a>
+                        <form method="POST" action="{{ url_for('core_models.delete_model', model_type='protocol', id=model_data.id) }}" style="display:inline;" class="confirm-delete-core-model-form" data-confirm-message="{{ _('Are you sure you want to delete this Protocol model? This cannot be undone.') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ _('Delete Model') }}"><i class="fas fa-trash-alt"></i></button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+     <div class="alert alert-secondary" role="alert">
+        {{ _('No protocol models found. Click the + button to create one.') }}
+    </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    var csrfToken = "{{ csrf_token() }}"; // Make CSRF token available to JS
+
+$(document).ready(function() {
+    let protocolSelectionMode = false;    
+
+    // --- DataTable Initialization ---
+    const animalTable = $('#animalModelsTable').DataTable({
+        "language": { "search": "{{ _('Search:') }}", "lengthMenu": "{{ _('Show _MENU_ entries') }}", "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}", "infoEmpty": "{{ _('Showing 0 to 0 of 0 entries') }}", "infoFiltered": "{{ _('(filtered from _MAX_ total entries)') }}", "paginate": { "first": "{{ _('First') }}", "last": "{{ _('Last') }}", "next": "{{ _('Next') }}", "previous": "{{ _('Previous') }}" }},
+        "columnDefs": [ 
+            { "orderable": false, "targets": [2] }
+        ]
+    });
+    
+    const protocolTable = $('#protocolModelsTable').DataTable({
+        "language": { "search": "{{ _('Search:') }}", "lengthMenu": "{{ _('Show _MENU_ entries') }}", "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}", "infoEmpty": "{{ _('Showing 0 to 0 of 0 entries') }}", "infoFiltered": "{{ _('(filtered from _MAX_ total entries)') }}", "paginate": { "first": "{{ _('First') }}", "last": "{{ _('Last') }}", "next": "{{ _('Next') }}", "previous": "{{ _('Previous') }}" }},
+        "columnDefs": [
+            { "orderable": false, "targets": [0, 3] }
+        ]
+    });
+
+    // --- Cell-Specific Clickable Logic ---
+    document.querySelectorAll('.clickable-row').forEach(row => {
+        const url = row.dataset.href;
+        if (!url) return;
+
+        row.querySelectorAll('td').forEach(cell => {
+            const hasInteractiveElements = cell.querySelector('a, button, form, input');
+            if (!hasInteractiveElements) {
+                cell.style.cursor = 'pointer';
+                cell.addEventListener('click', () => {
+                    const isAnimalRow = row.closest('#animalModelsTable');
+                    if (!protocolSelectionMode) {
+                        window.location.href = url;
+                    }
+                });
+            }
+        });
+    });
+
+    // --- Duplicate Button Logic ---
+    document.querySelectorAll('.duplicate-model-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.stopPropagation();
+            const modelType = this.dataset.modelType;
+            const modelId = this.dataset.modelId;
+            const newName = prompt('{{ _("Enter the new name for the duplicated model:") }}');
+            if (newName && newName.trim() !== "") {
+                const formElement = document.createElement('form');
+                formElement.method = 'POST';
+                formElement.action = `/core_models/duplicate/${modelType}/${modelId}`;
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrf_token';
+                csrfInput.value = window.csrfToken;
+                formElement.appendChild(csrfInput);
+                const nameInput = document.createElement('input');
+                nameInput.type = 'hidden';
+                nameInput.name = 'new_model_name';
+                nameInput.value = newName;
+                formElement.appendChild(nameInput);
+                document.body.appendChild(formElement);
+                formElement.submit();
+            }
+        });
+    });
+
+    // --- Delete Confirmation Logic ---
+    document.querySelectorAll('.confirm-delete-core-model-form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            const message = this.dataset.confirmMessage || 'Are you sure?';
+            if (!confirm(message)) {
+                event.preventDefault();
+            }
+        });
+    });
+
+});
+</script>
+{% endblock %}

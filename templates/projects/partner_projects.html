@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>{{ _('Projects for Partner') }}: {{ partner.company_name }}</h1>
+        {# Optional: Add a link back, maybe to the partners list or project list #}
+        <a href="{{ url_for('projects.list_projects') }}" class="btn btn-outline-secondary">{{ _('Back to All Projects') }}</a>
+    </div>
+    <p class="text-muted">{{ partner.contact_email }}</p>
+
+    {% if projects %}
+        <div class="list-group">
+            {% for project in projects %}
+                <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}" class="list-group-item list-group-item-action flex-column align-items-start">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ project.name }} <small class="text-muted">({{ project.slug }})</small></h5>
+                        <small>{{ _('Last Updated') }}: {{ project.updated_at.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                    <p class="mb-1">
+                        {% if project.description %}
+                            {# Display a snippet or plain text version of description #}
+                            {{ project.description | striptags | truncate(150) }}
+                        {% else %}
+                            <span class="text-muted">{{ _('No description.') }}</span>
+                        {% endif %}
+                    </p>
+                    <small>{{ _('Team') }}: {{ project.team.name }} | {{ _('Owner') }}: {{ project.owner.email }}</small>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            {{ _('No projects found for this partner that you have access to.') }}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

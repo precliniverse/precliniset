@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ _('Workplan Update Notification') }}</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .header { font-size: 20px; font-weight: bold; margin-bottom: 20px; }
+        .comment { border-left: 3px solid #ccc; padding-left: 15px; font-style: italic; margin: 15px 0; }
+        .button { display: inline-block; padding: 10px 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">{{ _('Workplan Update for Project: %(project_name)s', project_name=project.name) }}</div>
+        <p>
+            {{ _('Hello,') }}
+        </p>
+        <p>
+            {{ _('This is a notification that the workplan "%(workplan_name)s" has been updated by %(user_email)s.',
+               workplan_name=workplan.name, user_email=user.email) }}
+        </p>
+        {% if comment %}
+        <p>{{ _('Comment provided for this change:') }}</p>
+        <div class="comment">
+            <p>{{ comment }}</p>
+        </div>
+        {% endif %}
+        <p>
+            <a href="{{ workplan_url }}" class="button">{{ _('View Workplan') }}</a>
+        </p>
+    </div>
+</body>
+</html>

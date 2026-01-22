@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('DataTables for Group:') }} {{ group.name }}{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <style>
+        .actions-column-dt-list {
+            min-width: 230px;
+            text-align: center;
+            white-space: nowrap !important;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ _('DataTables for Group:') }} {{ group.name }}
+    {% if group.is_archived %}<span class="badge bg-warning text-dark ms-1">{{ _('Group Archived') }}</span>{% endif %}
+    {% if group.project and group.project.is_archived %}<span class="badge bg-secondary text-dark ms-1">{{ _('Project Archived') }}</span>{% endif %}
+</h1>
+
+{# Configuration for datatables_list.js #}
+<script id="datatables-list-config" type="application/json">
+    {
+        "urls": {
+            "serverSideData": "{{ url_for('api.server_side_datatables_server_side_data_table_list') }}",
+            "batchAnalyze": "{{ url_for('datatables.analyze_selected_datatables') }}",
+            "batchDownload": "{{ url_for('datatables.download_merged_selected_datatables') }}",
+            "batchDelete": "{{ url_for('datatables.batch_delete_datatables') }}"
+        },
+        "i18n": {
+            "searchPlaceholder": "{{ _('Search all datatables...') }}",
+            "lengthMenu": "{{ _('Show _MENU_ datatables') }}",
+            "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+            "first": "{{ _('First') }}",
+            "last": "{{ _('Last') }}",
+            "next": "{{ _('Next') }}",
+            "previous": "{{ _('Previous') }}",
+            "allPageSelected": "{{ _('All %s entries on this page are selected.') }}",
+            "allMatchingSelected": "{{ _('All %s matching entries are selected.') }}",
+            "selectAllMatching": "{{ _('Select all %s matching') }}",
+            "clearSelection": "{{ _('Clear selection') }}",
+            "noDatatablesSelected": "{{ _('Please select at least one datatable.') }}",
+            "confirmDelete": "{{ _('Are you sure you want to delete this datatable?') }}",
+            "confirmDeleteBatch": "{{ _('Are you sure you want to delete the selected datatables? This action cannot be undone.') }}",
+            "generalError": "{{ _('An error occurred. Please try again.') }}"
+        },
+        "groupId": "{{ group.id }}",
+        "csrfToken": "{{ csrf_token() }}"
+    }
+</script>
+
+<div class="mb-3">
+    <a href="{{ url_for('groups.manage_groups') }}" class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-arrow-left me-1"></i>{{ _('Back to Groups') }}</a>
+    <a href="{{ url_for('datatables.create_data_table', project_id=group.project_id, group_id_prefill=group.id) }}" class="btn btn-primary btn-sm me-2">
+        <i class="fas fa-plus me-1"></i> {{_('New DataTable for this Group')}}
+    </a>
+    <a href="{{ url_for('datatables.list_group_datatables', group_id=group.id, download_agg=True) }}" class="btn btn-success btn-sm"><i class="fas fa-file-excel me-1"></i>{{ _('Download All Group Data (XLSX)') }}</a>
+</div>
+
+{# Filter Toolbar #}
+<div class="row mb-3 mt-3">
+    <div class="col-md-auto">
+        <select class="form-select filter-input" id="protocol_filter">
+            <option value="">{{ _('All Protocols') }}</option>
+            {% for protocol in protocols %} {# protocols will need to be passed from the route #}
+            <option value="{{ protocol.id }}">{{ protocol.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-auto">
+        <label for="date_from" class="visually-hidden">{{ _('Date From') }}</label>
+        <input type="date" class="form-control filter-input" id="date_from" placeholder="{{ _('Date From') }}">
+    </div>
+    <div class="col-md-auto">
+        <label for="date_to" class="visually-hidden">{{ _('Date To') }}</label>
+        <input type="date" class="form-control filter-input" id="date_to" placeholder="{{ _('Date To') }}">
+    </div>
+</div>
+
+{# Batch Actions Toolbar #}
+<div id="batchActions" class="alert alert-info py-2" style="display:none;">
+    <span id="selectedCount" class="fw-bold">0</span> {{ _('datatables selected.') }}
+    <button type="button" class="btn btn-sm btn-outline-success ms-2" id="actionAnalyzeSelected"><i class="fas fa-chart-bar me-1"></i>{{ _('Analyze Selected') }}</button>
+    <button type="button" class="btn btn-sm btn-outline-primary ms-2" id="actionDownloadMerged"><i class="fas fa-download me-1"></i>{{ _('Download Merged') }}</button>
+    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="btnDeleteBatch"><i class="fas fa-trash me-1"></i>{{ _('Delete Selected') }}</button>
+    <div id="selectAllBanner" class="mt-2" style="display:none;">
+        <span id="selectAllMessage"></span>
+        <button type="button" class="btn btn-sm btn-info ms-2" id="selectAllMatchingBtn"></button>
+    </div>
+</div>
+
+<table class="table table-striped" id="datatablesServerTable" style="width:100%;">
+    <thead>
+        <tr>
+            <th><input type="checkbox" id="selectAllServer"></th>
+            <th>{{ _('Date') }}</th>
+            <th>{{ _('Protocol') }}</th>
+            <th>{{ _('Experimental Group') }}</th> 
+            <th>{{ _('Project') }}</th>            
+            <th>{{ _('Actions') }}</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/datatables_list.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

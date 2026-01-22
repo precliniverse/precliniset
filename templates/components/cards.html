@@ -1,0 +1,76 @@
+{# templates/components/cards.html #}
+{# Reusable card component macros #}
+
+{# Basic card #}
+{% macro card(title='', body='', footer='', header_class='', card_class='') %}
+<div class="card {{ card_class }}">
+    {% if title %}
+    <div class="card-header {{ header_class }}">
+        {{ title }}
+    </div>
+    {% endif %}
+    <div class="card-body">
+        {{ body|safe }}
+    </div>
+    {% if footer %}
+    <div class="card-footer">
+        {{ footer|safe }}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# Info card with icon #}
+{% macro info_card(title, value, icon='', color='primary', url='') %}
+<div class="card border-{{ color }}">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="card-subtitle mb-2 text-muted">{{ title }}</h6>
+                <h3 class="card-title mb-0">{{ value }}</h3>
+            </div>
+            {% if icon %}
+            <div class="text-{{ color }}">
+                <i class="{{ icon }} fa-3x"></i>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% if url %}
+    <div class="card-footer">
+        <a href="{{ url }}" class="text-{{ color }}">{{ _('View Details') }} <i class="fas fa-arrow-right"></i></a>
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# List group card #}
+{% macro list_card(title, items, icon_field='', text_field='', url_field='') %}
+<div class="card">
+    {% if title %}
+    <div class="card-header">
+        <h5 class="mb-0">{{ title }}</h5>
+    </div>
+    {% endif %}
+    <ul class="list-group list-group-flush">
+        {% if items %}
+        {% for item in items %}
+        <li class="list-group-item">
+            {% if url_field and item[url_field] %}
+            <a href="{{ item[url_field] }}">
+                {% endif %}
+                {% if icon_field and item[icon_field] %}
+                <i class="{{ item[icon_field] }} me-2"></i>
+                {% endif %}
+                {{ item[text_field] if text_field else item }}
+                {% if url_field and item[url_field] %}
+            </a>
+            {% endif %}
+        </li>
+        {% endfor %}
+        {% else %}
+        <li class="list-group-item text-muted">{{ _('No items to display') }}</li>
+        {% endif %}
+    </ul>
+</div>
+{% endmacro %}

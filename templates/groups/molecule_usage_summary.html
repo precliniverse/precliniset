@@ -1,0 +1,294 @@
+{# templates/groups/molecule_usage_summary.html #}
+{% extends 'base.html' %}
+
+{% block title %}{{ _('Molecule Usage Summary') }} - {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ _('Molecule Usage Summary') }}</h1>
+        <div class="no-print">
+            <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> {{ _('Back to Group') }}
+            </a>
+            <a href="{{ url_for('groups.export_molecule_usage_summary', group_id=group.id) }}"
+                class="btn btn-success ms-2">
+                <i class="fas fa-file-excel"></i> {{ _('Export Excel') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">{{ _('Group Information') }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>{{ _('Group ID:') }}</strong> {{ group.id }}
+                </div>
+                <div class="col-md-4">
+                    <strong>{{ _('Group Name:') }}</strong> {{ group.name }}
+                </div>
+                <div class="col-md-4">
+                    <strong>{{ _('Project:') }}</strong> {{ group.project.name }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 filter-card no-print">
+        <div class="card-body bg-light">
+            <div class="row align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold"><i class="fas fa-filter"></i> {{ _('Filter by Molecule')
+                        }}</label>
+                    <select id="molecule-filter" class="form-select form-select-sm">
+                        <option value="">{{ _('-- All Molecules --') }}</option>
+                        {% for m_id, m_name in used_molecules.items() %}
+                        <option value="{{ m_name }}">{{ m_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% for analyte in analytes if analyte.name != 'ID' %}
+                {% if loop.index <= 4 %} <div class="col-md-2 mt-2 mt-md-0">
+                    <label class="form-label fw-bold">{{ analyte.name }}</label>
+                    <select class="form-select form-select-sm analyte-filter" data-analyte="{{ analyte.name }}">
+                        <option value="">{{ _('-- All --') }}</option>
+                    </select>
+            </div>
+            {% endif %}
+            {% endfor %}
+
+            <div class="col-md-2 mt-2 mt-md-0">
+                <button id="reset-filters" class="btn btn-sm btn-outline-secondary w-100">
+                    <i class="fas fa-undo"></i> {{ _('Reset Filters') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-bordered table-sm main-animal-table" id="usage-summary-table">
+        <thead class="table-dark">
+            <tr>
+                <th style="width: 15%;">{{ _('Animal ID') }}</th>
+                <th style="width: 10%;">{{ _('Group/Blinding') }}</th>
+                <th style="width: 5%;">{{ _('Status') }}</th>
+                <th style="width: 70%;">{{ _('Molecule Usages') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for animal in animals %}
+            <tr class="animal-row" data-id="{{ animal.id }}" data-metadata='{{ animal.metadata | tojson }}'
+                data-molecules='{{ animal.usages | map(attribute="molecule_name") | list | tojson }}'>
+                <td class="align-middle"><strong>{{ animal.id }}</strong></td>
+                <td class="align-middle">
+                    {% if group.randomization_details and group.randomization_details.use_blinding %}
+                    {% set blinded_value = animal.metadata.get('Blinded Group', '') %}
+                    {% if can_view_unblinded and group.randomization_details.blinding_key and blinded_value in
+                    group.randomization_details.blinding_key %}
+                    {% set actual_value = group.randomization_details.blinding_key[blinded_value] %}
+                    <span class="badge bg-info">{{ blinded_value }}</span> <br>
+                    <small class="text-muted">({{ actual_value }})</small>
+                    {% else %}
+                    <span class="badge bg-info">{{ blinded_value }}</span>
+                    {% endif %}
+                    {% else %}
+                    <small>{{ animal.metadata.get('Treatment Group') or 'N/A' }}</small>
+                    {% endif %}
+                </td>
+                <td class="align-middle">
+                    {% if animal.status == 'dead' %}
+                    <span class="badge bg-danger">{{ _('Deceased') }}</span>
+                    {% else %}
+                    <span class="badge bg-success">{{ _('Alive') }}</span>
+                    {% endif %}
+                </td>
+                <td class="p-0">
+                    {% if animal.usages %}
+                    <table class="table table-sm table-hover mb-0 compact-usage-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 100px;">{{ _('Date') }}</th>
+                                <th>{{ _('Molecule') }}</th>
+                                <th class="text-end" style="width: 100px;">{{ _('Dose') }}</th>
+                                <th style="width: 100px;">{{ _('Batch') }}</th>
+                                <th style="width: 100px;">{{ _('Route') }}</th>
+                                <th>{{ _('Notes') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usage in animal.usages %}
+                            <tr class="usage-entry-row" data-molecule="{{ usage.molecule_name }}">
+                                <td class="text-nowrap">{{ usage.date }}</td>
+                                <td><span class="fw-bold text-primary">{{ usage.molecule_name }}</span></td>
+                                <td class="text-end text-nowrap">
+                                    {% if usage.dose %}
+                                    <strong>{{ "%.2f"|format(usage.dose) }}</strong> <small class="text-muted">{{
+                                        usage.unit }}</small>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td><small class="text-muted">{{ usage.batch or '-' }}</small></td>
+                                <td><small>{{ usage.route or '-' }}</small></td>
+                                <td class="notes-cell">
+                                    <small class="text-truncate d-inline-block" style="max-width: 250px;"
+                                        title="{{ usage.notes }}">
+                                        {{ usage.notes or '-' }}
+                                    </small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="p-2 text-muted fst-italic"><small>{{ _('No molecule usage recorded.') }}</small></div>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        const moleculeFilter = document.getElementById('molecule-filter');
+        const analyteFilters = document.querySelectorAll('.analyte-filter');
+        const animalRows = document.querySelectorAll('.animal-row');
+        const resetButton = document.getElementById('reset-filters');
+
+        // Populate analyte filter unique values
+        analyteFilters.forEach(filter => {
+            const analyteName = filter.dataset.analyte;
+            const values = new Set();
+            animalRows.forEach(row => {
+                const metadata = JSON.parse(row.dataset.metadata);
+                if (metadata[analyteName]) {
+                    values.add(metadata[analyteName]);
+                }
+            });
+
+            const sortedValues = Array.from(values).sort();
+            sortedValues.forEach(val => {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.textContent = val;
+                filter.appendChild(opt);
+            });
+        });
+
+        function applyFilters() {
+            const selectedMolecule = moleculeFilter.value;
+            const activeAnalyteFilters = Array.from(analyteFilters).map(f => ({
+                name: f.dataset.analyte,
+                value: f.value
+            })).filter(f => f.value !== "");
+
+            animalRows.forEach(row => {
+                const rowMolecules = JSON.parse(row.dataset.molecules);
+                const rowMetadata = JSON.parse(row.dataset.metadata);
+
+                let showMolecule = selectedMolecule === "" || rowMolecules.includes(selectedMolecule);
+                let showAnalyte = activeAnalyteFilters.every(f => rowMetadata[f.name] == f.value);
+
+                if (showMolecule && showAnalyte) {
+                    row.style.display = '';
+
+                    // Also filter nested usage rows if molecule is selected
+                    const usageRows = row.querySelectorAll('.usage-entry-row');
+                    usageRows.forEach(uRow => {
+                        if (selectedMolecule === "" || uRow.dataset.molecule === selectedMolecule) {
+                            uRow.style.display = '';
+                        } else {
+                            uRow.style.display = 'none';
+                        }
+                    });
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        moleculeFilter.addEventListener('change', applyFilters);
+        analyteFilters.forEach(f => f.addEventListener('change', applyFilters));
+
+        resetButton.addEventListener('click', function () {
+            moleculeFilter.value = "";
+            analyteFilters.forEach(f => f.value = "");
+            applyFilters();
+        });
+    });
+</script>
+
+<style>
+    .filter-card {
+        border-left: 4px solid #ffc107;
+    }
+
+    .main-animal-table {
+        font-size: 0.9rem;
+    }
+
+    .compact-usage-table {
+        font-size: 0.82rem;
+        border: none;
+    }
+
+    .compact-usage-table thead th {
+        background-color: #f8f9fa;
+        color: #495057;
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-top: none;
+    }
+
+    .compact-usage-table td {
+        border-color: #f1f1f1;
+    }
+
+    .notes-cell {
+        max-width: 250px;
+    }
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+
+        .btn,
+        nav,
+        footer,
+        .breadcrumb {
+            display: none !important;
+        }
+
+        .container {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .card {
+            border: 1px solid #dee2e6 !important;
+        }
+
+        .table-dark {
+            color: #000 !important;
+            background-color: #f8f9fa !important;
+        }
+
+        .compact-usage-table thead th {
+            background-color: #eee !important;
+        }
+    }
+</style>
+{% endblock %}

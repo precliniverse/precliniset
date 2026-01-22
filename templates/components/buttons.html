@@ -1,0 +1,102 @@
+{# templates/components/buttons.html #}
+{# Reusable button component macros #}
+
+{# Primary action button #}
+{% macro btn_primary(text, url='', icon='', type='button', extra_class='') %}
+{% if url %}
+<a href="{{ url }}" class="btn btn-primary {{ extra_class }}">
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</a>
+{% else %}
+<button type="{{ type }}" class="btn btn-primary {{ extra_class }}">
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</button>
+{% endif %}
+{% endmacro %}
+
+{# Secondary button #}
+{% macro btn_secondary(text, url='', icon='', type='button', extra_class='') %}
+{% if url %}
+<a href="{{ url }}" class="btn btn-secondary {{ extra_class }}">
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</a>
+{% else %}
+<button type="{{ type }}" class="btn btn-secondary {{ extra_class }}">
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</button>
+{% endif %}
+{% endmacro %}
+
+{# Success button #}
+{% macro btn_success(text, url='', icon='', type='button', extra_class='') %}
+{% if url %}
+<a href="{{ url }}" class="btn btn-success {{ extra_class }}">
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</a>
+{% else %}
+<button type="{{ type }}" class="btn btn-success {{ extra_class }}">
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</button>
+{% endif %}
+{% endmacro %}
+
+{# Danger button #}
+{% macro btn_danger(text, url='', icon='', type='button', extra_class='', confirm_message='') %}
+{% if url %}
+<a href="{{ url }}" class="btn btn-danger {{ extra_class }}" {% if confirm_message
+    %}onclick="return confirm('{{ confirm_message }}')" {% endif %}>
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</a>
+{% else %}
+<button type="{{ type }}" class="btn btn-danger {{ extra_class }}" {% if confirm_message
+    %}onclick="return confirm('{{ confirm_message }}')" {% endif %}>
+    {% if icon %}<i class="{{ icon }} me-1"></i>{% endif %}
+    {{ text }}
+</button>
+{% endif %}
+{% endmacro %}
+
+{# Icon-only button #}
+{% macro btn_icon(icon, url='', title='', btn_class='btn-sm btn-outline-secondary', type='button') %}
+{% if url %}
+<a href="{{ url }}" class="btn {{ btn_class }}" title="{{ title }}">
+    <i class="{{ icon }}"></i>
+</a>
+{% else %}
+<button type="{{ type }}" class="btn {{ btn_class }}" title="{{ title }}">
+    <i class="{{ icon }}"></i>
+</button>
+{% endif %}
+{% endmacro %}
+
+{# Back button #}
+{% macro btn_back(url, text='') %}
+<a href="{{ url }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left me-1"></i>
+    {{ text or _('Back') }}
+</a>
+{% endmacro %}
+
+{# Edit button #}
+{% macro btn_edit(url, text='') %}
+<a href="{{ url }}" class="btn btn-sm btn-outline-primary">
+    <i class="fas fa-edit me-1"></i>
+    {{ text or _('Edit') }}
+</a>
+{% endmacro %}
+
+{# Delete button #}
+{% macro btn_delete(url, text='', confirm_message='') %}
+<a href="{{ url }}" class="btn btn-sm btn-outline-danger"
+    onclick="return confirm('{{ confirm_message or _('Are you sure?') }}')">
+    <i class="fas fa-trash me-1"></i>
+    {{ text or _('Delete') }}
+</a>
+{% endmacro %}

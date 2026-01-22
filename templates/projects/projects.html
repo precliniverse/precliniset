@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    /* Professional Table Styling */
+    .project-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+    }
+
+    .project-table th {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+    }
+
+    /* Team Group Header */
+    .team-group-header {
+        background-color: #e9ecef;
+        color: #495057;
+        font-weight: bold;
+        font-size: 0.85rem;
+        padding: 8px 12px;
+        border-top: 1px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    /* Project Rows */
+    .project-row td {
+        vertical-align: middle;
+        padding: 8px 12px;
+        border-bottom: 1px solid #e9ecef;
+        font-size: 0.9rem;
+    }
+
+    .project-row:hover {
+        background-color: #f1f3f5;
+        cursor: pointer;
+    }
+
+    /* Visual cues */
+    .slug-text {
+        font-family: var(--bs-font-monospace);
+        font-size: 0.85em;
+        color: #6c757d;
+    }
+
+    .stat-item {
+        display: inline-block;
+        min-width: 30px;
+        margin-right: 10px;
+        color: #495057;
+        font-size: 0.85rem;
+    }
+
+    .stat-item i {
+        color: #adb5bd;
+        margin-right: 4px;
+    }
+
+    /* Owner Highlight */
+    .is-owner {
+        border-left: 3px solid #0d6efd;
+    }
+
+    .archived-row {
+        opacity: 0.6;
+        background-color: #fdfdfe;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+
+    <!-- Toolbar -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center">
+            <h1 class="h3 mb-0 me-3">{{ _('Projects') }}</h1>
+            <a href="{{ url_for('projects.create_project') }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus me-1"></i> {{ _('New Project') }}
+            </a>
+        </div>
+
+        <!-- Search & Filter -->
+        <form class="d-flex align-items-center" method="GET" action="{{ url_for('projects.list_projects') }}">
+            <div class="input-group input-group-sm me-2" style="width: 300px;">
+                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" class="form-control border-start-0" placeholder="{{ _('Search projects...') }}"
+                    name="q" value="{{ request.args.get('q', '') }}">
+            </div>
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="showArchivedProjectsSwitch"
+                    name="show_archived" value="true" {% if show_archived %}checked{% endif %}
+                    onchange="this.form.submit()">
+                <label class="form-check-label small text-muted" for="showArchivedProjectsSwitch">{{ _('Archived')
+                    }}</label>
+            </div>
+        </form>
+    </div>
+
+    {% if projects %}
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 project-table">
+                <thead>
+                    <tr>
+                        <th style="width: 35%;">{{ _('Project Name') }}</th>
+                        <th style="width: 15%;">{{ _('Owner') }}</th>
+                        <th style="width: 35%;">{{ _('Statistics') }}</th>
+                        <th style="width: 15%;" class="text-end">{{ _('Last Updated') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set current_team = namespace(name=None) %}
+
+                    {% for item in projects %}
+                    {% set project_obj = item.project %}
+                    {% set stats = item.stats %}
+
+                    {# --- Team Header Logic --- #}
+                    {% if current_team.name != project_obj.team.name %}
+                    {% set current_team.name = project_obj.team.name %}
+                    <tr>
+                        <td colspan="4" class="team-group-header">
+                            <i class="fas fa-users me-2 text-secondary"></i>{{ current_team.name }}
+                        </td>
+                    </tr>
+                    {% endif %}
+
+                    {# FIX: Removed onclick, added data-href #}
+                    <tr class="project-row {% if project_obj.is_archived %}archived-row{% endif %} {% if project_obj.owner_id == current_user.id %}is-owner{% endif %}"
+                        data-href="{{ url_for('projects.view_edit_project', project_slug=project_obj.slug) }}">
+
+                        <!-- Name & Slug -->
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="fw-bold text-dark">
+                                    {{ project_obj.name }}
+                                </div>
+                                {% if project_obj.is_archived %}
+                                <span class="badge bg-secondary ms-2" style="font-size: 0.65em;">{{ _('ARCHIVED')
+                                    }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="slug-text">{{ project_obj.slug }}</div>
+                            {% if project_obj.description %}
+                            <div class="text-muted small text-truncate" style="max-width: 400px;">
+                                {{ project_obj.description | striptags }}
+                            </div>
+                            {% endif %}
+                        </td>
+
+                        <!-- Owner -->
+                        <td>
+                            <div class="d-flex align-items-center">
+                                {% if project_obj.owner_id == current_user.id %}
+                                <i class="fas fa-user-circle text-primary me-2"
+                                    title="{{ _('You own this project') }}"></i>
+                                <span class="fw-medium">{{ _('You') }}</span>
+                                {% else %}
+                                <div class="text-truncate" style="max-width: 150px;"
+                                    title="{{ project_obj.owner.email }}">
+                                    {{ project_obj.owner.email.split('@')[0] }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Stats (Compact) -->
+                        <td>
+                            <span class="stat-item" title="{{ _('Experimental Groups') }}">
+                                <i class="fas fa-layer-group"></i> {{ stats.group_count }}
+                            </span>
+                            <span class="stat-item" title="{{ _('Animals') }}">
+                                <i class="fas fa-paw"></i> {{ stats.animal_count }}
+                            </span>
+                            <span class="stat-item" title="{{ _('DataTables') }}">
+                                <i class="fas fa-table"></i> {{ stats.datatable_count }}
+                            </span>
+                            <span class="stat-item" title="{{ _('Samples') }}">
+                                <i class="fas fa-vials"></i> {{ stats.sample_count }}
+                            </span>
+                            {% if stats.ea_refs and stats.ea_refs != 'N/A' %}
+                            <span class="stat-item ms-2 border-start ps-2" title="{{ _('Ethical Approval') }}">
+                                <i class="fas fa-balance-scale"></i> <small>{{ stats.ea_refs }}</small>
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Date -->
+                        <td class="text-end text-muted small">
+                            {{ project_obj.updated_at.strftime('%Y-%m-%d') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination Footer -->
+        {% if total_pages > 1 %}
+        <div class="card-footer bg-white border-top-0 py-3">
+            {% include 'components/_pagination.html' %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <div class="text-center p-5 bg-light rounded border border-dashed">
+        <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+        <h5>{{ _('No projects found') }}</h5>
+        <p class="text-muted">{{ _('Get started by creating a new project for your team.') }}</p>
+        <a href="{{ url_for('projects.create_project') }}" class="btn btn-primary mt-2">
+            {{ _('Create Project') }}
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        // Make rows clickable using JavaScript to comply with CSP
+        const rows = document.querySelectorAll('.project-row');
+        rows.forEach(row => {
+            row.addEventListener('click', function () {
+                const url = this.dataset.href;
+                if (url) {
+                    window.location.href = url;
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

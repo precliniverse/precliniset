@@ -1,0 +1,139 @@
+{# templates/datatables/analysis/_results_stage3.html #}
+<div id="show-results-stage" {% if analysis_stage=='show_results' %}style="display: block;" {% else
+    %}style="display: none;" {% endif %}>
+    <hr>
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{{ _('Analysis Results') }}</h2>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-export-pdf"><i
+                        class="fas fa-file-pdf me-1"></i> {{ _('Export') }}</button>
+            </div>
+        </div>
+        {% if source_identifiers and source_identifiers|length > 1 %}
+        <p class="text-muted small mb-0 mt-1">
+            <strong>{{ _('Analyzed Data:') }}</strong> 
+            {% for identifier in source_identifiers %}
+            <span class="badge bg-light text-dark border fw-normal">{{ identifier }}</span>
+            {% endfor %}
+        </p>
+        {% elif data_table %}
+        <p class="text-muted small mb-0 mt-1">
+            <span class="d-none d-print-inline"><strong>{{ _('Group:') }}</strong> {{ data_table.group.name }} | </span>
+            <strong>{{ _('DataTable:') }}</strong> {{ data_table.protocol.name }} ({{ data_table.date }})
+        </p>
+        {% endif %}
+    </div>
+
+    {# --- Overall Errors & Notes --- #}
+    {% if analysis_results and (analysis_results.overall_error or analysis_results.overall_notes) %}
+    <div class="mb-4">
+        {% if analysis_results.overall_error %}
+        <div class="alert alert-danger" role="alert">
+            <h4><i class="fas fa-exclamation-circle me-2"></i>{{ _('Analysis Error') }}</h4>
+            <p class="mb-0">{{ analysis_results.overall_error }}</p>
+        </div>
+        {% endif %}
+
+        {% if analysis_results.overall_notes %}
+        <div class="alert alert-info py-2" role="alert">
+            <ul class="mb-0 small">
+                {% for note in analysis_results.overall_notes %}
+                <li>{{ note }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# --- Survival Analysis Results (New) --- #}
+    {% if analysis_results.survival_results %}
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span class="fw-bold"><i class="fas fa-heartbeat me-2"></i>{{ _('Survival Analysis (Kaplan-Meier)')
+                }}</span>
+        </div>
+        <div class="card-body">
+            {% if analysis_results.survival_results.error %}
+            <div class="alert alert-danger">{{ analysis_results.survival_results.error }}</div>
+            {% else %}
+            <div class="row">
+                <div class="col-lg-8">
+                    <div id="plotlyChart-survival" class="plotly-graph-div" style="height:450px; width:100%;"></div>
+                    <script nonce="{{ csp_nonce }}">
+                        document.addEventListener('DOMContentLoaded', function () {
+                            Plots.renderSurvival('plotlyChart-survival', {{ analysis_results.survival_results.graph_data | tojson | safe }});
+                        });
+                    </script>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card h-100 bg-light">
+                        <div class="card-header fw-bold small">{{ _('Log-Rank Test Results') }}</div>
+                        <div class="card-body small p-2">
+                            {{ macros.render_stats_table(analysis_results.survival_results.stats_data) }}
+                            {% if analysis_results.survival_results.p_value is not none %}
+                            <div class="mt-2 text-center p-2 border rounded bg-white">
+                                <strong class="d-block">{{ _('P-Value') }}</strong>
+                                <span
+                                    class="fs-5 {% if analysis_results.survival_results.p_value <= 0.05 %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                                    {{ "%.4f"|format(analysis_results.survival_results.p_value) }}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# --- Group Summary --- #}
+    {% if analysis_results.group_summary_html %}
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <i class="fas fa-users me-2"></i>{{ _('Group Composition Summary') }}
+        </div>
+        <div class="card-body p-0" style="overflow-x: auto;">
+            {{ analysis_results.group_summary_html|safe }}
+        </div>
+    </div>
+    {% endif %}
+
+    {# --- Standard Analysis Results (Split/Param) --- #}
+    {% if analysis_results.results_by_split %}
+    {# Identical logic to previous monolithic file, just wrapped #}
+    {% for split_value, split_results in analysis_results.results_by_split.items() %}
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">{{ analysis_results.splitting_parameter }}: <strong>{{ split_value }}</strong></h5>
+        </div>
+        <div class="card-body">
+            {% include "datatables/analysis/_results_accordion.html" %}
+        </div>
+    </div>
+    {% endfor %}
+    {% elif analysis_results.results_by_parameter %}
+    <div class="mb-4">
+        {% set split_results = analysis_results %} {# Alias for reuse #}
+        {% include "datatables/analysis/_results_accordion.html" %}
+    </div>
+    {% elif analysis_stage == 'show_results' and not analysis_results.survival_results %}
+    <div class="alert alert-warning">{{ _('No analysis results were generated.') }}</div>
+    {% endif %}
+
+    {# --- Navigation --- #}
+    <div class="mt-4 d-flex justify-content-between">
+        <a href="{{ url_for('datatables.create_data_table') }}" class="btn btn-outline-secondary"><i
+                class="fas fa-list-ul me-1"></i> {{ _('Back to List') }}</a>
+
+        <div>
+            <button type="button" class="btn btn-primary" id="btn-edit-parameters-results"><i
+                    class="fas fa-edit me-1"></i> {{ _('Edit Parameters') }}</button>
+            <button type="button" class="btn btn-secondary ms-2" id="btn-reanalyze-this-table"
+                data-url="{{ request.path }}"><i class="fas fa-redo me-1"></i> {{ _('Re-Run') }}</button>
+        </div>
+    </div>
+</div>

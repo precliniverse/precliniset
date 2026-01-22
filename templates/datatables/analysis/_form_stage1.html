@@ -1,0 +1,158 @@
+{# templates/datatables/analysis/_form_stage1.html #}
+<div id="initial-selection-stage" {% if analysis_stage !='initial_selection' %}style="display: none;" {% endif %}>
+    <div class="row mb-4 justify-content-center">
+        <div class="col-md-9 col-lg-8"> {# Increased width for better layout #}
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">{{ _('Step 1: Select Parameters & Design') }}</div>
+                <input type="hidden" name="analysis_stage" id="analysis_stage" value="propose_workflow">
+                <div class="card-body">
+
+                    {# --- Grouping Parameters (New Checkbox Grid) --- #}
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">{{ _('Grouping Parameters:') }}</label>
+                        {# Hidden select for form submission compatibility #}
+                        <select name="grouping_params" id="grouping_params" class="form-select grouping-select d-none" multiple></select>
+
+                        <div class="card bg-light">
+                             <div class="card-header py-1 d-flex justify-content-between align-items-center">
+                                <span class="small text-muted" id="grouping-selected-count">0 {{ _('selected') }}</span>
+                                <small class="text-muted fst-italic">{{ _('Factors defining your groups (e.g. Treatment, Genotype)') }}</small>
+                            </div>
+                            <div class="card-body py-2" style="max-height: 150px; overflow-y: auto;">
+                                <div id="grouping-params-checkboxes" class="row row-cols-2 row-cols-md-3 g-2">
+                                    <div class="text-muted small p-2">{{ _('Loading parameters...') }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="grouping-params-error" class="invalid-feedback d-block" style="display:none;">{{ _('Select at least one grouping parameter.') }}</div>
+                    </div>
+
+                    {# --- Numerical Parameters (Existing Checkbox Grid) --- #}
+                    <div class="mb-4">
+                         <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-bold mb-0">{{ _('Parameters to Analyze:') }}</label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary py-0" id="select-all-numerical" title="{{ _('Select All') }}">{{ _('All') }}</button>
+                                <button type="button" class="btn btn-outline-secondary py-0" id="deselect-all-numerical" title="{{ _('Clear All') }}">{{ _('Clear') }}</button>
+                            </div>
+                        </div>
+                        {# Hidden select #}
+                        <select name="numerical_params" id="numerical_params" class="form-select numerical-select d-none" multiple required></select>
+
+                        <div class="card">
+                            <div class="card-body py-2" style="max-height: 300px; overflow-y: auto;">
+                                <div id="numerical-params-checkboxes" class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-2">
+                                    <div class="text-muted small p-2">{{ _('Loading parameters...') }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="numerical-params-error" class="invalid-feedback">{{ _('Select at least one numerical parameter.') }}</div>
+                    </div>
+
+                    {# --- Advanced Options Accordion --- #}
+                    <div class="accordion mb-3" id="advancedOptionsAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingAdvanced">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvanced" aria-expanded="false" aria-controls="collapseAdvanced">
+                                    <i class="fas fa-sliders-h me-2"></i> {{ _('Advanced Design Options') }}
+                                </button>
+                            </h2>
+                            <div id="collapseAdvanced" class="accordion-collapse collapse" aria-labelledby="headingAdvanced" data-bs-parent="#advancedOptionsAccordion">
+                                <div class="accordion-body bg-light">
+                                    
+                                    {# 1. Control Group & Split #}
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6">
+                                            <label for="control_group_param" class="form-label fw-bold small">{{ _('Control Group (for Comparisons)') }}
+                                                <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="{{ _('Select the group to serve as the baseline/control for post-hoc tests (e.g., Dunnett\'s).') }}"></i>
+                                            </label>
+                                            <select name="control_group_param" id="control_group_param" class="form-select form-select-sm">
+                                                <option value="">{{ _('-- None / Auto --') }}</option>
+                                            </select>
+                                        </div>
+                                         <div class="col-md-6">
+                                            <label for="splitting_param" class="form-label fw-bold small">{{ _('Split Analysis By:') }}</label>
+                                            <select name="splitting_param" id="splitting_param" class="form-select form-select-sm splitting-select">
+                                                <option id="no_split" value="">{{ _('Do not split analysis') }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {# 2. Covariate (ANCOVA) #}
+                                    <div class="mb-3">
+                                        <label for="covariate_param" class="form-label fw-bold small">{{ _('Covariate (for ANCOVA)') }}
+                                             <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="{{ _('Select a continuous variable to control for (e.g., Baseline Weight). Enables ANCOVA suggestions.') }}"></i>
+                                        </label>
+                                        <select name="covariate_param" id="covariate_param" class="form-select form-select-sm">
+                                            <option value="">{{ _('-- None --') }}</option>
+                                        </select>
+                                    </div>
+
+                                    <hr>
+
+                                    {# 3. Survival Analysis Options #}
+                                    <h6 class="fw-bold text-primary"><i class="fas fa-heartbeat me-1"></i> {{ _('Survival Analysis (Kaplan-Meier)') }}</h6>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="enable_survival" name="enable_survival" value="true" {% if form_data.get('enable_survival') %}checked{% endif %}>
+                                        <label class="form-check-label small" for="enable_survival">{{ _('Enable Survival Analysis') }}</label>
+                                    </div>
+                                    
+                                    <div id="survival-options" class="row g-3" style="display:none;">
+                                        <div class="col-md-6">
+                                            <label for="survival_time_col" class="form-label fw-bold small">{{ _('Date of Death Col') }}</label>
+                                            <select name="survival_time_col" id="survival_time_col" class="form-select form-select-sm">
+                                                <option value="">{{ _('-- Select Date Column --') }}</option>
+                                            </select>
+                                             <div class="form-text x-small">{{ _('Used to calc duration.') }}</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="survival_event_col" class="form-label fw-bold small">{{ _('Status / Event Col') }}</label>
+                                             <select name="survival_event_col" id="survival_event_col" class="form-select form-select-sm">
+                                                <option value="">{{ _('-- Select Status Column --') }}</option>
+                                            </select>
+                                            <div class="form-text x-small">{{ _('Value "1" or "Dead" = Event.') }}</div>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+                                    
+                                    {# 4. Other Settings (Ref Range, Outliers, RM) #}
+                                    <div class="row g-3">
+                                         <div class="col-md-6">
+                                            <label for="reference_range_id" class="form-label fw-bold small">{{ _('Reference Range') }}</label>
+                                            <select name="reference_range_id" id="reference_range_id" class="form-select form-select-sm reference-range-select">
+                                                <option value="">{{ _('-- None --') }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 align-self-end">
+                                             <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" id="exclude_outliers" name="exclude_outliers" value="true" {% if form_data.get('exclude_outliers', false) %}checked{% endif %}>
+                                                <label class="form-check-label small" for="exclude_outliers">{{ _('Exclude outliers (IQR)') }}</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 form-check border rounded p-2 bg-white" id="repeated-measures-container">
+                                        <input type="checkbox" class="form-check-input" id="is_repeated_measures" name="is_repeated_measures" value="on" {% if form_data.get('is_repeated_measures') %}checked{% endif %}>
+                                        <label class="form-check-label fw-bold small" for="is_repeated_measures">{{ _('Repeated Measures Design?') }}</label>
+                                         {% if subject_id_col %}
+                                        <small class="d-block text-muted x-small">({{ _('Requires ID: "{col}"').format(col=subject_id_col) }})
+                                            {% if not subject_id_col_present %}<strong class="text-danger">({{ _('MISSING') }})</strong>{% endif %}
+                                        </small>
+                                        {% endif %}
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ request.referrer or url_for('datatables.create_data_table') }}" class="btn btn-outline-secondary">{{ _('Cancel') }}</a>
+                        <button type="button" class="btn btn-primary" id="btn-propose-workflow">{{ _('Next: Check Data & Propose Tests') }} <i class="fas fa-arrow-right ms-1"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

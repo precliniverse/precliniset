@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Edit Housing Condition Set') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('resources.manage_housing_conditions') }}" class="btn btn-sm btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> {{ _('Back to All Sets') }}</a>
+    <h1>{{ _('Edit Housing Condition Set') }}</h1>
+    
+    <form method="POST" action="{{ url_for('resources.edit_housing_condition_set', id=set.id) }}">
+        {{ form.hidden_tag() }}
+        <div class="card mb-4">
+            <div class="card-header">{{ _('Set Details') }}</div>
+            <div class="card-body">
+                {{ render_field(form.name, class="form-control") }}
+                {{ render_field(form.description, class="form-control", rows=3) }}
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">{{ _('Associated Housing Condition Items') }}</div>
+            <div class="card-body">
+                {% if form_item_associations %}
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>{{ _('Item') }}</th>
+                                <th>{{ _('Default Value') }}</th>
+                                <th>{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for item_assoc in form_item_associations %}
+                            <tr>
+                                <td>
+                                    <strong>{{ item_assoc.item.name }}</strong>
+                                    {% if item_assoc.item.description %}<p class="mb-0 text-muted"><small>{{ item_assoc.item.description }}</small></p>{% endif %}
+                                    {{ item_assoc.form.item_id }} {# Hidden field for item_id #}
+                                </td>
+                                <td>
+                                    {% if item_assoc.item.data_type.name == 'CATEGORY' %}
+                                        <select name="{{ item_assoc.form.default_value.name }}" id="{{ item_assoc.form.default_value.id }}" class="form-select form-select-sm">
+                                            <option value="">-- {{ _('Select Value') }} --</option>
+                                            {% for val in item_assoc.item.allowed_values.split(';') %}
+                                                {% set clean_val = val.strip() %}
+                                                {% if clean_val %}
+                                                <option value="{{ clean_val }}" {% if clean_val == item_assoc.form.default_value.data %}selected{% endif %}>{{ clean_val }}</option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    {% elif item_assoc.item.data_type.name == 'INT' %}
+                                        <input type="number" name="{{ item_assoc.form.default_value.name }}" id="{{ item_assoc.form.default_value.id }}" value="{{ item_assoc.form.default_value.data or '' }}" class="form-control form-control-sm" step="1">
+                                    {% elif item_assoc.item.data_type.name == 'FLOAT' %}
+                                        <input type="number" name="{{ item_assoc.form.default_value.name }}" id="{{ item_assoc.form.default_value.id }}" value="{{ item_assoc.form.default_value.data or '' }}" class="form-control form-control-sm" step="any">
+                                    {% elif item_assoc.item.data_type.name == 'DATE' %}
+                                        <input type="date" name="{{ item_assoc.form.default_value.name }}" id="{{ item_assoc.form.default_value.id }}" value="{{ item_assoc.form.default_value.data or '' }}" class="form-control form-control-sm">
+                                    {% else %} {# TEXT #}
+                                        <input type="text" name="{{ item_assoc.form.default_value.name }}" id="{{ item_assoc.form.default_value.id }}" value="{{ item_assoc.form.default_value.data or '' }}" class="form-control form-control-sm">
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('resources.remove_item_from_set', set_id=set.id, item_id=item_assoc.item.id) }}" onsubmit="return confirm('{{ _('Are you sure you want to remove this item?') }}');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-danger">{{ _('Remove') }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p>{{ _('No housing condition items have been added to this set yet.') }}</p>
+                {% endif %}
+                <hr>
+                <div class="mb-3">
+                    {{ form.add_items.label(class="form-label") }}
+                    {{ form.add_items(class="form-select", multiple="multiple") }}
+                </div>
+            </div>
+        </div>
+
+        {{ form.submit_set(class="btn btn-primary", value=_('Update Set')) }}
+        <a href="{{ url_for('resources.manage_housing_conditions') }}" class="btn btn-secondary">{{ _('Cancel') }}</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{csp_nonce }}">
+$(document).ready(function() {
+    $('#add_items').select2({
+        theme: "bootstrap-5",
+        placeholder: "{{ _('Select items to add') }}",
+        allowClear: true
+    });
+});
+</script>
+{% endblock %}

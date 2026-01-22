@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Permission Denied') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2 text-center">
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> {{ _('Access Forbidden') }} (Error 403)</h4>
+            </div>
+            <p class="lead mt-4">
+                {{ _("Sorry, you don't have the necessary permissions to access this page or perform the requested action.") }}
+            </p>
+            <p>
+                {{ _('If you believe you should have access, please contact your team administrator or the project owner to request the appropriate permissions.') }}
+            </p>
+            <hr>
+            <p class="text-muted">
+                {{ _('You can return to the previous page or go to the homepage.') }}
+            </p>
+            <div class="mt-4">
+                <a href="javascript:history.back()" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> {{ _('Go Back') }}</a>
+                <a href="{{ url_for('main.index') }}" class="btn btn-primary"><i class="fas fa-home"></i> {{ _('Go to Homepage') }}</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

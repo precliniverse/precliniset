@@ -1,0 +1,49 @@
+{# templates/components/badges.html #}
+{# Reusable badge component macros #}
+
+{# Status badge with color coding #}
+{% macro status_badge(status, text='') %}
+{% set badge_class = 'secondary' %}
+{% set display_text = text or status %}
+
+{% if status in ['active', 'approved', 'completed', 'success'] %}
+{% set badge_class = 'success' %}
+{% elif status in ['pending', 'in_progress', 'processing'] %}
+{% set badge_class = 'warning' %}
+{% elif status in ['archived', 'cancelled', 'rejected', 'failed'] %}
+{% set badge_class = 'danger' %}
+{% elif status in ['draft', 'inactive'] %}
+{% set badge_class = 'secondary' %}
+{% endif %}
+
+<span class="badge bg-{{ badge_class }}">{{ display_text }}</span>
+{% endmacro %}
+
+{# Severity badge #}
+{% macro severity_badge(severity) %}
+{% set badge_class = 'secondary' %}
+
+{% if severity == 'MILD' %}
+{% set badge_class = 'success' %}
+{% elif severity == 'MODERATE' %}
+{% set badge_class = 'warning' %}
+{% elif severity == 'SEVERE' %}
+{% set badge_class = 'danger' %}
+{% endif %}
+
+<span class="badge bg-{{ badge_class }}">{{ severity }}</span>
+{% endmacro %}
+
+{# Count badge #}
+{% macro count_badge(count, color='primary') %}
+<span class="badge bg-{{ color }}">{{ count }}</span>
+{% endmacro %}
+
+{# Permission badge #}
+{% macro permission_badge(has_permission, yes_text='', no_text='') %}
+{% if has_permission %}
+<span class="badge bg-success">{{ yes_text or _('Yes') }}</span>
+{% else %}
+<span class="badge bg-secondary">{{ no_text or _('No') }}</span>
+{% endif %}
+{% endmacro %}

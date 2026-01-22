@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% if query %}: {{ query }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Search Results') }}</h1>
+
+    {# Display search form again, perhaps for refinement, or just the query #}
+    <form class="mb-4" method="GET" action="{{ url_for('main.search_results') }}">
+        <div class="input-group">
+            <input name="q" class="form-control" type="search" placeholder="{{ _('Search again...') }}" aria-label="Search" value="{{ query | default('', true) }}">
+            <button class="btn btn-outline-primary" type="submit"><i class="fas fa-search"></i></button>
+        </div>
+        {% if search_form.q.errors %}
+            <div class="text-danger small mt-1">
+                {% for error in search_form.q.errors %} {{ error }} {% endfor %}
+            </div>
+        {% endif %}
+    </form>
+
+    {% if search_performed %}
+        {% if query %}
+            <p class="lead">{{ _('Results for "%(query)s":', query=query) }}</p>
+        {% endif %}
+
+        {% set found_anything = false %}
+
+        {% if results.projects %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('Projects') }} ({{ results.projects|length }})</h3>
+            <div class="list-group mb-3">
+                {% for project in results.projects %}
+                <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}" class="list-group-item list-group-item-action">
+                    <strong>{{ project.name }}</strong> ({{ project.slug }}) - {{ _('Team:') }} {{ project.team.name }}
+                    {% if project.description %}<p class="mb-0 small text-muted">{{ project.description|striptags|truncate(150) }}</p>{% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if results.groups %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('Experimental Groups') }} ({{ results.groups|length }})</h3>
+            <div class="list-group mb-3">
+                {% for group in results.groups %}
+                <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="list-group-item list-group-item-action">
+                    <strong>{{ group.name }}</strong> ({{ group.id }}) - {{ _('Project:') }} {{ group.project.name if group.project else 'N/A' }}
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if results.ethical_approvals %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('Ethical Approvals') }} ({{ results.ethical_approvals|length }})</h3>
+            <div class="list-group mb-3">
+                {% for ea in results.ethical_approvals %}
+                <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=ea.id) }}" class="list-group-item list-group-item-action">
+                    <strong>{{ ea.title }}</strong> ({{ ea.reference_number }})
+                    {% if ea.description %}<p class="mb-0 small text-muted">{{ ea.description|striptags|truncate(150) }}</p>{% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if results.protocols %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('Protocol Models') }} ({{ results.protocols|length }})</h3>
+            <div class="list-group mb-3">
+                {% for protocol in results.protocols %}
+                <a href="{{ url_for('core_models.edit_model', model_type='protocol', id=protocol.id) }}" class="list-group-item list-group-item-action">
+                    <strong>{{ protocol.name }}</strong> - {{ _('Severity:') }} {{ protocol.severity.value }}
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if results.animal_models %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('Animal Models') }} ({{ results.animal_models|length }})</h3>
+            <div class="list-group mb-3">
+                {% for model in results.animal_models %}
+                <a href="{{ url_for('core_models.edit_model', model_type='animal', id=model.id) }}" class="list-group-item list-group-item-action">
+                    <strong>{{ model.name }}</strong>
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if results.partners %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('Partners') }} ({{ results.partners|length }})</h3>
+            <div class="list-group mb-3">
+                {% for partner in results.partners %}
+                <a href="{{ url_for('projects.partner_details', partner_id=partner.id) }}" class="list-group-item list-group-item-action">
+                    <strong>{{ partner.company_name }}</strong> ({{ partner.contact_email }})
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        {% if results.datatables %}
+            {% set found_anything = true %}
+            <h3 class="mt-4">{{ _('DataTables') }} ({{ results.datatables|length }})</h3>
+            <div class="list-group mb-3">
+                {% for dt in results.datatables %}
+                <a href="{{ url_for('datatables.view_data_table', datatable_id=dt.id) }}" class="list-group-item list-group-item-action">
+                    {{ dt.group.name if dt.group else 'N/A' }} / {{ dt.protocol.name if dt.protocol else 'N/A' }} - <strong>{{ dt.date }}</strong>
+                </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+
+        {% if not found_anything and query %}
+            <div class="alert alert-warning mt-4" role="alert">
+                {{ _('No results found for "%(query)s".', query=query) }}
+            </div>
+        {% elif not query and search_performed %}
+             <div class="alert alert-info mt-4" role="alert">
+                {{ _('Please enter a search term.') }}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="alert alert-info mt-4" role="alert">
+            {{ _('Enter a term in the search bar above to find projects, groups, ethical approvals, and more.') }}
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Transfer Ownership{% endblock %}
+
+{% block content %}
+    <h1>Transfer Ownership</h1>
+    <p>User {{ user.email }} is being removed from team {{ team.name }}.</p>
+    <p>They own the following projects in this team:</p>
+    <ul>
+        {% for project in projects %}
+            <li>{{ project.name }}</li>
+        {% endfor %}
+    </ul>
+
+    {% if team_admins %}
+        <form method="POST" action="{{ url_for('admin.remove_user_from_team', user_id=user.id) }}">
+            <input type="hidden" name="team_to_remove" value="{{ team.id }}">
+            <label for="new_owner">Select a new owner:</label>
+            <select name="new_owner" id="new_owner" class="form-select">
+                {% for admin in team_admins %}
+                    <option value="{{ admin.id }}">{{ admin.email }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">Transfer Ownership and Remove User</button>
+        </form>
+    {% else %}
+        <p>There are no other admins in this team to transfer ownership to. Please assign another admin before removing this user.</p>
+    {% endif %}
+{% endblock %}

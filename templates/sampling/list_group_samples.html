@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    .filter-form-sampling {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: .25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .select-all-banner {
+        background-color: #e8f4fd;
+        border: 1px solid #b6e0fe;
+        color: #0d3d6b;
+        padding: 0.75rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        border-radius: 0.25rem;
+        display: none;
+    }
+
+    .select-all-banner a {
+        font-weight: bold;
+        text-decoration: underline;
+        cursor: pointer;
+        color: #0a58ca;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <h2 class="mb-3">{{ _('Samples for Group:') }} {{ group.name }}</h2>
+
+    <div class="mb-3">
+        <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="btn btn-secondary btn-sm"><i
+                class="fas fa-arrow-left"></i> {{ _('Back to Group') }}</a>
+        <a href="{{ url_for('sampling.log_batch_samples_for_group', group_id=group.id) }}"
+            class="btn btn-sm btn-primary"><i class="fas fa-plus"></i> {{ _('Create New Sample') }}</a>
+    </div>
+
+    <!-- Filters Toolbar -->
+    <div class="card mb-3 bg-light border-0">
+        <div class="card-body p-2">
+            <div class="row g-2">
+                <!-- Row 1: Primary Filters -->
+                <div class="col-md-2">
+                    <select id="status_filter" class="form-select form-select-sm filter-input">
+                        <option value="all">{{ _('Status: All') }}</option>
+                        {% for status in SampleStatus %}
+                        <option value="{{ status.name }}">{{ status.value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="type_filter" class="form-select form-select-sm filter-input">
+                        <option value="">{{ _('Type: All') }}</option>
+                        {% for type in SampleType %}
+                        <option value="{{ type.name }}">{{ type.value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="organ_filter" class="form-select form-select-sm filter-input">
+                        <option value="">{{ _('Organ: All') }}</option>
+                        {% for organ in organs %}
+                        <option value="{{ organ.id }}">{{ organ.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- New Filters -->
+                <div class="col-md-2">
+                    <select id="staining_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Staining') }}">
+                        {% for s in stainings %}
+                        <option value="{{ s.id }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="anticoagulant_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Anticoagulant') }}">
+                        {% for a in anticoagulants %}
+                        <option value="{{ a.id }}">{{ a.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="derived_type_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Derived Type') }}">
+                        {% for d in derived_types %}
+                        <option value="{{ d.id }}">{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 mt-1">
+                 <div class="col-md-3">
+                    <select id="condition_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Conditions') }}">
+                        {% for c in tissue_conditions %}
+                        <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Row 2: Date Range & Actions -->
+                <div class="col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">{{ _('From') }}</span>
+                        <input type="date" id="date_from" class="form-control filter-input">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">{{ _('To') }}</span>
+                        <input type="date" id="date_to" class="form-control filter-input">
+                    </div>
+                </div>
+
+                <div class="col text-end">
+                    <div id="batchActions" style="display:none;">
+                        <span class="me-2 small fw-bold"><span id="selectedCount">0</span> {{ _('selected') }}</span>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-info" id="actionDerive"
+                                title="{{ _('Create Derived Sample (e.g. Slides)') }}"><i
+                                    class="fas fa-flask"></i></button>
+                            <button class="btn btn-outline-success" id="actionDownloadXLSX"
+                                title="{{ _('Download') }}"><i class="fas fa-file-excel"></i></button>
+                            <button class="btn btn-outline-primary" id="actionShip" title="{{ _('Ship') }}"><i
+                                    class="fas fa-shipping-fast"></i></button>
+                            <!-- FIX: Removed data-bs-toggle/target to allow JS control -->
+                            <button class="btn btn-outline-secondary" id="actionChangeStorage"
+                                title="{{ _('Move') }}"><i class="fas fa-box-open"></i></button>
+                            <button class="btn btn-outline-danger" id="actionDestroy" title="{{ _('Destroy') }}"><i
+                                    class="fas fa-trash"></i></button>
+                            <button class="btn btn-outline-warning" id="actionNotCollected" title="{{ _('Mark as Not Collected') }}"><i
+                                    class="fas fa-ban"></i></button>
+                            <button class="btn btn-success" id="actionStore" title="{{ _('Mark as Stored') }}"><i
+                                    class="fas fa-check"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Select All Banner -->
+    <div id="selectAllBanner" class="select-all-banner">
+        <span id="selectAllMessage"></span>
+        <a id="selectAllMatchingBtn">{{ _('Select all matching samples') }}</a>
+    </div>
+
+    <div class="table-responsive">
+        <table id="groupSamplesTable" class="table table-sm table-striped table-bordered align-middle"
+            style="width:100%">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 20px;"><input type="checkbox" id="selectAllServer"></th>
+                    <th>{{ _('ID') }}</th>
+                    <th>{{ _('Animal ID') }}</th>
+                    <th>{{ _('Type') }}</th>
+                    <th>{{ _('Organs') }}</th>
+                    <th>{{ _('Date') }}</th>
+                    <th>{{ _('Terminal') }}</th>
+                    <th>{{ _('Storage') }}</th>
+                    <th>{{ _('Status') }}</th>
+                    <th>{{ _('Notes') }}</th>
+                    <th>{{ _('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Change Storage Modal -->
+<div class="modal fade" id="changeStorageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Change Storage') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">{{ _('New Location') }}</label>
+                    <select class="form-select" id="newStorageLocation"></select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="confirmChangeStorage">{{ _('Apply') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Configuration Object for JS -->
+<script type="application/json" id="group-samples-config">
+{
+    "groupId": "{{ group.id }}",
+    "csrfToken": "{{ csrf_token() }}",
+    "urls": {
+        "serverSideData": "{{ url_for('sampling.samples_server_side') }}",
+        "logDerivedSamples": "{{ url_for('sampling.log_derived_samples', group_id=group.id) }}",
+        "getStorageLocations": "{{ url_for('sampling.get_storage_locations') }}",
+        "batchChangeStorage": "{{ url_for('sampling.batch_change_storage') }}",
+        "batchShip": "{{ url_for('sampling.batch_ship_samples') }}",
+        "batchDestroy": "{{ url_for('sampling.batch_destroy_samples') }}",
+        "batchNotCollected": "{{ url_for('sampling.batch_not_collected_samples') }}",
+        "batchStore": "{{ url_for('sampling.batch_store_samples') }}",
+        "downloadFile": "{{ url_for('sampling.download_sample_list_file') }}"
+    },
+    "i18n": {
+        "searchPlaceholder": "{{ _('Search (ID, Animal)...') }}",
+        "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+        "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+        "first": "{{ _('First') }}",
+        "last": "{{ _('Last') }}",
+        "next": "{{ _('Next') }}",
+        "previous": "{{ _('Previous') }}",
+        "allPageSelected": "{{ _('All %s samples on this page are selected.') }}",
+        "selectAllMatching": "{{ _('Select all %s samples matching this search') }}",
+        "allMatchingSelected": "{{ _('All %s samples matching this search are selected.') }}",
+        "clearSelection": "{{ _('Clear selection') }}",
+        "enterDestination": "{{ _('Please enter the shipment destination:') }}",
+        "confirmDestroy": "{{ _('Are you sure you want to mark these samples as DESTROYED?') }}",
+        "selectSamplesFirst": "{{ _('Please select samples first.') }}"
+    }
+}
+</script>
+
+<!-- Load the external JS file -->
+<script src="{{ url_for('static', filename='js/group_samples.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

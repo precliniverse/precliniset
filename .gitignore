@@ -1,0 +1,13 @@
+instance/
+.env
+*.db
+*.pyc
+uploads/
+.venv/
+venv/
+logs/
+**/.patch_backups/*
+instance_bak/
+.vscode/
+*.rdb
+site/

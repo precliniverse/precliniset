@@ -1,0 +1,296 @@
+{# templates/ethical_approvals/create_edit_ethical_approval.html #}
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    .procedure-entry {
+        border: 1px solid #dee2e6;
+        border-radius: .25rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background-color: #f8f9fa;
+        position: relative;
+    }
+
+    .procedure-entry .remove-procedure-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>{{ title }}</h1>
+        <div>
+            <a href="{{ url_for('ethical_approvals.list_ethical_approvals') }}" class="btn btn-secondary"><i
+                    class="fas fa-arrow-left"></i> {{ _('Back to Approvals List') }}</a>
+            {% if ea %}
+            <a href="{{ url_for('ethical_approvals.list_groups_for_ethical_approval', ethical_approval_id=ea.id) }}"
+                class="btn btn-info">
+                <i class="fas fa-layer-group"></i> {{ _('View Groups') }} <span class="badge bg-light text-dark">{{
+                    groups_count }}</span>
+            </a>
+            <a href="{{ url_for('ethical_approvals.list_datatables_for_ethical_approval', ethical_approval_id=ea.id) }}"
+                class="btn btn-primary">
+                <i class="fas fa-table"></i> {{ _('View DataTables') }} <span class="badge bg-light text-dark">{{
+                    datatables_count }}</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="POST" id="eaForm"
+        action="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=ea.id if ea else None) }}">
+        {{ form.hidden_tag() }}
+        <div class="card">
+            <div class="card-header">
+                <h4>{{ _('General Information') }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.reference_number, class="form-control" + (" is-invalid" if
+                        form.reference_number.errors else "")) }}
+                        {% if form.reference_number.errors %}<div class="invalid-feedback">{% for error in
+                            form.reference_number.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.title, class="form-control" + (" is-invalid" if form.title.errors else ""))
+                        }}
+                        {% if form.title.errors %}<div class="invalid-feedback">{% for error in form.title.errors
+                            %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ render_field(form.start_date, class="form-control" + (" is-invalid" if form.start_date.errors
+                        else "")) }}
+                        {% if form.start_date.errors %}<div class="invalid-feedback">{% for error in
+                            form.start_date.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ render_field(form.duration_years, class="form-control" + (" is-invalid" if
+                        form.duration_years.errors else "")) }}
+                        {% if form.duration_years.errors %}<div class="invalid-feedback">{% for error in
+                            form.duration_years.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ render_field(form.duration_months, class="form-control" + (" is-invalid" if
+                        form.duration_months.errors else "")) }}
+                        {% if form.duration_months.errors %}<div class="invalid-feedback">{% for error in
+                            form.duration_months.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.species, class="form-control" + (" is-invalid" if form.species.errors else
+                        "")) }}
+                        {% if form.species.errors %}<div class="invalid-feedback">{% for error in form.species.errors
+                            %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.number_of_animals, class="form-control" + (" is-invalid" if
+                        form.number_of_animals.errors else "")) }}
+                        {% if form.number_of_animals.errors %}<div class="invalid-feedback">{% for error in
+                            form.number_of_animals.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ render_field(form.sex_justification, class="form-control" + (" is-invalid" if
+                    form.sex_justification.errors else ""), rows="2") }}
+                    {% if form.sex_justification.errors %}<div class="invalid-feedback">{% for error in
+                        form.sex_justification.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ render_field(form.euthanasia_method, class="form-control" + (" is-invalid" if
+                    form.euthanasia_method.errors else ""), rows="2") }}
+                    {% if form.euthanasia_method.errors %}<div class="invalid-feedback">{% for error in
+                        form.euthanasia_method.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ render_field(form.description, class="form-control" + (" is-invalid" if form.description.errors
+                    else ""), rows="4") }}
+                    {% if form.description.errors %}<div class="invalid-feedback">{% for error in
+                        form.description.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.team_id, class="form-select" + (" is-invalid" if form.team_id.errors else
+                        "")) }}
+                        {% if form.team_id.errors %}<div class="invalid-feedback">{% for error in form.team_id.errors
+                            %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.shared_with_teams, class="form-select" + (" is-invalid" if
+                        form.shared_with_teams.errors else ""), size=5) }}
+                        {% if form.shared_with_teams.errors %}<div class="invalid-feedback">{% for error in
+                            form.shared_with_teams.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.apafis_reference, class="form-control" + (" is-invalid" if
+                        form.apafis_reference.errors else "")) }}
+                        {% if form.apafis_reference.errors %}<div class="invalid-feedback">{% for error in
+                            form.apafis_reference.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.apafis_version, class="form-control" + (" is-invalid" if
+                        form.apafis_version.errors else "")) }}
+                        {% if form.apafis_version.errors %}<div class="invalid-feedback">{% for error in
+                            form.apafis_version.errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4>{{ _('Procedures') }}</h4>
+            </div>
+            <div class="card-body">
+                <div id="proceduresContainer">
+                    {% for proc_form in form.procedures %}
+                    <div class="procedure-entry">
+                        {{ proc_form.form.hidden_tag() if proc_form.form.hidden_tag }}
+                        <button type="button" class="btn-close remove-procedure-btn" aria-label="Close"
+                            title="{{ _('Remove Procedure') }}"></button>
+                        <div class="row">
+                            <div class="col-md-8 mb-3">{{ render_field(proc_form.form.name, class="form-control" + ("
+                                is-invalid" if proc_form.form.name.errors else "")) }}</div>
+                            <div class="col-md-4 mb-3">{{ render_field(proc_form.form.severity, class="form-select" + ("
+                                is-invalid" if proc_form.form.severity.errors else "")) }}</div>
+                        </div>
+                        <div class="mb-3">{{ render_field(proc_form.form.description, class="form-control", rows="3") }}
+                        </div>
+                        <div class="mb-3">{{ render_field(proc_form.form.pain_management, class="form-control",
+                            rows="2") }}</div>
+                        <div class="form-check">
+                            {{ proc_form.form.is_euthanasia_endpoint(class="form-check-input") }}
+                            {{ proc_form.form.is_euthanasia_endpoint.label(class="form-check-label") }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" id="addProcedureBtn" class="btn btn-success mt-2"><i class="fas fa-plus"></i> {{
+                    _('Add Procedure') }}</button>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            {{ form.submit_ethical_approval(class="btn btn-primary btn-lg") }}
+        </div>
+    </form>
+</div>
+
+<!-- Template for new procedure entries -->
+<template id="procedureTemplate">
+    <div class="procedure-entry">
+        <button type="button" class="btn-close remove-procedure-btn" aria-label="Close"
+            title="{{ _('Remove Procedure') }}"></button>
+        <div class="row">
+            <div class="col-md-8 mb-3">
+                <label class="form-label" for="procedures-{{'__prefix__'}}-name">{{ _('Procedure Name') }}</label>
+                <input class="form-control" id="procedures-{{'__prefix__'}}-name"
+                    name="procedures-{{'__prefix__'}}-name" type="text" value="">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label class="form-label" for="procedures-{{'__prefix__'}}-severity">{{ _('Severity') }}</label>
+                <select class="form-select" id="procedures-{{'__prefix__'}}-severity"
+                    name="procedures-{{'__prefix__'}}-severity">
+                    {% for s_name, s_value in form.procedures.unbound_field.args[0].severity.choices %}
+                    <option value="{{ s_name }}">{{ s_value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="procedures-{{'__prefix__'}}-description">{{ _('Description') }}</label>
+            <textarea class="form-control" id="procedures-{{'__prefix__'}}-description"
+                name="procedures-{{'__prefix__'}}-description" rows="3"></textarea>
+        </div>
+        <div class="mb-3">
+            <label class="form-label" for="procedures-{{'__prefix__'}}-pain_management">{{ _('Pain Management')
+                }}</label>
+            <textarea class="form-control" id="procedures-{{'__prefix__'}}-pain_management"
+                name="procedures-{{'__prefix__'}}-pain_management" rows="2"></textarea>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" id="procedures-{{'__prefix__'}}-is_euthanasia_endpoint"
+                name="procedures-{{'__prefix__'}}-is_euthanasia_endpoint" type="checkbox" value="y">
+            <label class="form-check-label" for="procedures-{{'__prefix__'}}-is_euthanasia_endpoint">{{ _('Is Euthanasia
+                an Endpoint?') }}</label>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        const container = document.getElementById('proceduresContainer');
+        const addButton = document.getElementById('addProcedureBtn');
+        const template = document.getElementById('procedureTemplate');
+
+        function reindexProcedures() {
+            const entries = container.querySelectorAll('.procedure-entry');
+            entries.forEach((entry, index) => {
+                entry.querySelectorAll('input, select, textarea').forEach(input => {
+                    const name = input.getAttribute('name');
+                    if (name) {
+                        input.setAttribute('name', name.replace(/procedures-\d+-/, `procedures-${index}-`));
+                    }
+                    const id = input.getAttribute('id');
+                    if (id) {
+                        input.setAttribute('id', id.replace(/procedures-\d+-/, `procedures-${index}-`));
+                    }
+                    const label = entry.querySelector(`label[for="${id}"]`);
+                    if (label) {
+                        label.setAttribute('for', input.getAttribute('id'));
+                    }
+                });
+            });
+        }
+
+        function addRemoveListener(entry) {
+            const removeButton = entry.querySelector('.remove-procedure-btn');
+            if (removeButton) {
+                removeButton.addEventListener('click', function () {
+                    if (container.querySelectorAll('.procedure-entry').length > 1) {
+                        entry.remove();
+                        reindexProcedures();
+                    } else {
+                        alert("{{ _('At least one procedure is required.') }}");
+                    }
+                });
+            }
+        }
+
+        if (addButton) {
+            addButton.addEventListener('click', function () {
+                const newIndex = container.querySelectorAll('.procedure-entry').length;
+                const newEntryHtml = template.innerHTML.replace(/{{'__prefix__'}}/g, newIndex);
+                const newEntryDiv = document.createElement('div');
+                newEntryDiv.innerHTML = newEntryHtml;
+                const newEntry = newEntryDiv.firstElementChild;
+
+                container.appendChild(newEntry);
+                addRemoveListener(newEntry);
+            });
+        }
+
+        // Add remove listeners to existing entries on page load
+        container.querySelectorAll('.procedure-entry').forEach(addRemoveListener);
+    });
+</script>
+{% endblock %}

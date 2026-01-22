@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% from "components/project_sidebar.html" import project_sidebar with context %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    .select-all-banner {
+        background-color: #e8f4fd;
+        border: 1px solid #b6e0fe;
+        color: #0d3d6b;
+        padding: 0.75rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        border-radius: 0.25rem;
+        display: none;
+    }
+
+    .select-all-banner a {
+        font-weight: bold;
+        text-decoration: underline;
+        cursor: pointer;
+        color: #0a58ca;
+    }
+
+    .context-header {
+        background-color: #e9ecef;
+        padding: 1rem;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+        border-left: 5px solid #0d6efd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+
+    <!-- Context Header (Only visible if viewing a specific Storage) -->
+    {% if storage %}
+    <div class="context-header d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="h4 mb-1"><i class="fas fa-box-open me-2"></i>{{ storage.name }}</h2>
+            <small class="text-muted">
+                <strong>{{ _('Team:') }}</strong> {{ storage.team.name }} |
+                <strong>{{ _('Capacity:') }}</strong> {{ storage.capacity or 'N/A' }} |
+                <strong>{{ _('Location:') }}</strong> {{ storage.location_details or 'N/A' }}
+            </small>
+        </div>
+        <div>
+            <a href="{{ url_for('storage.manage_storages') }}" class="btn btn-sm btn-secondary">{{ _('Back') }}</a>
+            <a href="{{ url_for('storage.edit_storage', storage_id=storage.id) }}" class="btn btn-sm btn-primary">{{
+                _('Edit Settings') }}</a>
+            <a href="{{ url_for('storage.download_inventory', storage_id=storage.id) }}"
+                class="btn btn-sm btn-secondary"><i class="fas fa-file-download"></i> {{ _('Inventory') }}</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">{{ title }}</h1>
+        <div id="current-context" class="text-muted small">{{ _('Viewing: All Samples') }}</div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- LEFT SIDEBAR -->
+        <div class="col-md-3 col-lg-2 d-none d-md-block px-1">
+            {{ project_sidebar(sidebar_data) }}
+        </div>
+
+        <!-- RIGHT PANE -->
+        <div class="col-md-9 col-lg-10">
+            <!-- Filters Toolbar -->
+            <div class="card mb-3 bg-light border-0 shadow-sm">
+                <div class="card-body p-2">
+                    <div class="row g-2">
+                        <div class="col-md-2">
+                            <select id="status_filter" class="form-select form-select-sm filter-input">
+                                <option value="all">{{ _('Status: All') }}</option>
+                                {% for status in SampleStatus %}
+                                <option value="{{ status.name }}" {% if storage and status.name=='STORED' %}selected{%
+                                    endif %}>{{ status.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select id="type_filter" class="form-select form-select-sm filter-input">
+                                <option value="">{{ _('Type: All') }}</option>
+                                {% for type in SampleType %}
+                                <option value="{{ type.name }}">{{ type.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select id="organ_filter" class="form-select form-select-sm filter-input">
+                                <option value="">{{ _('Organ: All') }}</option>
+                                {% for organ in organs %}
+                                <option value="{{ organ.id }}">{{ organ.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Hide Storage Filter if we are already in a Storage View -->
+                        {% if not storage %}
+                        <div class="col-md-2">
+                            <select id="storage_filter" class="form-select form-select-sm filter-input">
+                                <option value="">{{ _('Storage: All') }}</option>
+                                {% for s in storages %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
+                        <div class="col-md-2">
+                            <select id="condition_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Condition') }}">
+                                {% for cond in conditions %}
+                                <option value="{{ cond.id }}">{{ cond.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- New Filters -->
+                        <div class="col-md-2">
+                             <select id="staining_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Staining') }}">
+                                {% for s in stainings %}
+                                <option value="{{ s.id }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                             <select id="anticoagulant_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Anticoagulant') }}">
+                                {% for a in anticoagulants %}
+                                <option value="{{ a.id }}">{{ a.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                             <select id="derived_type_filter" class="form-select form-select-sm filter-input" multiple data-placeholder="{{ _('Derived Type') }}">
+                                {% for d in derived_types %}
+                                <option value="{{ d.id }}">{{ d.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-2">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">{{ _('From') }}</span>
+                                <input type="date" id="date_from" class="form-control filter-input">
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">{{ _('To') }}</span>
+                                <input type="date" id="date_to" class="form-control filter-input">
+                            </div>
+                        </div>
+
+                        <div class="col text-end">
+                            <div id="batchActions" style="display:none;">
+                                <span class="me-2 small fw-bold"><span id="selectedCount">0</span> {{ _('selected')
+                                    }}</span>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-secondary" id="actionDownloadXLSX"
+                                        title="{{ _('Download') }}"><i class="fas fa-file-download"></i></button>
+                                    <button class="btn btn-primary" id="actionShip" title="{{ _('Ship') }}"><i
+                                            class="fas fa-shipping-fast"></i></button>
+                                    <button class="btn btn-info" id="actionChangeStorage" title="{{ _('Move') }}"><i
+                                            class="fas fa-box-open"></i></button>
+                                    <button class="btn btn-danger" id="actionDestroy" title="{{ _('Destroy') }}"><i
+                                            class="fas fa-trash"></i></button>
+                                    <button class="btn btn-warning" id="actionNotCollected" title="{{ _('Mark as Not Collected') }}"><i
+                                            class="fas fa-ban"></i></button>
+                                    <button class="btn btn-success" id="actionStore"
+                                        title="{{ _('Mark as Stored') }}"><i class="fas fa-check"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Select All Banner -->
+            <div id="selectAllBanner" class="select-all-banner">
+                <span id="selectAllMessage"></span>
+                <a id="selectAllMatchingBtn">{{ _('Select all matching samples') }}</a>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table id="samplesServerTable" class="table table-sm table-striped table-hover w-100 mb-0"
+                        style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 20px;"><input type="checkbox" id="selectAllServer"
+                                        class="form-check-input"></th>
+                                <th>{{ _('ID') }}</th>
+                                <th>{{ _('Animal') }}</th>
+                                <th>{{ _('Type') }}</th>
+                                <th>{{ _('Details') }}</th>
+                                <th>{{ _('Date') }}</th>
+                                <th>{{ _('Term.') }}</th>
+                                {% if not storage %}<th>{{ _('Storage') }}</th>{% endif %}
+                                <th>{{ _('Status') }}</th>
+                                <th>{{ _('Notes') }}</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Change Storage Modal -->
+<div class="modal fade" id="changeStorageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Change Storage') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">{{ _('New Location') }}</label>
+                    <select class="form-select" id="newStorageLocation"></select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="confirmChangeStorage">{{ _('Apply') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script type="application/json" id="samples-list-config">
+{
+    "csrfToken": "{{ csrf_token() }}",
+    "storageId": {{ storage.id if storage else 'null' }},
+    "urls": {
+        "serverSideData": "{{ url_for('sampling.samples_server_side') }}",
+        "getStorageLocations": "{{ url_for('sampling.get_storage_locations') }}",
+        "batchChangeStorage": "{{ url_for('sampling.batch_change_storage') }}",
+        "batchShip": "{{ url_for('sampling.batch_ship_samples') }}",
+        "batchDestroy": "{{ url_for('sampling.batch_destroy_samples') }}",
+        "batchNotCollected": "{{ url_for('sampling.batch_not_collected_samples') }}",
+        "batchStore": "{{ url_for('sampling.batch_store_samples') }}",
+        "downloadFile": "{{ url_for('sampling.download_sample_list_file') }}"
+    },
+    "i18n": {
+        "searchPlaceholder": "{{ _('Search (ID, Animal)...') }}",
+        "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+        "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+        "first": "{{ _('First') }}",
+        "last": "{{ _('Last') }}",
+        "next": "{{ _('Next') }}",
+        "previous": "{{ _('Previous') }}",
+        "viewingAll": "{{ _('Viewing: All Samples') }}",
+        "allPageSelected": "{{ _('All %s samples on this page are selected.') }}",
+        "selectAllMatching": "{{ _('Select all %s samples matching this search') }}",
+        "allMatchingSelected": "{{ _('All %s samples matching this search are selected.') }}",
+        "clearSelection": "{{ _('Clear selection') }}",
+        "enterDestination": "{{ _('Please enter the shipment destination:') }}",
+        "confirmDestroy": "{{ _('Are you sure you want to mark these samples as DESTROYED?') }}",
+        "selectSamplesFirst": "{{ _('Please select samples first.') }}"
+    }
+}
+</script>
+<script src="{{ url_for('static', filename='js/samples_list.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

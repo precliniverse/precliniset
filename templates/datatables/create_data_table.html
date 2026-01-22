@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+{% from "components/project_sidebar.html" import project_sidebar with context %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <!-- Top: Creation Form (Collapsible) -->
+    <div class="card mb-3 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center cursor-pointer"
+            id="toggle-creation-form">
+            <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>{{ _('Create New Data Table') }}</h5>
+            <i class="fas fa-chevron-down transition-icon"></i>
+        </div>
+        <div class="card-body" id="creation-form-container" style="display: none;">
+            <form method="POST" action="{{ url_for('datatables.create_data_table') }}">
+                {{ form.hidden_tag() }}
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">{{ render_field(form.group, class="form-select select2-enable") }}</div>
+                    <div class="col-md-3">{{ render_field(form.protocol, class="form-select select2-enable") }}</div>
+                    <div class="col-md-2">{{ render_field(form.date, type='date') }}</div>
+                    <div class="col-md-2">{{ render_field(form.assigned_to_id, class="form-select select2-enable") }}
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">{{ _('Create') }}</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2 d-none d-md-block px-1">
+            {{ project_sidebar(sidebar_data) }}
+        </div>
+
+        <!-- Main List -->
+        <div class="col-md-9 col-lg-10">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 id="dt-page-title">{{ _('All DataTables') }}</h3>
+
+                <!-- Batch Actions -->
+                <div id="dtBatchActions" style="display:none;">
+                    <span class="fw-bold me-2"><span id="dtSelectedCount">0</span> {{ _('selected') }}</span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-success" id="btnDownloadMerged"><i
+                                class="fas fa-compress-arrows-alt me-1"></i>{{ _('Merge') }}</button>
+                        <button type="button" class="btn btn-primary" id="btnDownloadTransposed"><i
+                                class="fas fa-rotate-right me-1"></i>{{ _('Transpose') }}</button>
+                        <button type="button" class="btn btn-success" id="btnAnalyzeBatch"><i
+                                class="fas fa-chart-bar me-1"></i>{{ _('Analyze') }}</button>
+                        <button type="button" class="btn btn-danger" id="btnDeleteBatch"><i
+                                class="fas fa-trash me-1"></i></button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-link text-muted" id="btnClearSelection">{{ _('Clear')
+                        }}</button>
+                </div>
+            </div>
+
+            <!-- Filters Toolbar -->
+            <div class="row mb-3">
+                <div class="col-md-auto">
+                    <select class="form-select filter-input" id="status_filter">
+                        <option value="false">{{ _('Active Only') }}</option>
+                        <option value="all">{{ _('All Statuses') }}</option>
+                        <option value="true">{{ _('Archived Only') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <select class="form-select filter-input" id="protocol_filter">
+                        <option value="">{{ _('All Protocols') }}</option>
+                        {% for protocol in protocols %}
+                        <option value="{{ protocol.id }}">{{ protocol.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <input type="date" class="form-control filter-input" id="date_from"
+                        placeholder="{{ _('Date From') }}">
+                </div>
+                <div class="col-md-auto">
+                    <input type="date" class="form-control filter-input" id="date_to" placeholder="{{ _('Date To') }}">
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table id="datatablesServerTable" class="table table-hover table-striped mb-0" style="width:100%">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 20px;"></th> <!-- Checkbox -->
+                                <th>{{ _('Date') }}</th>
+                                <th>{{ _('Protocol') }}</th>
+                                <th>{{ _('Group') }}</th>
+                                <th>{{ _('Project') }}</th>
+                                <th class="text-end">{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden form for batch downloads -->
+<form id="batchDownloadForm" method="POST" style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+
+{# Config #}
+<script id="datatables-list-config" type="application/json">
+    {
+        "urls": {
+            "serverSideData": "{{ url_for('api.server_side_datatables_server_side_data_table_list') }}",
+            "downloadMerged": "{{ url_for('datatables.download_merged_selected_datatables') }}",
+            "downloadTransposed": "{{ url_for('datatables.download_merged_transposed_selected_datatables') }}",
+            "analyzeBatch": "{{ url_for('datatables.analyze_selected_datatables') }}",
+            "deleteBatch": "{{ url_for('datatables.batch_delete_datatables') }}",
+            "searchGroups": "{{ url_for('groups.search_groups_ajax') }}"
+        },
+        "i18n": {
+            "searchPlaceholder": "{{ _('Search datatables...') }}",
+            "selectGroup": "{{ _('Search for a group...') }}"
+        },
+        "csrfToken": "{{ csrf_token() }}"
+    }
+</script>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/datatables_list.js') }}" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        const assigneeSelect = document.querySelector('select[name="assigned_to_id"]');
+        const protocolSelect = document.querySelector('select[name="protocol"]');
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'alert alert-warning mt-2';
+        warningDiv.style.display = 'none';
+        warningDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong> The selected user may not be competent for this protocol. Please verify training records.';
+        assigneeSelect.parentNode.appendChild(warningDiv);
+
+        function checkCompetency() {
+            const userId = assigneeSelect.value;
+            const protocolId = protocolSelect.value;
+
+            if (!userId || !protocolId) {
+                warningDiv.style.display = 'none';
+                return;
+            }
+
+            fetch(`/datatables/api/check_competency/${userId}/${protocolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.valid) {
+                        warningDiv.style.display = 'none';
+                    } else {
+                        warningDiv.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking competency:', error);
+                    warningDiv.style.display = 'none';
+                });
+        }
+
+        assigneeSelect.addEventListener('change', checkCompetency);
+        protocolSelect.addEventListener('change', checkCompetency);
+    });
+</script>
+{% endblock %}

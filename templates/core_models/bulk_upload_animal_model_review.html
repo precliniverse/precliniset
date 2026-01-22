@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('Review Bulk Animal Model Upload') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Review Animal Model Import') }}</h1>
+
+    {% if conflicts %}
+        <div class="alert alert-danger">
+            <h4>{{ _('Conflicts Found') }}</h4>
+            <p>{{ _('The following issues must be resolved in your XLSX file before you can import.') }}</p>
+            <ul>
+                {% for conflict in conflicts %}
+                    <li>{{ conflict }}</li>
+                {% endfor %}
+            </ul>
+            <a href="{{ url_for('core_models.bulk_upload_animal_model') }}" class="btn btn-secondary">{{ _('Go Back') }}</a>
+        </div>
+    {% else %}
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i>
+            {{ _('No conflicts found. Review the data below before confirming the import.') }}
+        </div>
+    {% endif %}
+
+    {% if skipped_models %}
+        <div class="alert alert-warning">
+            <h4>{{ _('Skipped Models') }}</h4>
+            <p>{{ _('The following animal models already exist and will be skipped:') }}</p>
+            <ul>
+                {% for model_name in skipped_models %}
+                    <li>{{ model_name }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4><i class="fas fa-paw"></i> {{ _('New Animal Models to Be Created') }}</h4>
+        </div>
+        <div class="card-body">
+            {% if models %}
+                <ul class="list-group">
+                    {% for model in models %}
+                        <li class="list-group-item">
+                            <strong>{{ _('Model:') }}</strong> {{ model.name }}
+                            {% if model.analytes %}
+                                <ul class="mt-2">
+                                    {% for analyte in model.analytes %}
+                                        <li>
+                                            {{ analyte.name }}
+                                            <small class="text-muted">
+                                                ({{ _('Metadata:') }} {{ analyte.is_metadata }}, {{ _('Default:') }} {{ analyte.default_value or 'N/A' }})
+                                            </small>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{{ _('No new animal models to create.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4><i class="fas fa-atom"></i> {{ _('New Analytes to Be Created') }}</h4>
+        </div>
+        <div class="card-body">
+            {% if new_analytes %}
+                <ul class="list-group">
+                    {% for analyte in new_analytes %}
+                        <li class="list-group-item">
+                            <strong>{{ analyte.name }}</strong>
+                            <small class="text-muted">
+                                ({{ _('Unit:') }} {{ analyte.unit or 'N/A' }}, {{ _('Type:') }} {{ analyte.data_type }})
+                            </small>
+                            {% if analyte.description %}<p class="mb-0">{{ analyte.description }}</p>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{{ _('No new analytes will be created.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mt-4">
+        {% if not conflicts and (models or new_analytes) %}
+            <form action="{{ url_for('core_models.bulk_upload_animal_model_confirm') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> {{ _('Confirm and Import') }}</button>
+                <a href="{{ url_for('core_models.manage_models') }}" class="btn btn-danger">{{ _('Cancel') }}</a>
+            </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

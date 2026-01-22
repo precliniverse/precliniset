@@ -1,0 +1,15 @@
+[Unit]
+Description=Precliniset Celery Worker
+After=network.target redis-server.service precliniset.service
+
+[Service]
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ app_dir }}
+Environment="PATH={{ venv_dir }}/bin"
+EnvironmentFile={{ app_dir }}/.env
+ExecStart={{ venv_dir }}/bin/celery -A celery_worker.celery_app worker --loglevel=info
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %} {# Assuming you might have or want form helpers #}
+
+{% block title %}Manage Team: {{ team.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Manage Team: {{ team.name }}</h2>
+    <a href="{{ url_for('admin.manage_teams') }}" class="btn btn-secondary mb-3">&larr; Back to All Teams</a>
+
+    {# --- Invite User Form --- #}
+    <div class="card mb-4">
+        <div class="card-header">Invite User to Team</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.manage_team_members', team_id=team.id) }}">
+                {{ invite_form.hidden_tag() }}
+                <div class="row g-3 align-items-end">
+                    <div class="col-md">
+                        <label for="email" class="form-label">{{ invite_form.email.label }}</label>
+                        {{ invite_form.email(class="form-control" + (" is-invalid" if invite_form.email.errors else ""),
+                        placeholder="user@example.com") }}
+                        {% if invite_form.email.errors %}
+                        <div class="invalid-feedback">
+                            {% for error in invite_form.email.errors %}<span>{{ error }}</span>{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md">
+                        <label for="role_id" class="form-label">{{ invite_form.role_id.label }}</label>
+                        {{ invite_form.role_id(class="form-select" + (" is-invalid" if invite_form.role_id.errors else "")) }}
+                        {% if invite_form.role_id.errors %}
+                        <div class="invalid-feedback">
+                            {% for error in invite_form.role_id.errors %}<span>{{ error }}</span>{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-auto">
+                        {{ invite_form.submit_invite_member(class="btn btn-primary") }}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# --- Current Members List --- #}
+    <div class="card">
+        <div class="card-header">Current Members</div>
+        <div class="card-body">
+            {% if team.memberships %}
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for membership in team.memberships|sort(attribute='user.email') %}
+                    <tr>
+                        <td>
+                            {{ membership.user.email }}
+                            <div class="mt-2">
+                                {% set user_roles_in_team = membership.user.team_roles|selectattr('team_id', 'equalto',
+                                team.id)|list %}
+                                {% if user_roles_in_team %}
+                                {% for link in user_roles_in_team %}
+                                <span class="badge bg-info me-1">
+                                    {{ link.role.name }}
+                                    <form
+                                        action="{{ url_for('admin.unassign_role_from_user', team_id=team.id, user_id=membership.user.id, role_id=link.role.id) }}"
+                                        method="POST" class="d-inline"
+                                        onsubmit="return confirm('{{ _('Are you sure you want to unassign this role?') }}');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-close btn-close-white"
+                                            aria-label="Unassign"></button>
+                                    </form>
+                                </span>
+                                {% endfor %}
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {# --- Role Assignment --- #}
+                            <form method="POST"
+                                action="{{ url_for('admin.assign_role_to_user', team_id=team.id, user_id=membership.user.id) }}"
+                                class="d-inline-block me-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="input-group input-group-sm">
+                                    <select name="role_id" class="form-select form-select-sm">
+                                        <option value="">-- {{ _('Assign Role') }} --</option>
+                                        {% set assigned_role_ids = user_roles_in_team|map(attribute='role_id')|list %}
+                                        {% for role in assignable_roles if role.id not in assigned_role_ids %}
+                                        <option value="{{ role.id }}">{{ role.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-outline-secondary">{{ _('Assign') }}</button>
+                                </div>
+                            </form>
+
+                            {# Form to remove member #}
+                            <form method="POST"
+                                action="{{ url_for('admin.remove_team_member', team_id=team.id, user_id=membership.user.id) }}"
+                                style="display: inline;" class="confirm-remove-member-form"
+                                data-confirm-message="Are you sure you want to remove {{ membership.user.email }} from this team?">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No members in this team yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.confirm-remove-member-form').forEach(form => {
+            form.addEventListener('submit', function (event) {
+                const message = this.dataset.confirmMessage || 'Are you sure?';
+                if (!confirm(message)) {
+                    event.preventDefault();
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

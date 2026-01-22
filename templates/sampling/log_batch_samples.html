@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <style>
+        .stage { display: none; }
+        .stage.active { display: block; }
+        .animal-list-table th, .animal-list-table td { vertical-align: middle; font-size: 0.85rem; padding: 0.4rem; }
+        .animal-list-table .form-select-sm { padding-top: 0.2rem; padding-bottom: 0.2rem; height: calc(1.8125rem + 2px); }
+        
+        .sample-definition-entry { border: 1px dashed #ccc; padding: 15px; margin-bottom: 15px; border-radius: 4px; background-color: #f9f9f9; position: relative; }
+        .remove-sample-def-btn { position: absolute; top: 5px; right: 5px; }
+        .sample-type-details-entry-def { display: none; margin-top: 10px; padding: 10px; border-top: 1px solid #e0e0e0; }
+        
+        .tissue-organ-entry-row-def { border-bottom: 1px dotted #eee; padding-bottom: 8px; margin-bottom: 8px; }
+        .tissue-organ-entry-row-def:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0;}
+
+        .animal-assignment-table th, .animal-assignment-table td { font-size: 0.9rem; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ title }}</h1>
+    <p>
+        <strong>{{ _('Project:') }}</strong> {{ group.project.name if group.project else 'N/A' }} |
+        <strong>{{ _('Animal Model:') }}</strong> {{ group.model.name if group.model else 'N/A' }}
+    </p>
+    <div class="mb-3">
+        <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="btn btn-secondary btn-sm"><i class="fas fa-arrow-left"></i> {{ _('Back to Group') }}</a>
+        <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-info btn-sm"><i class="fas fa-list-ul"></i> {{ _('View Logged Samples') }}</a>
+    </div>
+
+    {% if not group.animal_data %}
+        <div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> {{ _('No animals found in this group to log samples for.') }}</div>
+    {% else %}
+        <form id="logBatchSamplesForm">
+            {{ common_details_form.hidden_tag() }}
+
+            {# --- STAGE 1: Select Animals & Common Details --- #}
+            <div id="stage1_select_animals" class="stage active">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-primary text-white"><h4><i class="fas fa-mouse me-2"></i>{{ _('Step 1: Common Details & Select Sampled Animals') }}</h4></div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 mb-3">{{ render_field(common_details_form.collection_date, class="form-control") }}</div>
+                            <div class="col-md-3 mb-3">{{ render_field(common_details_form.status, class="form-select") }}</div>
+                            <div class="col-md-3 mb-3">{{ render_field(common_details_form.default_storage_id, class="form-select", id="common_default_storage_id_s1") }}</div>
+                            <div class="col-md-3 mb-3 d-flex align-items-center pt-md-4">
+                                <div class="form-check form-switch">
+                                    {{ common_details_form.is_terminal_event(class="form-check-input") }}
+                                    {{ common_details_form.is_terminal_event.label(class="form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">{{ render_field(common_details_form.event_notes, class="form-control", rows="2") }}</div>
+                        </div>
+                        <hr>
+                        <h5>{{ _('Select ALL Animals Sampled in this Event') }}</h5>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-hover animal-list-table">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width: 5%;"><input type="checkbox" id="masterAnimalCheckboxS1" title="{{_('Select/Deselect All Visible')}}"></th>
+                                        {% for field_name in animal_model_field_names %}
+                                            <th>{{ field_name }}</th>
+                                        {% else %}
+                                            <th>{{_('Animal ID')}}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody id="animalListTableBodyS1">
+                                    {# This will be populated by JavaScript #}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3 text-end">
+                            <button type="button" class="btn btn-primary" id="goToStage2DefineSamplesBtn">{{ _('Next: Define Sample Set') }} <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- STAGE 2: Define Sample Set --- #}
+            <div id="stage2_define_sample_set" class="stage">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-info text-dark"><h4><i class="fas fa-flask me-2"></i>{{ _('Step 2: Define the Set of Samples Collected') }}</h4></div>
+                    <div class="card-body">
+                        <div class="alert alert-secondary small">
+                            <strong>{{ _('Common Event Details:') }}</strong><br>
+                            {{ _('Date:') }} <span id="s2_event_date_display"></span> |
+                            {{ _('Terminal:') }} <span id="s2_event_terminal_display"></span> |
+                            {{ _('Default Storage:') }} <span id="s2_event_storage_display"></span>
+                            <br>{{ _('Event Notes:') }} <pre class="mb-0 small" id="s2_event_notes_display" style="white-space: pre-wrap;"></pre>
+                        </div>
+                        <p>{{ _('Define each type of sample collected during this event. This set will be applied to selected animals in the next step.') }}</p>
+                        <div id="sampleSetDefinitionContainer"></div>
+                        <button type="button" id="addSampleToSetBtn" class="btn btn-success mt-2"><i class="fas fa-plus"></i> {{ _('Add Sample Type to Set') }}</button>
+                        <hr>
+                        <div class="mt-3 d-flex justify-content-between">
+                            <button type="button" class="btn btn-secondary" id="backToStage1SelectAnimalsBtn"><i class="fas fa-arrow-left"></i> {{ _('Back to Animal Selection') }}</button>
+                            <button type="button" class="btn btn-primary" id="goToStage3AssignBtn">{{ _('Next: Assign to Animals') }} <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- STAGE 3: Assign Sample Set to Animals & Log --- #}
+            <div id="stage3_assign_and_log" class="stage">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-success text-white"><h4><i class="fas fa-check-circle me-2"></i>{{ _('Step 3: Assign Sample Set & Log') }}</h4></div>
+                    <div class="card-body">
+                        <div class="alert alert-secondary small">
+                            <strong>{{ _('Common Event Details:') }}</strong><br>
+                            {{ _('Date:') }} <span id="s3_event_date_display"></span> |
+                            {{ _('Terminal:') }} <span id="s3_event_terminal_display"></span> |
+                            {{ _('Default Storage:') }} <span id="s3_event_storage_display"></span>
+                            <br>{{ _('Event Notes:') }} <pre class="mb-0 small" id="s3_event_notes_display" style="white-space: pre-wrap;"></pre>
+                        </div>
+                        <h5>{{ _('Defined Sample Set:') }}</h5>
+                        <div id="definedSampleSetSummaryForStage3" class="mb-3 p-2 border rounded bg-light small"></div>
+                        <hr>
+                        <h5>{{ _('Confirm Animals Receiving This Sample Set') }}</h5>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm table-hover animal-assignment-table">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width: 5%;"><input type="checkbox" id="masterAnimalCheckboxS3" title="{{_('Select/Deselect All')}}" checked></th>
+                                        {% for field_name in animal_model_field_names %}
+                                            <th>{{ field_name }}</th>
+                                        {% else %}
+                                            <th>{{_('Animal ID')}}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody id="animalAssignmentTableBodyS3"></tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3 d-flex justify-content-between">
+                            <button type="button" class="btn btn-secondary" id="backToStage2DefineSampleSetBtn"><i class="fas fa-arrow-left"></i> {{ _('Back to Define Sample Set') }}</button>
+                            <button type="button" class="btn btn-success btn-lg" id="logFinalSamplesBtn">{{ _('Log Samples for Confirmed Animals') }}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    {% endif %}
+</div>
+
+<!-- Template for a single sample definition entry -->
+<template id="sample-definition-template">
+    <div class="sample-definition-entry">
+        <button type="button" class="btn-close btn-sm remove-sample-def-btn" aria-label="Close" title="{{ _('Remove this sample definition') }}"></button>
+        <div class="row gx-2">
+            <div class="col-md-5 mb-2"><label class="form-label form-label-sm">{{ _('Sample Type') }}</label><select name="sample_type_def" class="form-select form-select-sm dynamic-sample-type-select-def" required></select></div>
+            <div class="col-md-5 mb-2"><label class="form-label form-label-sm">{{ _('Storage (Override)') }}</label><select name="storage_id_override_def" class="form-select form-select-sm dynamic-storage-override-select-def"></select></div>
+        </div>
+        <div class="sample-type-details-entry-def" data-sample-type-detail-def="BLOOD"><h6>{{ _('Blood Details') }}</h6><div class="row gx-2"><div class="col-md-4 mb-2"><label class="form-label form-label-sm">{{ _('Anticoagulant') }}</label><select name="anticoagulant_id_def" class="form-select form-select-sm dynamic-anticoagulant-select-def"></select></div><div class="col-md-4 mb-2"><label class="form-label form-label-sm">{{ _('Volume') }}</label><input type="number" step="any" name="blood_volume_def" class="form-control form-control-sm"></div><div class="col-md-4 mb-2"><label class="form-label form-label-sm">{{ _('Unit') }}</label><input type="text" name="blood_volume_unit_def" class="form-control form-control-sm" value="µL"></div></div></div>
+        <div class="sample-type-details-entry-def" data-sample-type-detail-def="URINE"><h6>{{ _('Urine Details') }}</h6><div class="row gx-2"><div class="col-md-6 mb-2"><label class="form-label form-label-sm">{{ _('Volume') }}</label><input type="number" step="any" name="urine_volume_def" class="form-control form-control-sm"></div><div class="col-md-6 mb-2"><label class="form-label form-label-sm">{{ _('Unit') }}</label><input type="text" name="urine_volume_unit_def" class="form-control form-control-sm" value="µL"></div></div></div>
+        <div class="sample-type-details-entry-def" data-sample-type-detail-def="BIOLOGICAL_TISSUE"><h6>{{ _('Tissue Details') }}</h6><div class="tissue-organ-entries-container-def mb-2"></div><button type="button" class="btn btn-sm btn-outline-success add-organ-to-tissue-def-btn"><i class="fas fa-plus"></i> {{ _('Add Organ/Piece') }}</button></div>
+        <div class="sample-type-details-entry-def" data-sample-type-detail-def="OTHER"><h6>{{ _('Other Details') }}</h6><label class="form-label form-label-sm">{{ _('Description') }}</label><textarea name="other_description_def" class="form-control form-control-sm" rows="2" required></textarea></div>
+        <div class="mt-2 specific-notes-toggle sample-type-details-entry-def" data-sample-type-detail-def="NOT_BIOLOGICAL_TISSUE">
+            <label class="form-label form-label-sm">{{ _('Specific Notes for this Sample') }}</label>
+            <textarea name="specific_notes_def" class="form-control form-control-sm" rows="1"></textarea>
+        </div>
+    </div>
+</template>
+
+<!-- Template for a single organ/tissue entry within a sample definition -->
+<template id="tissue-organ-entry-template">
+    <div class="row gx-2 mb-2 tissue-organ-entry-row-def align-items-center">
+        <div class="col-md-3"><label class="form-label form-label-sm visually-hidden">{{ _('Organ/Tissue Name') }}</label><select name="organ_id_def" class="form-select form-select-sm dynamic-organ-select-def" required></select></div>
+        <div class="col-md-3"><label class="form-label form-label-sm visually-hidden">{{ _('Piece ID/Sub-location') }}</label><input type="text" name="piece_id_def" class="form-control form-control-sm" placeholder="{{ _('e.g., Lobe A, Slice 1') }}"></div>
+        <div class="col-md-3"><label class="form-label form-label-sm visually-hidden">{{ _('Collection Conditions') }}</label><select name="condition_ids_def" class="form-select form-select-sm dynamic-tissue-conditions-def-select" multiple required><option value="" disabled selected></option></select></div>
+        <div class="col-md-2"><label class="form-label form-label-sm visually-hidden">{{ _('Storage (Organ Specific)') }}</label><select name="storage_id_def" class="form-select form-select-sm dynamic-organ-storage-def-select"></select></div>
+        <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger remove-organ-row-btn-def" title="{{ _('Remove this organ/piece') }}"><i class="fas fa-times"></i></button></div>
+        <div class="col-12 mt-1"><label class="form-label form-label-sm visually-hidden">{{ _('Notes (Organ Specific)') }}</label><textarea name="notes_def" class="form-control form-control-sm" rows="1" placeholder="{{ _('Notes (Organ Specific)') }}"></textarea></div>
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Configuration Object for JS -->
+<script type="application/json" id="sampling-wizard-config">
+{
+    "storageLocations": {{ storage_locations_json | safe }},
+    "organChoices": {{ organ_choices_json | safe }},
+    "tissueConditions": {{ tissue_condition_choices_json | safe }},
+    "sampleTypes": {{ sample_type_enum_json | safe }},
+    "anticoagulants": {{ anticoagulant_choices_json | safe }},
+    "animalModelFields": {{ animal_model_field_names | tojson | safe }},
+    "allAnimalData": {{ group.animal_data | tojson | safe }},
+    "csrfToken": "{{ csrf_token() }}",
+    "urls": {
+        "getAvailableAnimals": "{{ url_for('sampling.get_available_animals', group_id=group.id) }}",
+        "logBatchSamples": "{{ url_for('sampling.log_batch_samples_for_group', group_id=group.id) }}"
+    },
+    "i18n": {
+        "useEventDefault": "{{ _('-- Use Event Default --') }}",
+        "selectType": "{{ _('-- Select Sample Type --') }}",
+        "selectOrgan": "{{ _('-- Select Organ --') }}",
+        "selectConditions": "{{ _('Select conditions...') }}",
+        "noSampleSetDefined": "{{ _('No sample set defined. Please add at least one sample type.') }}",
+        "addSampleTypeToSet": "{{ _('Add Sample Type to Set') }}",
+        "sampleTypeLabel": "{{ _('Sample Type') }}",
+        "storageOverrideLabel": "{{ _('Storage (Override)') }}",
+        "bloodDetailsLabel": "{{ _('Blood Details') }}",
+        "anticoagulantLabel": "{{ _('Anticoagulant') }}",
+        "volumeLabel": "{{ _('Volume') }}",
+        "unitLabel": "{{ _('Unit') }}",
+        "urineDetailsLabel": "{{ _('Urine Details') }}",
+        "tissueDetailsLabel": "{{ _('Tissue Details') }}",
+        "organTissueNameLabel": "{{ _('Organ/Tissue Name') }}",
+        "organPieceIdLabel": "{{ _('Piece ID/Sub-location') }}",
+        "collectionConditionsLabel": "{{ _('Collection Conditions') }}",
+        "organStorageLabel": "{{ _('Storage (Organ Specific)') }}",
+        "organNotesLabel": "{{ _('Notes (Organ Specific)') }}",
+        "otherDetailsLabel": "{{ _('Other Details') }}",
+        "descriptionLabel": "{{ _('Description') }}",
+        "specificNotesLabel": "{{ _('Specific Notes for this Sample') }}",
+        "yesLabel": "{{ _('Yes') }}",
+        "noLabel": "{{ _('No') }}",
+        "noneLabel": "{{ _('None') }}",
+        "selectDefaultStorage": "{{ _('-- Select Default Storage --') }}",
+        "selectAtLeastOne": "{{ _('Please select at least one animal.') }}"
+    }
+}
+</script>
+
+<!-- Load the external JS file -->
+<script src="{{ url_for('static', filename='js/sampling_log_batch.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

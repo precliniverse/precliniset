@@ -1,0 +1,703 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Workplan:') }} {{ workplan.name }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<style>
+    .workplan-table th,
+    .workplan-table td {
+        vertical-align: middle;
+    }
+
+    .workplan-table .form-control,
+    .workplan-table .form-select {
+        font-size: 0.85rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .projected-date {
+        font-style: italic;
+        color: #6c757d;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    .weekend-row,
+    .weekend-row td {
+        background-color: #fffbe6 !important;
+        /* Light yellow warning */
+    }
+
+    /* Hide spinner buttons */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    input[type=number] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="mb-0">{{ _('Workplan:') }} {{ workplan.name }}</h1>
+            <p class="lead mb-0">{{ _('Project:') }} <a
+                    href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}">{{ project.name }}</a>
+            </p>
+            <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}"
+                class="btn btn-sm btn-secondary mt-2"><i class="fas fa-arrow-left"></i> {{ _('Back to Project') }}</a>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <!-- Toolbar -->
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyModal"
+                    title="{{ _('History') }}">
+                    <i class="fas fa-history"></i>
+                </button>
+                <a href="{{ url_for('workplans.export_workplan', workplan_id=workplan.id) }}" class="btn btn-success"
+                    title="{{ _('Export to XLSX') }}">
+                    <i class="fas fa-file-excel"></i>
+                </a>
+                <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#importModal"
+                    title="{{ _('Import from XLSX') }}">
+                    <i class="fas fa-file-upload"></i>
+                </button>
+                <a id="view-on-calendar-btn" href="{{ url_for('calendar.view_calendar') }}" class="btn btn-info" {% if
+                    not workplan.study_start_date %}disabled title="{{ _('Set a start date to view on calendar') }}" {%
+                    else %}title="{{ _('View on Calendar') }}" {% endif %}>
+                    <i class="fas fa-calendar-day"></i>
+                </a>
+                <form method="POST" action="{{ url_for('workplans.clone_workplan', workplan_id=workplan.id) }}"
+                    class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-secondary" title="{{ _('Clone to New Draft') }}"><i
+                            class="fas fa-copy"></i></button>
+                </form>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal"
+                    data-bs-target="#deleteWorkplanModal" title="{{ _('Delete Workplan') }}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Animal Count / Group Info -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                {% if workplan.status == WorkplanStatus.DRAFT %}
+                <div class="col-md-4">
+                    <label for="planned_animal_count" class="form-label"><strong>{{ _('Planned Number of Animals')
+                            }}</strong></label>
+                    <input type="number" id="planned_animal_count" name="planned_animal_count" class="form-control"
+                        value="{{ workplan.planned_animal_count or '' }}" min="0">
+                </div>
+                {% else %}
+                <div class="col-md-6">
+                    <strong>{{ _('Experimental Group:') }}</strong><br>
+                    {% if workplan.generated_group %}
+                    <a href="{{ url_for('groups.edit_group', id=workplan.generated_group.id) }}"
+                        class="btn btn-outline-info btn-sm me-2">
+                        <i class="fas fa-users"></i> {{ workplan.generated_group.name }}
+                        <span class="badge bg-secondary ms-1">{{ _('Total animals:') }} {{ total_animals_in_group }} /
+                            {{ _('Animals alive:') }} {{ alive_animals_in_group }}</span>
+                    </a>
+                    <a href="{{ url_for('datatables.list_group_datatables', group_id=workplan.generated_group.id) }}"
+                        class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-table"></i>
+                        <span class="badge bg-secondary me-1">{{ group_datatable_count }}</span> {{ _('DataTables') }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted fst-italic">{{ _('Group not yet generated.') }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Editor / View -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">{{ _('Plan Details') }}</h4>
+            <span class="badge bg-info fs-6">{{ workplan.status.value }}</span>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <label for="study_start_date" class="form-label">{{ _('Study Start Date') }}</label>
+                    <input type="date" id="study_start_date" class="form-control"
+                        value="{{ workplan.study_start_date.strftime('%Y-%m-%d') if workplan.study_start_date else '' }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="expected_dob" class="form-label">{{ _('Expected Date of Birth') }}</label>
+                    <input type="date" id="expected_dob" class="form-control"
+                        value="{{ workplan.expected_dob.strftime('%Y-%m-%d') if workplan.expected_dob else '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="workplan_notes" class="form-label">{{ _('Workplan Notes') }}</label>
+                    <textarea id="workplan_notes" class="form-control" rows="1">{{ workplan.notes or '' }}</textarea>
+                </div>
+            </div>
+
+            <h5 class="mt-4">{{ _('Events') }}</h5>
+
+            {% if workplan.status == WorkplanStatus.DRAFT %}
+            <!-- DRAFT MODE: EDITABLE TABLE -->
+            <div class="table-responsive">
+                <table class="table table-bordered workplan-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 100px;">{{ _('Day Offset') }}</th>
+                            <th style="width: 60px;">{{ _('Week') }}</th>
+                            <th style="width: 150px;">{{ _('Projected Date') }}</th>
+                            <th style="width: 100px;">{{ _('Age') }}</th>
+                            <th>{{ _('Protocol') }}</th>
+                            <th>{{ _('Event Name (Optional)') }}</th>
+                            <th>{{ _('Assigned To') }}</th>
+                            <th style="width: 80px;">{{ _('Status') }}</th>
+                            <th style="width: 60px;">{{ _('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workplan-events-tbody">
+                        {# Rows will be populated by JavaScript #}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-2">
+                <button type="button" id="add-event-btn" class="btn btn-success"><i class="fas fa-plus"></i> {{ _('Add
+                    Event') }}</button>
+                <button type="button" id="bulk-add-btn" class="btn btn-info"><i class="fas fa-tasks"></i> {{ _('Bulk
+                    Add') }}</button>
+                <button type="button" id="bulk-assign-btn" class="btn btn-secondary" data-bs-toggle="modal"
+                    data-bs-target="#bulkAssignModal" {% if workplan.events.count()==0 %}disabled{% endif %}>
+                    <i class="fas fa-user-plus"></i> {{ _('Bulk Assign') }}
+                </button>
+                <button type="button" id="clear-all-events-btn" class="btn btn-outline-danger ms-auto"
+                    data-bs-toggle="modal" data-bs-target="#clearEventsModal" {% if workplan.events.count()==0
+                    %}disabled{% endif %}>
+                    <i class="fas fa-eraser"></i> {{ _('Clear All') }}
+                </button>
+            </div>
+
+            {% else %}
+            <!-- PLANNED/RUNNING MODE: READ ONLY TABLE (with Assignee dropdown) -->
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{ _('Date') }}</th>
+                            <th>{{ _('Protocol') }}</th>
+                            <th>{{ _('Event Name') }}</th>
+                            <th>{{ _('Assigned To') }}</th>
+                            <th>{{ _('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dt in generated_datatables %}
+                        <tr>
+                            <td>
+                                <input type="date" class="form-control form-control-sm datatable-date-change" 
+                                       data-datatable-id="{{ dt.id }}" value="{{ dt.date }}">
+                            </td>
+                            <td>{{ dt.protocol.name if dt.protocol else 'N/A' }}</td>
+                            <td>{{ dt.generated_from_event.event_name if dt.generated_from_event else '' }}</td>
+                            <td>
+                                <select class="form-select form-select-sm datatable-assignee-select"
+                                    data-datatable-id="{{ dt.id }}">
+                                    <option value="">-- {{ _('Unassigned') }} --</option>
+                                    {% for user in assignable_users %}
+                                    <option value="{{ user.id }}" {% if dt.assigned_to_id==user.id %}selected{% endif
+                                        %}>
+                                        {{ user.email }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('datatables.view_data_table', datatable_id=dt.id) }}"
+                                    class="btn btn-sm btn-outline-info">{{ _('View Data') }}</a>
+                                <a href="{{ url_for('datatables.edit_data_table', id=dt.id) }}"
+                                    class="btn btn-sm btn-outline-primary">{{ _('Enter Data') }}</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">{{ _('No DataTables have been generated for
+                                this workplan yet.') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+        <div class="card-footer text-end">
+            {% if workplan.status == WorkplanStatus.DRAFT %}
+            <button type="button" class="btn btn-primary" id="save-workplan-btn"><i class="fas fa-save"></i> {{ _('Save
+                Draft') }}</button>
+            <button type="button" class="btn btn-success btn-lg" id="finalize-plan-btn" {% if not
+                workplan.study_start_date or not workplan.expected_dob %}disabled
+                title="{{ _('Please set a Study Start Date and Expected DOB to finalize.') }}" {% endif %}>
+                <i class="fas fa-check-double"></i> {{ _('Finalize and Plan Study...') }}
+            </button>
+            {% elif workplan.status in [WorkplanStatus.PLANNED, WorkplanStatus.RUNNING] and not workplan.generated_group
+            %}
+            <a href="{{ url_for('groups.edit_group', from_workplan=workplan.id) }}" class="btn btn-success btn-lg">
+                <i class="fas fa-users"></i> {{ _('Generate Experimental Group') }}
+            </a>
+            {% elif workplan.generated_group %}
+            <a href="{{ url_for('groups.edit_group', id=workplan.generated_group.id) }}" class="btn btn-info btn-lg">
+                <i class="fas fa-eye"></i> {{ _('View Generated Group') }}
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ================= MODALS ================= -->
+
+<!-- Save Changes Modal -->
+<div class="modal fade" id="saveChangesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Save Workplan Changes') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="change_comment" class="form-label">{{ _('Comment (Optional)') }}</label>
+                    <textarea id="change_comment" class="form-control" rows="3"
+                        placeholder="{{ _('e.g., Adjusted dosing schedule.') }}"></textarea>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="notify_team_checkbox" checked>
+                    <label class="form-check-label" for="notify_team_checkbox">{{ _('Notify team members by email')
+                        }}</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="confirm-save-btn">{{ _('Save') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Workplan Version History') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6>{{ _('Versions') }}</h6>
+                        <div id="version-list" class="list-group"></div>
+                    </div>
+                    <div class="col-md-8">
+                        <div id="version-details-view">
+                            <div class="alert alert-info">{{ _('Select a version to view its details.') }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="notify_team_on_restore" checked>
+                    <label class="form-check-label" for="notify_team_on_restore">{{ _('Notify team of restore')
+                        }}</label>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+                    <button type="button" class="btn btn-warning" id="restore-version-btn" disabled>{{ _('Restore This
+                        Version') }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Add Events Modal -->
+<div class="modal fade" id="bulkAddModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Bulk Add Events') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bulkAddForm">
+                    <div class="mb-3">
+                        <label for="bulk_protocol_id" class="form-label">{{ _('Protocol') }}</label>
+                        <select id="bulk_protocol_id" class="form-select" required></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="bulk_start_date" class="form-label">{{ _('Start Date') }}</label>
+                        <input type="date" id="bulk_start_date" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('Repeat Every') }}</label>
+                        <div class="d-flex align-items-center mb-2">
+                            <input type="number" id="repeat_interval" class="form-control w-25 mt-2" value="1" min="1">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="repeat_unit" id="repeat_daily"
+                                    value="day" checked>
+                                <label class="form-check-label" for="repeat_daily">{{ _('Day(s)') }}</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="repeat_unit" id="repeat_weekly"
+                                    value="week">
+                                <label class="form-check-label" for="repeat_weekly">{{ _('Week(s)') }}</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="repeat_unit" id="repeat_monthly"
+                                    value="month">
+                                <label class="form-check-label" for="repeat_monthly">{{ _('Month(s)') }}</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="weekly_day_selection" style="display: none;">
+                        <label class="form-label">{{ _('Repeat On (Days of Week)') }}</label>
+                        <div>
+                            {% for day_val, day_name in [(1, 'Mon'), (2, 'Tue'), (3, 'Wed'), (4, 'Thu'), (5, 'Fri'), (6,
+                            'Sat'), (0, 'Sun')] %}
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="bulk_days_of_week"
+                                    value="{{ day_val }}" id="day_{{ day_val }}">
+                                <label class="form-check-label" for="day_{{ day_val }}">{{ _(day_name) }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('Ends On') }}</label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="end_condition" id="end_on_date"
+                                    value="on_date">
+                                <label class="form-check-label" for="end_on_date">{{ _('On Date') }}</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="end_condition"
+                                    id="end_after_occurrences" value="after_occurrences">
+                                <label class="form-check-label" for="end_after_occurrences">{{ _('After') }}</label>
+                            </div>
+                        </div>
+                        <div id="end_on_date_options" class="mt-2" style="display: none;">
+                            <input type="date" id="end_date" class="form-control">
+                        </div>
+                        <div id="end_after_occurrences_options" class="mt-2" style="display: none;">
+                            <input type="number" id="num_occurrences" class="form-control" min="1">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('Advanced Options') }}</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skip_weekends">
+                            <label class="form-check-label" for="skip_weekends">{{ _('Skip Weekends (Sat/Sun)')
+                                }}</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enable_auto_naming">
+                            <label class="form-check-label" for="enable_auto_naming">{{ _('Auto-name events') }}</label>
+                        </div>
+                        <div id="auto_naming_options" style="display: none;" class="mt-2">
+                            <input type="text" id="event_name_template" class="form-control form-control-sm"
+                                placeholder="Treatment {n}">
+                            <small class="text-muted">{{ _('Use: {n}=number, {day}=day, {week}=week') }}</small>
+                        </div>
+                    </div>
+                    <div class="d-grid mb-2">
+                        <button type="button" class="btn btn-outline-info btn-sm" id="preview-bulk-events-btn">
+                            <i class="fas fa-eye"></i> {{ _('Preview') }} <span id="preview-count-badge"
+                                class="badge bg-secondary">0</span>
+                        </button>
+                    </div>
+                    <div id="bulk_preview_container" style="display: none;">
+                        <div class="alert alert-info alert-sm">
+                            <strong id="preview_event_count">0</strong> {{ _('events') }}
+                        </div>
+                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>{{ _('Day') }}</th>
+                                        <th>{{ _('Week') }}</th>
+                                        <th>{{ _('Name') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulk_preview_tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="confirm-bulk-add-btn" disabled>{{ _('Add') }} <span
+                        id="confirm-count">0</span> {{ _('Events') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Assign Modal -->
+<div class="modal fade" id="bulkAssignModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Bulk Assign Events') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bulkAssignForm">
+                    <div class="mb-3">
+                        <label for="bulk_assign_protocols" class="form-label">{{ _('Select Protocols (leave blank for
+                            all events)') }}</label>
+                        <select id="bulk_assign_protocols" class="form-select" multiple="multiple"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="bulk_assign_user" class="form-label">{{ _('Assign To') }}</label>
+                        <select id="bulk_assign_user" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="bulk_assign_comment" class="form-label">{{ _('Comment (Optional)') }}</label>
+                        <textarea id="bulk_assign_comment" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="bulk_assign_notify_team" checked>
+                        <label class="form-check-label" for="bulk_assign_notify_team">{{ _('Notify team members')
+                            }}</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-primary" id="confirm-bulk-assign-btn">{{ _('Assign Events')
+                    }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Import Workplan') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('workplans.import_workplan', workplan_id=workplan.id) }}"
+                enctype="multipart/form-data">
+                <div class="modal-body">
+                    <p class="alert alert-warning">{{ _('Warning: This will overwrite all existing events.') }}</p>
+                    {% set import_form = get_import_form() %}
+                    {{ import_form.hidden_tag() }}
+                    {{ render_field(import_form.xlsx_file, class="form-control") }}
+                    <hr>
+                    <div class="mb-3">
+                        <label for="import_change_comment" class="form-label">{{ _('Comment (Optional)') }}</label>
+                        <textarea id="import_change_comment" name="change_comment" class="form-control"
+                            rows="2"></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="import_notify_team" name="notify_team"
+                            checked>
+                        <label class="form-check-label" for="import_notify_team">{{ _('Notify team members') }}</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                    {{ import_form.submit_import(class="btn btn-primary") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Finalize Plan Modal -->
+<div class="modal fade" id="finalizePlanModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Finalize Workplan') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ _('This action will lock the plan and generate datatables. This cannot be undone.') }}</p>
+                <div id="finalize-summary" class="alert alert-info"></div>
+                <div id="finalize-errors" class="alert alert-danger" style="display: none;"></div>
+
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="group_action" id="create_new_group_radio"
+                            value="create" checked>
+                        <label class="form-check-label" for="create_new_group_radio">{{ _('Create a new experimental
+                            group') }}</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="group_action" id="link_existing_group_radio"
+                            value="link">
+                        <label class="form-check-label" for="link_existing_group_radio">{{ _('Link to existing group')
+                            }}</label>
+                    </div>
+                </div>
+
+                <div id="new_group_section">
+                    <div class="mb-3">
+                        <label for="new_group_name" class="form-label">{{ _('New Group Name') }}</label>
+                        <input type="text" id="new_group_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_group_animal_model_id" class="form-label">{{ _('Animal Model') }}</label>
+                        <select id="new_group_animal_model_id" class="form-select" required></select>
+                    </div>
+                </div>
+
+                <div id="existing_group_section" style="display: none;">
+                    <div class="mb-3">
+                        <label for="existing_group_id" class="form-label">{{ _('Select Group') }}</label>
+                        <select id="existing_group_id" class="form-select" required></select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="finalize_ethical_approval_id" class="form-label">{{ _('Ethical Approval') }}</label>
+                    <select id="finalize_ethical_approval_id" class="form-select" required></select>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="finalize_notify_team" checked>
+                    <label class="form-check-label" for="finalize_notify_team">{{ _('Notify team members') }}</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-success" id="confirm-finalize-btn">{{ _('Confirm & Generate')
+                    }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteWorkplanModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Confirm Deletion') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">{{ _('Are you sure you want to delete this workplan? This cannot be undone.') }}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <form action="{{ url_for('workplans.delete_workplan', workplan_id=workplan.id) }}" method="POST"
+                    style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">{{ _('Delete') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clear Events Confirmation Modal -->
+<div class="modal fade" id="clearEventsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _('Confirm Clear All') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="alert alert-warning">{{ _('Are you sure you want to delete ALL planned events?') }}</p>
+                <div class="mb-3">
+                    <label for="clear_events_comment" class="form-label">{{ _('Comment') }}</label>
+                    <textarea id="clear_events_comment" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="clear_events_notify_team" checked>
+                    <label class="form-check-label" for="clear_events_notify_team">{{ _('Notify team') }}</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-danger" id="confirm-clear-events-btn">{{ _('Clear All Events')
+                    }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template for a new event row -->
+<template id="event-row-template">
+    <tr>
+        <td><input type="number" name="offset_days" class="form-control" min="0" required
+                aria-label="{{ _('Day Offset') }}"></td>
+        <td class="week-number"></td>
+        <td class="projected-date"></td>
+        <td class="animal-age"></td>
+        <td><select name="protocol_id" class="form-select protocol-select" required
+                aria-label="{{ _('Protocol') }}"></select></td>
+        <td><input type="text" name="event_name" class="form-control" aria-label="{{ _('Event Name') }}"></td>
+        <td><select name="assigned_to_id" class="form-select assignee-select" aria-label="{{ _('Assignee') }}"></select>
+        </td>
+        <td><span class="badge bg-secondary">{{ _('Planned') }}</span></td>
+        <td><button type="button" class="btn btn-sm btn-danger remove-event-btn"><i class="fas fa-trash"></i></button>
+        </td>
+    </tr>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">
+    // Define global variables for the workplan edit JS
+    const events_json = {{ events_json | tojson }};
+    const protocols_json = {{ protocols_json | tojson }};
+    const team_members_json = {{ team_members_json | tojson }};
+    const animal_models_json = {{ animal_models_json | tojson }};
+    const current_locale = {{ current_locale | tojson }};
+    const view_calendar_url = "{{ url_for('calendar.view_calendar') }}";
+    const finalize_url = "{{ url_for('workplans.finalize_workplan', workplan_id=workplan.id) }}";
+    const get_finalize_info_url = "{{ url_for('workplans.get_finalize_info', workplan_id=workplan.id) }}";
+    const restore_url = "{{ url_for('workplans.restore_workplan_version', workplan_id=workplan.id) }}";
+    const bulk_assign_url = "{{ url_for('workplans.bulk_assign_events', workplan_id=workplan.id) }}";
+    const history_url = "{{ url_for('workplans.workplan_history', workplan_id=workplan.id) }}";
+    const reassign_datatable_url = "{{ url_for('datatables.reassign_datatable', datatable_id=0) }}";
+    const move_datatable_url = "{{ url_for('datatables.move_datatable', datatable_id=0) }}";
+    const select_protocol_text = {{ _("Select Protocol...") | tojson }};
+    const unassigned_text = {{ _("Unassigned") | tojson }};
+    const before_dob_text = {{ _("Before DOB") | tojson }};
+    const invalid_date_text = {{ _("Invalid Date") | tojson }};
+    const view_on_cal_text = {{ _("View on calendar") | tojson }};
+    const no_changes_text = {{ _("No changes have been made.") | tojson }};
+    const required_fields_text = {{ _("Please fill in all required fields (Day Offset, Protocol).") | tojson }};
+    const saving_text = {{ _("Saving...") | tojson }};
+    const csrf_token = "{{ csrf_token() }}";
+</script>
+<script src="{{ url_for('static', filename='js/workplan_edit.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

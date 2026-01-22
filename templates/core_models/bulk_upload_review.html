@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('Review Bulk Protocol Upload') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Review Bulk Protocol Upload') }}</h1>
+    <p>{{ _('Please review the changes below. If everything is correct, click "Confirm Import" to save them to the database.') }}</p>
+
+    {% if conflicts %}
+        <div class="alert alert-danger">
+            <h4><i class="fas fa-exclamation-triangle"></i> {{ _('Conflicts Found') }}</h4>
+            <p>{{ _('The following issues were found in your upload. Please correct them in your file and try again. The import cannot proceed.') }}</p>
+            <ul>
+                {% for conflict in conflicts %}
+                    <li>{{ conflict }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if skipped_protocols %}
+        <div class="alert alert-warning">
+            <h4><i class="fas fa-info-circle"></i> {{ _('Skipped Protocols') }}</h4>
+            <p>{{ _('The following protocols already exist in the database and will be skipped:') }}</p>
+            <ul>
+                {% for protocol_name in skipped_protocols %}
+                    <li>{{ protocol_name }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-6">
+            <h3>{{ _('New Protocols to be Created') }}</h3>
+            {% for protocol in protocols %}
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>{{ protocol.name }}</strong>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><strong>{{ _('Severity:') }}</strong> {{ protocol.severity }}</p>
+                        <p class="mb-1"><strong>{{ _('Description:') }}</strong> {{ protocol.description or 'N/A' }}</p>
+                        <p class="mb-1"><strong>{{ _('URL:') }}</strong> {{ protocol.url or 'N/A' }}</p>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item active">{{ _('Analytes to be linked:') }}</li>
+                        {% for analyte in protocol.analytes %}
+                            <li class="list-group-item">{{ analyte.name }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% else %}
+                <p class="text-muted">{{ _('No new protocols to create.') }}</p>
+            {% endfor %}
+        </div>
+        <div class="col-md-6">
+            <h3>{{ _('New Analytes to be Created') }}</h3>
+            {% for analyte in new_analytes %}
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>{{ analyte.name }}</strong>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><strong>{{ _('Description:') }}</strong> {{ analyte.description or 'N/A' }}</p>
+                        <p class="mb-1"><strong>{{ _('Unit:') }}</strong> {{ analyte.unit or 'N/A' }}</p>
+                        <p class="mb-1"><strong>{{ _('Data Type:') }}</strong> {{ analyte.data_type }}</p>
+                        {% if analyte.data_type == 'category' %}
+                            <p class="mb-1"><strong>{{ _('Allowed Values:') }}</strong> {{ analyte.allowed_values }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <p class="text-muted">{{ _('No new analytes to create.') }}</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="mt-4">
+        <a href="{{ url_for('core_models.bulk_upload_protocol') }}" class="btn btn-secondary">{{ _('Cancel and Upload Again') }}</a>
+        {% if not conflicts %}
+            <form method="POST" action="{{ url_for('core_models.bulk_upload_confirm') }}" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-primary">{{ _('Confirm Import') }}</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

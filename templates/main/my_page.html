@@ -1,0 +1,612 @@
+{# templates/main/my_page.html #}
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    .my-page-section-header {
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+        margin-top: 2rem;
+    }
+
+    .my-page-section-header h3 {
+        color: #0d6efd;
+    }
+
+    .compact-list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.6rem 1rem;
+        border-left-width: 4px;
+        border-left-style: solid;
+        margin-bottom: -1px;
+    }
+
+    .compact-list-item:first-child {
+        border-top-left-radius: .25rem;
+        border-top-right-radius: .25rem;
+    }
+
+    .compact-list-item:last-child {
+        margin-bottom: 0;
+        border-bottom-left-radius: .25rem;
+        border-bottom-right-radius: .25rem;
+    }
+
+    .bookmarked-group-list-item {
+        border-left-color: #198754;
+    }
+
+    .bookmarked-datatable-list-item {
+        border-left-color: #0dcaf0;
+    }
+
+    .created-group-list-item {
+        border-left-color: #ffc107;
+    }
+
+    .created-datatable-list-item {
+        border-left-color: #fd7e14;
+    }
+
+    .team-project-list-item {
+        border-left-color: #6f42c1;
+    }
+
+    .item-info-line {
+        flex-grow: 1;
+        margin-right: 1rem;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .item-title-line {
+        font-weight: 500;
+        margin-bottom: 0.1rem;
+        font-size: 0.95rem;
+    }
+
+    .item-title-line a {
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .item-title-line a:hover {
+        text-decoration: underline;
+    }
+
+    .item-meta-line {
+        font-size: 0.78rem;
+        color: #6c757d;
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .item-meta-line>span,
+    .item-meta-line>a {
+        margin-right: 0.75rem;
+        white-space: nowrap;
+    }
+
+    .item-meta-line>span:last-child,
+    .item-meta-line>a:last-child {
+        margin-right: 0;
+    }
+
+    .item-meta-line .badge {
+        font-size: 0.7rem;
+        vertical-align: middle;
+    }
+
+    .item-meta-line i.fa-fw {
+        text-align: center;
+    }
+
+    .item-actions-line .btn {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.35rem;
+        margin-left: 0.25rem;
+    }
+
+    .item-actions-line form {
+        display: inline-block;
+    }
+
+    .archived-item .item-title-line a,
+    .archived-item .item-meta-line,
+    .archived-item .item-meta-line a {
+        color: #6c757d !important;
+        text-decoration: line-through;
+    }
+
+    .archived-item .item-meta-line a:hover {
+        text-decoration: line-through underline;
+    }
+
+    .empty-section-message {
+        background-color: #f8f9fa;
+        border: 1px dashed #ced4da;
+        padding: 2rem;
+        text-align: center;
+        border-radius: .25rem;
+    }
+
+    .filter-card {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    {% if is_my_page_empty and not request.args.get('filterItemType') and not request.args.get('filterItemSource') and
+    not request.args.get('filterItemStatus') and not request.args.get('filterTextSearch') %}
+    <div class="alert alert-info mt-4" role="alert" id="myPageWelcomeMessage">
+        <h4 class="alert-heading">{{ _('Welcome to Your Page!') }}</h4>
+        <p>{{ _("This is your personal dashboard. As you work with projects, groups, and datatables, you can bookmark
+            them or see items you've created right here for quick access.") }}</p>
+        <hr>
+        <p class="mb-0">
+            {{ _('Get started by:') }}
+            <a href="{{ url_for('projects.create_project') }}" class="btn btn-sm btn-success ms-2">{{ _('Creating a New
+                Project') }}</a>
+            {{ _('or') }}
+            <a href="{{ url_for('projects.list_projects') }}" class="btn btn-sm btn-outline-primary ms-2">{{
+                _('Exploring Existing Projects') }}</a>.
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- Training Manager Link Section -->
+    {% if config.get('TM_ENABLED', 'False')|string|lower == 'true' %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title text-warning"><i class="fas fa-graduation-cap me-2"></i>{{ _('Training &
+                            Competencies') }}</h5>
+                        <p class="card-text text-muted mb-0">{{ _('View your skills, validate training sessions, and
+                            check your competency status in the Training Manager.') }}</p>
+                    </div>
+                    <a href="{{ url_for('auth.sso_training_manager') }}" class="btn btn-warning text-dark">
+                        {{ _('Go to My Training Profile') }} <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filter Controls -->
+    <div class="card mb-4 filter-card">
+        <div class="card-header">
+            <i class="fas fa-filter me-1"></i>{{ _('Filter My Page') }}
+        </div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <label for="filterItemType" class="form-label form-label-sm">{{ _('Item Type:') }}</label>
+                    <select id="filterItemType" class="form-select form-select-sm">
+                        <option value="all" selected>{{ _('All Types') }}</option>
+                        <option value="project">{{ _('Projects Only') }}</option>
+                        <option value="group">{{ _('Groups Only') }}</option>
+                        <option value="datatable">{{ _('DataTables Only') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterItemSource" class="form-label form-label-sm">{{ _('Source:') }}</label>
+                    <select id="filterItemSource" class="form-select form-select-sm">
+                        <option value="all" selected>{{ _('All Sources') }}</option>
+                        <option value="bookmarked">{{ _('My Bookmarks') }}</option>
+                        <option value="created">{{ _('My Creations') }}</option>
+                        <option value="team">{{ _('My Team\'s Projects') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterItemStatus" class="form-label form-label-sm">{{ _('Status:') }}</label>
+                    <select id="filterItemStatus" class="form-select form-select-sm">
+                        <option value="all">{{ _('All Statuses') }}</option>
+                        <option value="active" selected>{{ _('Active Only') }}</option>
+                        <option value="archived">{{ _('Archived Only') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterTextSearch" class="form-label form-label-sm">{{ _('Search Text:') }}</label>
+                    <input type="text" id="filterTextSearch" class="form-control form-control-sm"
+                        placeholder="{{ _('Filter by name, project...') }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="noFilterResultsMessage" class="alert alert-warning mt-4" style="display: none;" role="alert">
+        {{ _('No items match your current filter criteria.') }}
+    </div>
+
+    <!-- Define IDs for existence checks to avoid 'do' extension usage -->
+    {% set my_group_ids = my_groups|map(attribute='id')|list if my_groups else [] %}
+    {% set my_datatable_ids = my_datatables|map(attribute='id')|list if my_datatables else [] %}
+
+    <!-- Bookmarked Groups -->
+    <div class="my-page-section-header" data-section-type="group" data-section-source="bookmarked">
+        <h3><i class="fas fa-bookmark text-primary me-2"></i>{{ _('My Bookmarked Groups') }}</h3>
+    </div>
+    {% if my_groups %}
+    <div class="list-group mb-4 section-content" data-section-type="group" data-section-source="bookmarked">
+        {% for group in my_groups %}
+        <div class="list-group-item compact-list-item bookmarked-group-list-item {% if group.is_archived %}archived-item{% endif %}"
+            data-item-type="group" data-item-source="bookmarked"
+            data-item-status="{{ 'archived' if group.is_archived else 'active' }}"
+            data-search-text="{{ (group.name + ' ' + (group.project.name if group.project else '') + ' ' + (group.project.team.name if group.project and group.project.team else '') + ' ' + (group.model.name if group.model else '')) | lower }}">
+            <div class="item-info-line">
+                <div class="item-title-line">
+                    <a href="{{ url_for('groups.edit_group', id=group.id) }}">
+                        {{ group.name }}
+                    </a>
+                    {% if group.is_archived %}<span class="badge bg-secondary ms-1">{{ _('Archived') }}</span>{% endif
+                    %}
+                </div>
+                <div class="item-meta-line">
+                    <span><i class="fas fa-folder-open fa-fw me-1"></i><a
+                            href="{{ url_for('projects.view_edit_project', project_slug=group.project.slug) if group.project else '#' }}"
+                            class="text-muted">{{ group.project.name if group.project else _('N/A Project')
+                            }}</a></span>
+                    <span><i class="fas fa-users fa-fw me-1"></i>{{ group.project.team.name if group.project and
+                        group.project.team else _('N/A Team') }}</span>
+                    <span><i class="fas fa-dna fa-fw me-1"></i><a
+                            href="{{ url_for('core_models.edit_model', model_type='animal', id=group.model.id) if group.model else '#' }}"
+                            class="text-muted">{{ group.model.name if group.model else _('N/A') }}</a></span>
+                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ group.animal_data|length if group.animal_data else 0
+                        }} {{ _('Animals') }}</span>
+                </div>
+            </div>
+            <div class="item-actions-line">
+                <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-outline-info"
+                    title="{{_('View Samples')}}"><i class="fas fa-vials"></i></a>
+                {% if not group.is_archived %}
+                <a href="{{ url_for('sampling.log_batch_samples_for_group', group_id=group.id) }}"
+                    class="btn btn-outline-success" title="{{_('Log Samples')}}"><i class="fas fa-vial"></i></a>
+                {% endif %}
+                <form method="POST" action="{{ url_for('main.remove_group_from_my_page', group_id=group.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-outline-warning" title="{{ _('Remove from My Page') }}"><i
+                            class="fas fa-times-circle"></i></button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Bookmarked DataTables -->
+    <div class="my-page-section-header" data-section-type="datatable" data-section-source="bookmarked">
+        <h3><i class="fas fa-bookmark text-info me-2"></i>{{ _('My Bookmarked DataTables') }}</h3>
+    </div>
+    {% if my_datatables %}
+    <div class="list-group mb-4 section-content" data-section-type="datatable" data-section-source="bookmarked">
+        {% for dt in my_datatables %}
+        {% set item_is_effectively_archived = dt.group.is_archived or (dt.group.project and
+        dt.group.project.is_archived) %}
+        <!-- FIX: Added |string to dt.date to prevent TypeError -->
+        <div class="list-group-item compact-list-item bookmarked-datatable-list-item {% if item_is_effectively_archived %}archived-item{% endif %}"
+            data-item-type="datatable" data-item-source="bookmarked"
+            data-item-status="{{ 'archived' if item_is_effectively_archived else 'active' }}"
+            data-search-text="{{ ((dt.protocol.name if dt.protocol else '') + ' ' + dt.date|string + ' ' + (dt.group.name if dt.group else '') + ' ' + (dt.group.project.name if dt.group and dt.group.project else '')) | lower }}">
+            <div class="item-info-line">
+                <div class="item-title-line">
+                    <a href="{{ url_for('datatables.view_data_table', datatable_id=dt.id) }}">
+                        {{ dt.protocol.name if dt.protocol else _('N/A Protocol') }}
+                    </a>
+                    {% if item_is_effectively_archived %}<span class="badge bg-secondary ms-1">{{ _('Parent Archived')
+                        }}</span>{% endif %}
+                </div>
+                <div class="item-meta-line">
+                    <span><i class="fas fa-calendar-alt fa-fw me-1"></i>{{ dt.date }}</span>
+                    <span><i class="fas fa-layer-group fa-fw me-1"></i><a
+                            href="{{ url_for('groups.edit_group', id=dt.group.id) if dt.group else '#' }}"
+                            class="text-muted">{{ dt.group.name if dt.group else _('N/A Group') }}</a></span>
+                    <span><i class="fas fa-folder-open fa-fw me-1"></i><a
+                            href="{{ url_for('projects.view_edit_project', project_slug=dt.group.project.slug) if dt.group and dt.group.project else '#' }}"
+                            class="text-muted">{{ dt.group.project.name if dt.group and dt.group.project else _('N/A')
+                            }}</a></span>
+                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ dt.group.animal_data|length if dt.group and
+                        dt.group.animal_data else 0 }} {{ _('Animals in Group') }}</span>
+                </div>
+            </div>
+            <div class="item-actions-line">
+                <a href="{{ url_for('datatables.analyze_datatable', datatable_id=dt.id) }}"
+                    class="btn btn-outline-primary {% if item_is_effectively_archived %}disabled{% endif %}"
+                    title="{{_('Analyze')}}"><i class="fas fa-chart-bar"></i></a>
+                <a href="{{ url_for('datatables.edit_data_table', id=dt.id) }}"
+                    class="btn btn-outline-secondary {% if item_is_effectively_archived %}disabled{% endif %}"
+                    title="{{_('Edit')}}"><i class="fas fa-edit"></i></a>
+                <form method="POST" action="{{ url_for('main.remove_datatable_from_my_page', datatable_id=dt.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-outline-warning" title="{{ _('Remove from My Page') }}"><i
+                            class="fas fa-times-circle"></i></button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Groups I Created -->
+    <div class="my-page-section-header" data-section-type="group" data-section-source="created">
+        <h3><i class="fas fa-pencil-alt text-success me-2"></i>{{ _('Groups I Created') }}</h3>
+    </div>
+    {% set displayed_created_groups_count = 0 %}
+    {% if created_groups %}
+    <div class="list-group mb-4 section-content" data-section-type="group" data-section-source="created">
+        {% for group in created_groups %}
+        {% if group.id not in my_group_ids %}
+        {% set displayed_created_groups_count = displayed_created_groups_count + 1 %}
+        <div class="list-group-item compact-list-item created-group-list-item {% if group.is_archived %}archived-item{% endif %}"
+            data-item-type="group" data-item-source="created"
+            data-item-status="{{ 'archived' if group.is_archived else 'active' }}"
+            data-search-text="{{ (group.name + ' ' + (group.project.name if group.project else '') + ' ' + (group.project.team.name if group.project and group.project.team else '') + ' ' + (group.model.name if group.model else '')) | lower }}">
+            <div class="item-info-line">
+                <div class="item-title-line">
+                    <a href="{{ url_for('groups.edit_group', id=group.id) }}">
+                        {{ group.name }}
+                    </a>
+                    {% if group.is_archived %}<span class="badge bg-secondary ms-1">{{ _('Archived') }}</span>{% endif
+                    %}
+                </div>
+                <div class="item-meta-line">
+                    <span><i class="fas fa-folder fa-fw me-1"></i><a
+                            href="{{ url_for('projects.view_edit_project', project_slug=group.project.slug) if group.project else '#' }}"
+                            class="text-muted">{{ group.project.name if group.project else _('N/A Project')
+                            }}</a></span>
+                    <span><i class="fas fa-users fa-fw me-1"></i>{{ group.project.team.name if group.project and
+                        group.project.team else _('N/A Team') }}</span>
+                    <span><i class="fas fa-dna fa-fw me-1"></i><a
+                            href="{{ url_for('core_models.edit_model', model_type='animal', id=group.model.id) if group.model else '#' }}"
+                            class="text-muted">{{ group.model.name if group.model else _('N/A') }}</a></span>
+                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ group.animal_data|length if group.animal_data else 0
+                        }} {{ _('Animals') }}</span>
+                </div>
+            </div>
+            <div class="item-actions-line">
+                <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-outline-info"
+                    title="{{_('View Samples')}}"><i class="fas fa-list-ul"></i></a>
+                {% if not group.is_archived %}
+                <a href="{{ url_for('sampling.log_batch_samples_for_group', group_id=group.id) }}"
+                    class="btn btn-outline-success" title="{{_('Log Samples')}}"><i class="fas fa-vial"></i></a>
+                {% endif %}
+                <form method="POST" action="{{ url_for('main.add_group_to_my_page', group_id=group.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-outline-primary" title="{{ _('Add to My Page') }}"><i
+                            class="fas fa-bookmark"></i></button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% if displayed_created_groups_count == 0 and not is_my_page_empty %}
+    <div class="empty-section-message mb-4 section-content" data-section-type="group" data-section-source="created">
+        <p class="mb-0 text-muted">{{ _("You haven't created any groups, or all your created groups are already
+            bookmarked.") }}</p>
+    </div>
+    {% endif %}
+    {% elif not is_my_page_empty %}
+    <div class="empty-section-message mb-4 section-content" data-section-type="group" data-section-source="created">
+        <p class="mb-0 text-muted">{{ _('You have not created any groups yet.') }}</p>
+    </div>
+    {% endif %}
+
+    <!-- DataTables I Created -->
+    <div class="my-page-section-header" data-section-type="datatable" data-section-source="created">
+        <h3><i class="fas fa-table text-warning me-2"></i>{{ _('DataTables I Created') }}</h3>
+    </div>
+    {% set displayed_created_datatables_count = 0 %}
+    {% if created_datatables %}
+    <div class="list-group mb-4 section-content" data-section-type="datatable" data-section-source="created">
+        {% for dt in created_datatables %}
+        {% if dt.id not in my_datatable_ids %}
+        {% set displayed_created_datatables_count = displayed_created_datatables_count + 1 %}
+        {% set item_is_effectively_archived = dt.group.is_archived or (dt.group.project and
+        dt.group.project.is_archived) %}
+        <!-- FIX: Added |string to dt.date -->
+        <div class="list-group-item compact-list-item created-datatable-list-item {% if item_is_effectively_archived %}archived-item{% endif %}"
+            data-item-type="datatable" data-item-source="created"
+            data-item-status="{{ 'archived' if item_is_effectively_archived else 'active' }}"
+            data-search-text="{{ ((dt.protocol.name if dt.protocol else '') + ' ' + dt.date|string + ' ' + (dt.group.name if dt.group else '') + ' ' + (dt.group.project.name if dt.group and dt.group.project else '')) | lower }}">
+            <div class="item-info-line">
+                <div class="item-title-line">
+                    <a href="{{ url_for('datatables.view_data_table', datatable_id=dt.id) }}">
+                        {{ dt.protocol.name if dt.protocol else _('N/A Protocol') }}
+                    </a>
+                    {% if item_is_effectively_archived %}<span class="badge bg-secondary ms-1">{{ _('Parent Archived')
+                        }}</span>{% endif %}
+                </div>
+                <div class="item-meta-line">
+                    <span><i class="fas fa-calendar-alt fa-fw me-1"></i>{{ dt.date }}</span>
+                    <span><i class="fas fa-users-cog fa-fw me-1"></i><a
+                            href="{{ url_for('groups.edit_group', id=dt.group.id) if dt.group else '#' }}"
+                            class="text-muted">{{ dt.group.name if dt.group else _('N/A Group') }}</a></span>
+                    <span><i class="fas fa-folder-open fa-fw me-1"></i><a
+                            href="{{ url_for('projects.view_edit_project', project_slug=dt.group.project.slug) if dt.group and dt.group.project else '#' }}"
+                            class="text-muted">{{ dt.group.project.name if dt.group and dt.group.project else _('N/A')
+                            }}</a></span>
+                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ dt.group.animal_data|length if dt.group and
+                        dt.group.animal_data else 0 }} {{ _('Animals in Group') }}</span>
+                </div>
+            </div>
+            <div class="item-actions-line">
+                <a href="{{ url_for('datatables.analyze_datatable', datatable_id=dt.id) }}"
+                    class="btn btn-outline-primary {% if item_is_effectively_archived %}disabled{% endif %}"
+                    title="{{_('Analyze')}}"><i class="fas fa-chart-bar"></i></a>
+                <a href="{{ url_for('datatables.edit_data_table', id=dt.id) }}"
+                    class="btn btn-outline-secondary {% if item_is_effectively_archived %}disabled{% endif %}"
+                    title="{{_('Edit')}}"><i class="fas fa-edit"></i></a>
+                <form method="POST" action="{{ url_for('main.add_datatable_to_my_page', datatable_id=dt.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-outline-primary" title="{{ _('Add to My Page') }}"><i
+                            class="fas fa-bookmark"></i></button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% if displayed_created_datatables_count == 0 and not is_my_page_empty %}
+    <div class="empty-section-message mb-4 section-content" data-section-type="datatable" data-section-source="created">
+        <p class="mb-0 text-muted">{{ _("You haven't created any DataTables, or all your created DataTables are already
+            bookmarked.") }}</p>
+    </div>
+    {% endif %}
+    {% elif not is_my_page_empty %}
+    <div class="empty-section-message mb-4 section-content" data-section-type="datatable" data-section-source="created">
+        <p class="mb-0 text-muted">{{ _('You have not created any DataTables yet.') }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Team Projects -->
+    <div class="my-page-section-header" data-section-type="project" data-section-source="team">
+        <h3><i class="fas fa-folder-open text-primary me-2"></i>{{ _('My Team\'s Projects') }}</h3>
+    </div>
+    {% if team_projects %}
+    <div class="list-group mb-4 section-content" data-section-type="project" data-section-source="team">
+        {% for project in team_projects %}
+        <div class="list-group-item compact-list-item team-project-list-item {% if project.is_archived %}archived-item{% endif %}"
+            data-item-type="project" data-item-source="team"
+            data-item-status="{{ 'archived' if project.is_archived else 'active' }}"
+            data-search-text="{{ (project.name + ' ' + project.team.name) | lower }}">
+            <div class="item-info-line">
+                <div class="item-title-line">
+                    <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}">
+                        {{ project.name }}
+                    </a>
+                    {% if project.is_archived %}<span class="badge bg-secondary ms-1">{{ _('Archived') }}</span>{% endif
+                    %}
+                </div>
+                <div class="item-meta-line">
+                    <span><i class="fas fa-users fa-fw me-1"></i>{{ project.team.name }}</span>
+                    <span><i class="fas fa-user-circle fa-fw me-1"></i>{{ project.owner.full_name }}</span>
+                    <span><i class="fas fa-calendar-alt fa-fw me-1"></i>{{ project.created_at.strftime('%Y-%m-%d')
+                        }}</span>
+                </div>
+            </div>
+            <div class="item-actions-line">
+                <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}"
+                    class="btn btn-outline-primary" title="{{_('View Project')}}"><i class="fas fa-eye"></i></a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-section-message mb-4 section-content" data-section-type="project" data-section-source="team">
+        <p class="mb-0 text-muted">{{ _('There are no active projects in your team(s).') }}</p>
+    </div>
+    {% endif %}
+
+</div> <!-- FIX: Closed the container div here -->
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        const filterItemType = document.getElementById('filterItemType');
+        const filterItemSource = document.getElementById('filterItemSource');
+        const filterItemStatus = document.getElementById('filterItemStatus');
+        const filterTextSearch = document.getElementById('filterTextSearch');
+        const myPageWelcomeMessage = document.getElementById('myPageWelcomeMessage');
+        const noFilterResultsMessage = document.getElementById('noFilterResultsMessage');
+
+        function applyFilters() {
+            const typeFilter = filterItemType.value;
+            const sourceFilter = filterItemSource.value;
+            const statusFilter = filterItemStatus.value;
+            const textFilter = filterTextSearch.value.toLowerCase().trim();
+
+            let anyItemVisibleOverall = false;
+
+            document.querySelectorAll('.my-page-section-header').forEach(sectionHeader => {
+                const sectionType = sectionHeader.dataset.sectionType;
+                const sectionSource = sectionHeader.dataset.sectionSource;
+                const listGroup = sectionHeader.nextElementSibling;
+
+                if (!listGroup) {
+                    sectionHeader.style.display = 'none';
+                    return;
+                }
+
+                let itemsInSection = 0;
+                let visibleItemsInSection = 0;
+
+                if (listGroup.classList.contains('list-group')) {
+                    const items = listGroup.querySelectorAll('.compact-list-item');
+                    itemsInSection = items.length;
+
+                    items.forEach(item => {
+                        const itemType = item.dataset.itemType;
+                        const itemSource = item.dataset.itemSource;
+                        const itemStatus = item.dataset.itemStatus;
+                        const itemSearchText = item.dataset.searchText || '';
+
+                        const typeMatch = (typeFilter === 'all' || itemType === typeFilter);
+                        const sourceMatch = (sourceFilter === 'all' || itemSource === sourceFilter);
+                        const statusMatch = (statusFilter === 'all' || itemStatus === statusFilter);
+                        const textMatch = (textFilter === '' || itemSearchText.includes(textFilter));
+
+                        if (typeMatch && sourceMatch && statusMatch && textMatch) {
+                            item.style.display = 'flex';
+                            visibleItemsInSection++;
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+
+                    listGroup.style.display = visibleItemsInSection > 0 ? '' : 'none';
+                }
+
+                const sectionShouldBeVisible = (typeFilter === 'all' || sectionType === typeFilter) && (sourceFilter === 'all' || sectionSource === sourceFilter);
+
+                if (sectionShouldBeVisible && visibleItemsInSection > 0) {
+                    sectionHeader.style.display = '';
+                    anyItemVisibleOverall = true;
+                } else if (sectionShouldBeVisible && itemsInSection === 0 && listGroup.classList.contains('empty-section-message')) {
+                    sectionHeader.style.display = '';
+                    listGroup.style.display = 'block';
+                    anyItemVisibleOverall = true;
+                } else {
+                    sectionHeader.style.display = 'none';
+                }
+            });
+
+            if (myPageWelcomeMessage) {
+                const isMyPageEmpty = Boolean({{ 1 if is_my_page_empty else 0 }});
+    const noFiltersActive = (typeFilter === 'all' && sourceFilter === 'all' && statusFilter === 'active' && textFilter === '');
+    myPageWelcomeMessage.style.display = (noFiltersActive && isMyPageEmpty) ? 'block' : 'none';
+        }
+
+    if (noFilterResultsMessage) {
+        const filtersAreActive = (typeFilter !== 'all' || sourceFilter !== 'all' || statusFilter !== 'all' || textFilter !== '');
+        noFilterResultsMessage.style.display = (filtersAreActive && !anyItemVisibleOverall) ? 'block' : 'none';
+    }
+    }
+
+    filterItemType.addEventListener('change', applyFilters);
+    filterItemSource.addEventListener('change', applyFilters);
+    filterItemStatus.addEventListener('change', applyFilters);
+
+    let searchTimeout;
+    filterTextSearch.addEventListener('input', function () {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(applyFilters, 300);
+    });
+
+    applyFilters();
+    });
+</script>
+{% endblock %}

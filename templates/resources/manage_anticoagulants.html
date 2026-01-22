@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Manage Anticoagulants') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">{{ _('Manage Anticoagulants') }}</h1>
+    <a href="{{ url_for('resources.manage_static_lists') }}" class="btn btn-secondary mb-3">← {{ _('Back to Lists') }}</a>
+
+    <div class="row">
+        <!-- Add/Edit Anticoagulant Form & Bulk Management -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">{{ _('Add New Anticoagulant') }}</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('resources.manage_anticoagulants') }}">
+                        {{ form.hidden_tag() }}
+                        {{ render_field(form.name, class="form-control") }}
+                        {{ form.submit(class="btn btn-primary") }}
+                    </form>
+                </div>
+            </div>
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h4 class="mb-0">{{ _('Bulk Management') }}</h4>
+                </div>
+                <div class="card-body">
+                    <p>{{ _('Download all anticoagulants as an XLSX file or upload a file to bulk-add or update anticoagulants.') }}</p>
+                    <a href="{{ url_for('resources.download_anticoagulants') }}" class="btn btn-success"><i class="fas fa-download"></i> {{ _('Download XLSX') }}</a>
+                    <hr>
+                    <form method="POST" action="{{ url_for('resources.upload_anticoagulants') }}" enctype="multipart/form-data" class="mt-3">
+                        {{ upload_form.hidden_tag() }}
+                        <div class="mb-3">
+                            {{ upload_form.file.label(class="form-label") }}
+                            {{ upload_form.file(class="form-control") }}
+                        </div>
+                        {{ upload_form.submit_upload(class="btn btn-info") }}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anticoagulants Table -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">{{ _('Existing Anticoagulants') }}</h4>
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>{{ _('Name') }}</th>
+                                <th>{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for anticoagulant in anticoagulants %}
+                            <tr data-bs-toggle="modal" data-bs-target="#editAnticoagulantModal-{{ anticoagulant.id }}" style="cursor: pointer;">
+                                <td>{{ anticoagulant.name }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('resources.delete_anticoagulant', id=anticoagulant.id) }}" style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-danger delete-anticoagulant-btn">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modals -->
+{% for anticoagulant in anticoagulants %}
+<div class="modal fade" id="editAnticoagulantModal-{{ anticoagulant.id }}" tabindex="-1" aria-labelledby="editAnticoagulantModalLabel-{{ anticoagulant.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editAnticoagulantModalLabel-{{ anticoagulant.id }}">{{ _('Edit Anticoagulant') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('resources.edit_anticoagulant', id=anticoagulant.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="name-{{ anticoagulant.id }}" class="form-label">{{ _('Name') }}</label>
+                        <input type="text" id="name-{{ anticoagulant.id }}" name="name" class="form-control" value="{{ anticoagulant.name }}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">{{ _('Save Changes') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delete-anticoagulant-btn').forEach(function(button) {
+        button.addEventListener('click', function(event) {
+            event.stopPropagation();
+            if (!confirm('{{ _('Are you sure you want to delete this anticoagulant?') }}')) {
+                event.preventDefault(); // Prevent form submission if user cancels
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

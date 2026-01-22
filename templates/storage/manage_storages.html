@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ title }}</h1>
+
+    {% if current_user.is_super_admin or teams_for_select %}
+    <div class="card mb-4">
+        <div class="card-header">{{ _('Create New Storage') }}</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('storage.manage_storages', team_id=selected_team_id if selected_team_id else omit) }}">
+                {{ form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.name, class="form-control form-control-sm") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {% if teams_for_select %}
+                            <label for="team_for_storage" class="form-label">{{ _('Team') }}</label>
+                            <select name="team_for_storage" id="team_for_storage" class="form-select form-select-sm" required>
+                                <option value="">-- {{ _('Select Team') }} --</option>
+                                {% for team in teams_for_select %}
+                                    <option value="{{ team.id }}" {% if team.id == default_team_id_for_form %}selected{% endif %}>{{ team.name }}</option>
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            <p class="text-muted">{{ _('No teams available to assign storage.') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.capacity, class="form-control form-control-sm") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ render_field(form.location_details, class="form-control form-control-sm", rows="1") }}
+                    </div>
+                </div>
+                {% if teams_for_select %}
+                {{ form.submit(class="btn btn-primary btn-sm") }}
+                {% endif %}
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_super_admin and teams_for_select|length > 1 %}
+    <form method="GET" action="{{ url_for('storage.manage_storages') }}" class="mb-3" id="teamFilterForm">
+        <div class="row align-items-end">
+            <div class="col-md-4">
+                <label for="team_id_filter" class="form-label">{{ _('Filter by Team:') }}</label>
+                <select name="team_id" id="team_id_filter" class="form-select form-select-sm">
+                    <option value="">{{ _('All Teams') }}</option>
+                    {% for team in teams_for_select %}
+                        <option value="{{ team.id }}" {% if team.id == selected_team_id %}selected{% endif %}>{{ team.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+
+    <h3 class="mt-4">{{ _('Existing Storages') }} {% if selected_team_id and teams_for_select|selectattr('id', 'equalto', selected_team_id)|first %}({{ _('Team:') }} {{ (teams_for_select|selectattr('id', 'equalto', selected_team_id)|first).name }}){% elif not selected_team_id and current_user.is_super_admin %}({{ _('All Teams') }}){% endif %}</h3>
+    {% if storages %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>{{ _('Name') }}</th>
+                    {% if not selected_team_id and current_user.is_super_admin %}<th>{{ _('Team') }}</th>{% endif %}
+                    <th>{{ _('Capacity') }}</th>
+                    <th>{{ _('Location') }}</th>
+                    <th>{{ _('Samples Stored') }}</th>
+                    <th>{{ _('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for storage_item in storages %}
+                <tr class="clickable-row" data-href="{{ url_for('storage.view_storage', storage_id=storage_item.id) }}">
+                    <td>{{ storage_item.name }}</td>
+                    {% if not selected_team_id and current_user.is_super_admin %}<td>{{ storage_item.team.name }}</td>{% endif %}
+                    <td>{{ storage_item.capacity if storage_item.capacity else '-' }}</td>
+                    <td>{{ storage_item.location_details if storage_item.location_details else '-' }}</td>
+                    <td class="text-center">{{ storage_item.samples.count() }}</td>
+                    <td class="actions-column">
+                        {% if current_user.is_super_admin or current_user.is_admin_of(storage_item.team) %}
+                        <a href="{{ url_for('storage.edit_storage', storage_id=storage_item.id) }}" class="btn btn-sm btn-outline-secondary me-1" title="{{ _('Edit') }}"><i class="fas fa-edit"></i></a>
+                        <form method="POST" action="{{ url_for('storage.delete_storage', storage_id=storage_item.id) }}" style="display:inline;" class="delete-storage-form" data-storage-name="{{ storage_item.name }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ _('Delete') }}" {% if storage_item.samples.first() %}disabled title="{{ _('Cannot delete: storage contains samples') }}"{% endif %}><i class="fas fa-trash-alt"></i></button>
+                        </form>
+                        <a href="{{ url_for('storage.download_inventory', storage_id=storage_item.id) }}" class="btn btn-sm btn-success me-1" title="{{ _('Download Inventory') }}"><i class="fas fa-download"></i></a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="alert alert-info">
+        {% if selected_team_id %}
+            {{ _('No storages found for the selected team.') }}
+        {% elif current_user.is_super_admin %}
+            {{ _('No storages found in any team.') }}
+        {% else %}
+            {{ _('No storages found for your team(s).') }}
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+$(document).ready(function() {
+    $('.table').DataTable({
+        "language": { 
+            "search": "{{ _('Search:') }}",
+            "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+            "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+            "infoEmpty": "{{ _('Showing 0 to 0 of 0 entries') }}",
+            "infoFiltered": "{{ _('(filtered from _MAX_ total entries)') }}",
+            "paginate": {
+                "first": "{{ _('First') }}",
+                "last": "{{ _('Last') }}",
+                "next": "{{ _('Next') }}",
+                "previous": "{{ _('Previous') }}"
+            }
+        },
+        "columnDefs": [
+            { "orderable": false, "targets": -1 } 
+        ]
+    });
+
+    // Make table rows clickable, except for the actions column
+    $(".clickable-row").click(function(event) {
+        // Check if the clicked element or any of its parents is within the actions-column
+        if (!$(event.target).closest('.actions-column').length) {
+            window.location = $(this).data("href");
+        }
+    });
+    $('#team_for_storage, #team_id_filter').select2({ theme: "bootstrap-5", width: '100%', allowClear: true, placeholder: $(this).data('placeholder') });
+
+    // Attach confirmation to delete storage forms
+    document.querySelectorAll('.delete-storage-form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            const storageName = this.dataset.storageName || 'this storage';
+            const message = `Are you sure you want to delete storage "${storageName}"? This cannot be undone if it contains no samples.`;
+            if (!confirm(message)) {
+                event.preventDefault();
+            }
+        });
+    });
+    
+    // Submit form on team filter change
+    const teamFilterSelect = document.getElementById('team_id_filter');
+    if (teamFilterSelect) {
+        teamFilterSelect.addEventListener('change', function() {
+            document.getElementById('teamFilterForm').submit();
+        });
+    }
+});
+</script>
+{% endblock %}

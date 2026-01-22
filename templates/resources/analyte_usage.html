@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">{{ _('Usage for Analyte: %(analyte_name)s', analyte_name=analyte.name) }}</h1>
+    <a href="{{ url_for('resources.manage_analytes') }}" class="btn btn-secondary mb-3">← {{ _('Back to Analytes') }}</a>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h2>{{ _('Animal Models') }}</h2>
+            {% if animal_models %}
+                <ul class="list-group">
+                    {% for model in animal_models %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('core_models.edit_model', model_type='animal', id=model.id) }}">{{ model.name }}</a>
+                            <a href="{{ url_for('resources.list_groups_for_animal_model', model_id=model.id) }}" class="badge bg-primary rounded-pill text-decoration-none">{{ model.groups.count() }} {{ _('groups') }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{{ _('This analyte is not used in any animal models.') }}</p>
+            {% endif %}
+        </div>
+        <div class="col-md-6">
+            <h2>{{ _('Protocol Models') }}</h2>
+            {% if protocol_models %}
+                <ul class="list-group">
+                    {% for model in protocol_models %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('core_models.edit_model', model_type='protocol', id=model.id) }}">{{ model.name }}</a>
+                            <a href="{{ url_for('resources.list_datatables_for_protocol_model', model_id=model.id) }}" class="badge bg-primary rounded-pill text-decoration-none">{{ model.data_tables.count() }} {{ _('datatables') }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{{ _('This analyte is not used in any protocol models.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

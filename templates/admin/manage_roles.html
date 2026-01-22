@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>{{ _('Manage Roles') }}</h1>
+        <a href="{{ url_for('admin.create_role') }}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>{{ _('Create New Role') }}
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">{{ _('Role Management') }}</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>{{ _('Role Name') }}</th>
+                            <th>{{ _('Description') }}</th>
+                            <th>{{ _('Scope') }}</th>
+                            <th>{{ _('Team') }}</th>
+                            <th>{{ _('Assignments') }}</th>
+                            <th>{{ _('Permissions Count') }}</th>
+                            <th>{{ _('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for role in roles %}
+                        <tr>
+                            <td>
+                                <strong>{{ role.name }}</strong>
+                                {% if role.description %}
+                                    <br><small class="text-muted">{{ role.description }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if role.description %}
+                                    {{ role.description[:50] }}{% if role.description|length > 50 %}...{% endif %}
+                                {% else %}
+                                    <span class="text-muted">{{ _('No description') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if role.team_id %}
+                                    <span class="badge bg-warning text-dark">Team Specific</span>
+                                {% else %}
+                                    <span class="badge bg-info">Global</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if role.team %}
+                                    {{ role.team.name }}
+                                {% else %}
+                                    <span class="text-muted">{{ _('N/A (Global)') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if role.has_active_assignments() %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-users me-1"></i>
+                                        {{ _('Assigned') }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ _('Not Assigned') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-primary">{{ role.permissions|length }} {{ _('perms') }}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{{ url_for('admin.edit_role', role_id=role.id) }}" class="btn btn-outline-primary" title="{{ _('Edit Role') }}">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{{ url_for('admin.create_role', template_role_id=role.id) }}" class="btn btn-outline-success" title="{{ _('Create from Template') }}"
+                                       onclick="return confirm('Start creating a new role based on {{ role.name | e }}?');">
+                                        <i class="fas fa-copy"></i>
+                                    </a>
+                                    {% if not role.has_active_assignments() %}
+                                        <form action="{{ url_for('admin.delete_role', role_id=role.id) }}" method="POST" style="display:inline;"
+                                              onsubmit="return confirm('Are you sure you want to delete {{ role.name | e }}? This cannot be undone.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-outline-danger" title="{{ _('Delete Role') }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <button class="btn btn-outline-secondary" disabled title="{{ _('Cannot delete assigned role') }}">
+                                            <i class="fas fa-ban"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <div class="text-muted">
+                                    <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                                    {{ _('No roles found. Create your first role to get started!') }}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,925 @@
+{# templates/projects/project.html #}
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ project.name }} - {{ _('Project Details') }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    .accordion-button:not(.collapsed) {
+        color: var(--bs-primary);
+        background-color: var(--bs-primary-bg-subtle);
+    }
+    .description-view {
+        border: 1px solid #ced4da;
+        padding: 12px 15px;
+        border-radius: .25rem;
+        background-color: #f8f9fa;
+        min-height: 100px;
+        white-space: pre-wrap;
+    }
+    .archived-project-banner {
+        background-color: #ffeeba;
+        border-color: #ffdf7e;
+        color: #856404;
+    }
+    .card-form-section {
+        border: 1px solid rgba(0, 0, 0, .125);
+        border-radius: .25rem;
+        padding: 1rem;
+        background-color: #f8f9fa;
+    }
+    .perm-icon {
+        font-size: 0.8rem;
+        margin-right: 4px;
+        color: #adb5bd;
+    }
+    .perm-icon.active {
+        color: #198754;
+    }
+    .perm-icon.danger.active {
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center">
+            <h1 class="mb-0">
+                {{ project.name }} <small class="text-muted">({{ project.slug }})</small>
+                {% if project.is_archived %}
+                <span class="badge bg-warning text-dark ms-2 fs-6">{{ _('Archived') }}</span>
+                {% endif %}
+            </h1>
+            <div class="ms-3">
+                {% if can_archive_project and not project.is_archived %}
+                <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal"
+                    data-bs-target="#archiveProjectModal" title="{{ _('Archive Project') }}">
+                    <i class="fas fa-archive"></i>
+                </button>
+                {% endif %}
+                {% if can_delete_project %}
+                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal"
+                    data-bs-target="#deleteProjectModal" title="{{ _('Delete Project Permanently') }}">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        <div>
+            {% if ckan_config_complete %}
+            <a href="{{ url_for('ckan.upload_project', project_slug=project.slug) }}" class="btn btn-info"><i
+                    class="fas fa-cloud-upload-alt me-1"></i> {{ _('Upload to CKAN') }}</a>
+            {% endif %}
+            <a href="{{ url_for('projects.list_projects') }}" class="btn btn-secondary">{{ _('Back to Projects List')
+                }}</a>
+        </div>
+    </div>
+</div>
+
+<p class="lead">
+    <strong>{{ _('Team') }}:</strong> {{ project.team.name }} | <strong>{{ _('Owner') }}:</strong> {{
+    project.owner.email }}
+</p>
+
+{% if project.is_archived %}
+<div class="alert archived-project-banner d-flex justify-content-between align-items-center" role="alert">
+    <div>
+        <h4 class="alert-heading">{{ _('This project is archived.') }}</h4>
+        <p class="mb-0">{{ _('Most editing functions are disabled. To make changes, please unarchive the project first.') }}</p>
+    </div>
+    {% if can_archive_project %}
+    <form id="unarchiveProjectForm" method="POST"
+        action="{{ url_for('projects.unarchive_project', project_slug=project.slug) }}" class="ms-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="unarchive_project_submit" value="true">
+        <button type="submit" class="btn btn-success"><i class="fas fa-box-open me-1"></i>{{ _('Unarchive Project')
+            }}</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Main Content Column -->
+    <div class="col-lg-8">
+
+        <!-- Project Description -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Description') }}</h4>
+                {% if can_edit_project_details and description_form and not project.is_archived %}
+                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#editDescriptionForm" aria-expanded="false" aria-controls="editDescriptionForm">
+                    <i class="fas fa-edit"></i>
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="description-view">
+                    {%- if project.description -%}
+                    {{ project.description }}
+                    {%- else -%}
+                    <span class="text-muted">{{ _('No description provided.') }}</span>
+                    {%- endif -%}
+                </div>
+                {% if can_edit_project_details and description_form and not project.is_archived %}
+                <div class="collapse mt-3" id="editDescriptionForm">
+                    <form id="description-edit-form" method="POST"
+                        action="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}">
+                        {{ description_form.hidden_tag() }}
+                        <div class="mb-3">
+                            <textarea class="form-control" id="description-input-main" name="description"
+                                rows="6">{{ description_form.description.data or project.description or '' }}</textarea>
+                        </div>
+                        {{ description_form.submit_description(class="btn btn-primary") }}
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Workplans -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Workplans') }}</h4>
+                {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                <button class="btn btn-success btn-sm" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#createWorkplanForm" aria-expanded="false" aria-controls="createWorkplanForm">
+                    <i class="fas fa-plus me-1"></i> {{ _('Create New Workplan') }}
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if project_perms.can_edit_exp_groups and not project.is_archived and workplan_form %}
+                <div class="collapse" id="createWorkplanForm">
+                    <form method="POST" action="{{ url_for('workplans.create_workplan', project_slug=project.slug) }}"
+                        class="mb-3 card-form-section">
+                        {{ workplan_form.hidden_tag() }}
+                        {{ render_field(workplan_form.name, class="form-control form-control-sm") }}
+                        {{ render_field(workplan_form.planned_animal_count, class="form-control form-control-sm") }}
+                        {{ workplan_form.submit(class="btn btn-primary btn-sm mt-2") }}
+                    </form>
+                </div>
+                {% endif %}
+
+                {% if project.workplans.all() %}
+                <ul class="list-group">
+                    {% for wp in project.workplans.order_by(Workplan.created_at.desc()).all() %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{{ url_for('workplans.edit_workplan', workplan_id=wp.id) }}">{{ wp.name }}</a>
+                            <span class="badge bg-info ms-2">{{ wp.status.value }}</span>
+                            <small class="text-muted d-block">
+                                {{ _('Animals:') }} {{ wp.planned_animal_count }} | {{ _('Events:') }} {{
+                                wp.events.count() }}
+                            </small>
+                        </div>
+                        {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-workplan-btn"
+                            data-workplan-id="{{ wp.id }}" data-workplan-name="{{ wp.name }}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <form method="POST" action="{{ url_for('workplans.delete_workplan', workplan_id=wp.id) }}"
+                            id="delete-workplan-form-{{ wp.id }}" class="d-none">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        </form>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">{{ _('No workplans created for this project yet.') }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+
+        <!-- Experimental Groups & DataTables -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Experimental Groups & DataTables') }}</h4>
+                {% if project_perms.can_create_exp_groups and not project.is_archived %}
+                <a href="{{ url_for('groups.edit_group', project_id_prefill=project.id) }}"
+                    class="btn btn-success btn-sm">
+                    <i class="fas fa-plus me-1"></i> {{ _('Create New Group') }}
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if groups_with_datatables %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>{{ _('Group Name') }}</th>
+                                <th>{{ _('Animal Model') }}</th>
+                                <th class="text-center">{{ _('Animals') }}</th>
+                                <th>{{ _('Recent DataTables') }} ({{_('Max 5 shown')}})</th>
+                                {% if project_perms.can_edit_exp_groups and not project.is_archived %}<th>{{ _('Actions') }}</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for g_data in groups_with_datatables %}
+                            {% set group_item = g_data.group %}
+                            <tr>
+                                <td>
+                                    {% if project_perms.can_edit_exp_groups %}
+                                        <a href="{{ url_for('groups.edit_group', id=group_item.id) }}">{{ group_item.name }}</a>
+                                    {% else %}
+                                        <a href="{{ url_for('groups.view_group', id=group_item.id) }}">{{ group_item.name }}</a>
+                                    {% endif %}
+                                    {% if group_item.is_archived %}<span class="badge bg-secondary ms-1">{{
+                                        _('Archived') }}</span>{% endif %}
+                                </td>
+                                <td>{{ group_item.model.name if group_item.model else 'N/A' }}</td>
+                                <td class="text-center">{{ group_item.animal_data|length if group_item.animal_data else
+                                    0 }}</td>
+                                <td>
+                                    {% if g_data.datatables_preview %}
+                                    <div class="small">
+                                        {% for dt in g_data.datatables_preview %}
+                                        <a href="{{ url_for('datatables.view_data_table', datatable_id=dt.id) }}"
+                                            class="badge bg-light text-dark border me-1 mb-1 text-decoration-none"
+                                            title="{{ dt.protocol.name if dt.protocol else 'N/A' }} - {{ dt.date }}">
+                                            <i class="fas fa-table fa-xs"></i> {{ dt.date }}
+                                        </a>
+                                        {% endfor %}
+                                        {% if g_data.total_datatables_count > g_data.datatables_preview|length %}
+                                        <a href="{{ url_for('datatables.list_group_datatables', group_id=group_item.id) }}"
+                                            class="badge bg-secondary text-white text-decoration-none me-1 mb-1">
+                                            {{ _('View all %(count)s...', count=g_data.total_datatables_count) }}
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted small">{{_('No accessible DataTables')}}</span>
+                                    {% endif %}
+                                </td>
+                                {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                                <td class="group-actions-cell">
+                                    <button type="button" class="btn btn-outline-warning unlink-group-btn"
+                                        data-group-id="{{ group_item.id }}" data-group-name="{{ group_item.name }}"
+                                        data-group-team-id="{{ group_item.team_id }}"
+                                        data-project-slug="{{ project.slug }}" title="{{_('Manage Group Linkage')}}">
+                                        <i class="fas fa-random"></i>
+                                    </button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">{{ _('No experimental groups linked to this project.') }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Sidebar Column -->
+    <div class="col-lg-4">
+
+        <!-- Share Project -->
+        <div class="card mb-4" id="shareProjectCard">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ _('Share & Permissions') }}</h5>
+                {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#shareProjectCollapse" aria-expanded="false" aria-controls="shareProjectCollapse">
+                    <i class="fas fa-plus"></i> {{ _('Add Share') }}
+                </button>
+                {% endif %}
+            </div>
+            
+            <!-- Share Form (Collapsed by default) -->
+            <div class="collapse" id="shareProjectCollapse">
+                <div class="card-body bg-light border-bottom">
+                    {% if can_edit and share_user_form and share_team_form and not project.is_archived %}
+                    <ul class="nav nav-tabs mb-3" id="shareTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="user-tab" data-bs-toggle="tab" data-bs-target="#share-user-pane" type="button" role="tab">{{ _('User') }}</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="team-tab" data-bs-toggle="tab" data-bs-target="#share-team-pane" type="button" role="tab">{{ _('Team') }}</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="shareTabsContent">
+                        <!-- User Share Tab -->
+                        <div class="tab-pane fade show active" id="share-user-pane" role="tabpanel">
+                            <form id="share-project-user-form" method="POST" action="{{ url_for('projects.share_project', project_slug=project.slug) }}">
+                                {{ share_user_form.hidden_tag() }}
+                                <input type="hidden" name="share_type" value="user">
+                                
+                                <div class="mb-3">
+                                    {{ render_field(share_user_form.user_to_share, class="form-select", id="user_to_share") }}
+                                </div>
+
+                                <!-- Preset Selector -->
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">{{ _('Quick Preset') }}</label>
+                                    <select class="form-select form-select-sm" id="user-share-preset">
+                                        <option value="custom">{{ _('Custom') }}</option>
+                                        <option value="viewer" selected>{{ _('Viewer (Read Only)') }}</option>
+                                        <option value="collaborator">{{ _('Collaborator (Edit Data)') }}</option>
+                                        <option value="manager">{{ _('Manager (Delete/Archive)') }}</option>
+                                    </select>
+                                </div>
+
+                                <!-- Granular Permissions -->
+                                <div class="p-2 border rounded bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        {{ share_user_form.can_view_project(class="form-check-input user-perm-check", id="user_can_view") }}
+                                        <label class="form-check-label fw-bold" for="user_can_view">{{ share_user_form.can_view_project.label.text }}</label>
+                                    </div>
+                                    <div class="ps-4 mb-2">
+                                        <div class="form-check">
+                                            {{ share_user_form.can_view_exp_groups(class="form-check-input user-perm-check", id="user_view_groups") }}
+                                            <label class="form-check-label small" for="user_view_groups">{{ _('View Groups') }}</label>
+                                        </div>
+                                        <div class="form-check">
+                                            {{ share_user_form.can_view_datatables(class="form-check-input user-perm-check", id="user_view_dt") }}
+                                            <label class="form-check-label small" for="user_view_dt">{{ _('View DataTables') }}</label>
+                                        </div>
+                                        <div class="form-check">
+                                            {{ share_user_form.can_view_samples(class="form-check-input user-perm-check", id="user_view_samples") }}
+                                            <label class="form-check-label small" for="user_view_samples">{{ _('View Samples') }}</label>
+                                        </div>
+                                    </div>
+                                    <hr class="my-1">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="form-check">
+                                                {{ share_user_form.can_create_exp_groups(class="form-check-input user-perm-check", id="user_create_groups") }}
+                                                <label class="form-check-label small" for="user_create_groups">{{ _('Create Groups') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_user_form.can_edit_exp_groups(class="form-check-input user-perm-check", id="user_edit_groups") }}
+                                                <label class="form-check-label small" for="user_edit_groups">{{ _('Edit Groups') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_user_form.can_delete_exp_groups(class="form-check-input user-perm-check", id="user_delete_groups") }}
+                                                <label class="form-check-label small" for="user_delete_groups">{{ _('Delete Groups') }}</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="form-check">
+                                                {{ share_user_form.can_create_datatables(class="form-check-input user-perm-check", id="user_create_dt") }}
+                                                <label class="form-check-label small" for="user_create_dt">{{ _('Create Tables') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_user_form.can_edit_datatables(class="form-check-input user-perm-check", id="user_edit_dt") }}
+                                                <label class="form-check-label small" for="user_edit_dt">{{ _('Edit Tables') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_user_form.can_delete_datatables(class="form-check-input user-perm-check", id="user_delete_dt") }}
+                                                <label class="form-check-label small" for="user_delete_dt">{{ _('Delete Tables') }}</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="form-check">
+                                                {{ share_user_form.can_view_unblinded_data(class="form-check-input user-perm-check", id="user_view_unblinded") }}
+                                                <label class="form-check-label small text-danger" for="user_view_unblinded">{{ share_user_form.can_view_unblinded_data.label.text }}</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <button type="submit" name="submit_share_user" class="btn btn-primary w-100">{{ _('Save Permissions') }}</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Team Share Tab -->
+                        <div class="tab-pane fade" id="share-team-pane" role="tabpanel">
+                            <form id="share-project-team-form" method="POST" action="{{ url_for('projects.share_project', project_slug=project.slug) }}">
+                                {{ share_team_form.hidden_tag() }}
+                                <input type="hidden" name="share_type" value="team">
+                                
+                                <div class="mb-3">
+                                    {{ render_field(share_team_form.team_to_share, class="form-select", id="team_to_share") }}
+                                </div>
+
+                                <!-- Preset Selector for Team -->
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">{{ _('Quick Preset') }}</label>
+                                    <select class="form-select form-select-sm" id="team-share-preset">
+                                        <option value="custom">{{ _('Custom') }}</option>
+                                        <option value="viewer" selected>{{ _('Viewer (Read Only)') }}</option>
+                                        <option value="collaborator">{{ _('Collaborator (Edit Data)') }}</option>
+                                    </select>
+                                </div>
+
+                                <!-- Granular Permissions (Team) -->
+                                <div class="p-2 border rounded bg-white">
+                                    <div class="form-check form-switch mb-1">
+                                        {{ share_team_form.can_view_project(class="form-check-input team-perm-check", id="team_can_view") }}
+                                        <label class="form-check-label fw-bold" for="team_can_view">{{ share_team_form.can_view_project.label.text }}</label>
+                                    </div>
+                                    <div class="ps-4 mb-2">
+                                        <div class="form-check">
+                                            {{ share_team_form.can_view_exp_groups(class="form-check-input team-perm-check", id="team_view_groups") }}
+                                            <label class="form-check-label small" for="team_view_groups">{{ _('View Groups') }}</label>
+                                        </div>
+                                        <div class="form-check">
+                                            {{ share_team_form.can_view_datatables(class="form-check-input team-perm-check", id="team_view_dt") }}
+                                            <label class="form-check-label small" for="team_view_dt">{{ _('View DataTables') }}</label>
+                                        </div>
+                                        <div class="form-check">
+                                            {{ share_team_form.can_view_samples(class="form-check-input team-perm-check", id="team_view_samples") }}
+                                            <label class="form-check-label small" for="team_view_samples">{{ _('View Samples') }}</label>
+                                        </div>
+                                    </div>
+                                    <hr class="my-1">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="form-check">
+                                                {{ share_team_form.can_create_exp_groups(class="form-check-input team-perm-check", id="team_create_groups") }}
+                                                <label class="form-check-label small" for="team_create_groups">{{ _('Create Groups') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_team_form.can_edit_exp_groups(class="form-check-input team-perm-check", id="team_edit_groups") }}
+                                                <label class="form-check-label small" for="team_edit_groups">{{ _('Edit Groups') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_team_form.can_delete_exp_groups(class="form-check-input team-perm-check", id="team_delete_groups") }}
+                                                <label class="form-check-label small" for="team_delete_groups">{{ _('Delete Groups') }}</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="form-check">
+                                                {{ share_team_form.can_create_datatables(class="form-check-input team-perm-check", id="team_create_dt") }}
+                                                <label class="form-check-label small" for="team_create_dt">{{ _('Create Tables') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_team_form.can_edit_datatables(class="form-check-input team-perm-check", id="team_edit_dt") }}
+                                                <label class="form-check-label small" for="team_edit_dt">{{ _('Edit Tables') }}</label>
+                                            </div>
+                                            <div class="form-check">
+                                                {{ share_team_form.can_delete_datatables(class="form-check-input team-perm-check", id="team_delete_dt") }}
+                                                <label class="form-check-label small" for="team_delete_dt">{{ _('Delete Tables') }}</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="form-check">
+                                                {{ share_team_form.can_view_unblinded_data(class="form-check-input team-perm-check", id="team_view_unblinded") }}
+                                                <label class="form-check-label small text-danger" for="team_view_unblinded">{{ share_team_form.can_view_unblinded_data.label.text }}</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <button type="submit" name="submit_share_team" class="btn btn-primary w-100">{{ _('Save Permissions') }}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- List of Shares -->
+            <div class="card-body p-0">
+                {% if shared_with_teams or shared_with_users %}
+                <ul class="list-group list-group-flush">
+                    <!-- Teams -->
+                    {% for perm in shared_with_teams %}
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-users me-2 text-primary"></i><strong>{{ perm.team.name }}</strong>
+                                <div class="mt-1">
+                                    {# Visual Indicators #}
+                                    <i class="fas fa-eye perm-icon active" title="{{_('View Project')}}"></i>
+                                    <i class="fas fa-folder-plus perm-icon {{ 'active' if perm.can_create_exp_groups else '' }}" title="{{_('Create Groups')}}"></i>
+                                    <i class="fas fa-table perm-icon {{ 'active' if perm.can_create_datatables else '' }}" title="{{_('Create Tables')}}"></i>
+                                    <i class="fas fa-trash perm-icon danger {{ 'active' if perm.can_delete_exp_groups else '' }}" title="{{_('Delete Groups')}}"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary me-1 edit-team-share-btn" data-team-id="{{ perm.team.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <form method="POST"
+                                    action="{{ url_for('projects.unshare_with_team', project_slug=project.slug, team_id=perm.team_id) }}"
+                                    class="confirm-action-form d-inline"
+                                    data-confirm-message="{{ _('Are you sure you want to unshare this project from this team?') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+
+                    <!-- Users -->
+                    {% for user_perm in shared_with_users %}
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-user me-2 text-secondary"></i><strong>{{ user_perm.user.email }}</strong>
+                                <div class="mt-1">
+                                    {# Visual Indicators #}
+                                    <i class="fas fa-eye perm-icon active" title="{{_('View Project')}}"></i>
+                                    <i class="fas fa-folder-plus perm-icon {{ 'active' if user_perm.can_create_exp_groups else '' }}" title="{{_('Create Groups')}}"></i>
+                                    <i class="fas fa-table perm-icon {{ 'active' if user_perm.can_create_datatables else '' }}" title="{{_('Create Tables')}}"></i>
+                                    <i class="fas fa-trash perm-icon danger {{ 'active' if user_perm.can_delete_exp_groups else '' }}" title="{{_('Delete Groups')}}"></i>
+                                    {% if user_perm.can_view_unblinded_data %}
+                                        <i class="fas fa-eye-slash perm-icon active text-warning" title="{{_('View Unblinded')}}"></i>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary me-1 edit-user-share-btn" data-user-id="{{ user_perm.user.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <form method="POST"
+                                    action="{{ url_for('projects.unshare_with_user', project_slug=project.slug, user_id=user_perm.user.id) }}"
+                                    class="confirm-action-form d-inline"
+                                    data-confirm-message="{{ _('Are you sure you want to unshare this project from this user?') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted small text-center">{{ _('Not shared with any other users or teams.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Attachments -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ _('Attachments') }} <span class="badge bg-secondary ms-2">{{ attachments|length
+                        }}</span></h5>
+                {% if can_edit and attachment_form and not project.is_archived %}
+                <button class="btn btn-sm btn-outline-success" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#addAttachmentForm" aria-expanded="false" aria-controls="addAttachmentForm">
+                    <i class="fas fa-plus"></i>
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if can_edit and attachment_form and not project.is_archived %}
+                <div class="collapse" id="addAttachmentForm">
+                    <form method="POST" action="{{ url_for('projects.upload_attachment', project_slug=project.slug) }}"
+                        enctype="multipart/form-data" class="mb-3 card-form-section">
+                        {{ attachment_form.hidden_tag() }}
+                        <p class="fw-bold small mb-1">{{_('Upload New')}}</p>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-12">{{ render_field(attachment_form.file, class="form-control
+                                form-control-sm") }}</div>
+                            <div class="col-md-12">{{ render_field(attachment_form.description, class="form-control
+                                form-control-sm", placeholder=_('Optional description')) }}</div>
+                            <div class="col-md-12">{{ attachment_form.submit_attachment(class="btn btn-success btn-sm
+                                w-100") }}</div>
+                        </div>
+                    </form>
+                </div>
+                {% elif project.is_archived %}
+                <p class="text-muted small">{{_('Attachment uploads disabled for archived projects.')}}</p>
+                {% endif %}
+
+                {% if attachments %}
+                <ul class="item-list-stacked">
+                    {% for attachment in attachments %}
+                    <li>
+                        <div>
+                            <a href="{{ url_for('projects.download_attachment', project_slug=project.slug, attachment_id=attachment.id) }}"
+                                target="_blank"><i class="fas fa-paperclip me-1"></i>{{ attachment.filename }}</a>
+                            <small class="text-muted">({{ attachment.size | filesizeformat }})</small>
+                            {% if attachment.description %}<p class="mb-0 text-muted small">{{ attachment.description }}
+                            </p>{% endif %}
+                            <small class="text-muted">{{_('Uploaded')}}: {{ attachment.uploaded_at.strftime('%Y-%m-%d')
+                                }}</small>
+                        </div>
+                        {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                        <div class="item-actions">
+                            <form method="POST"
+                                action="{{ url_for('projects.delete_attachment', project_slug=project.slug, attachment_id=attachment.id) }}"
+                                class="confirm-action-form"
+                                data-confirm-message="{{ _('Are you sure you want to delete this attachment?') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="{{_('Delete')}}"><i
+                                        class="fas fa-trash"></i></button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">{{ _('No attachments yet.') }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Partners -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ _('Partners') }} <span class="badge bg-secondary ms-2">{{ partners|length }}</span>
+                </h5>
+                {% if can_edit and link_partner_form and not project.is_archived %}
+                <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#linkPartnerForm" aria-expanded="false" aria-controls="linkPartnerForm">
+                    <i class="fas fa-plus"></i>
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if can_edit and link_partner_form and not project.is_archived %}
+                <div class="collapse" id="linkPartnerForm">
+                    <form method="POST" action="{{ url_for('projects.link_partner', project_slug=project.slug) }}"
+                        class="mb-3 card-form-section">
+                        {{ link_partner_form.hidden_tag() }}
+                        <p class="fw-bold small mb-1">{{ _('Link a Partner') }}</p>
+                        <p class="small text-muted mb-2">{{ _('Select existing or enter a new one.') }}</p>
+                        {{ render_field(link_partner_form.existing_partner, class="form-select form-select-sm mb-2") }}
+                        <div class="text-center my-1 small fw-bold">{{_('OR')}}</div>
+                        {{ render_field(link_partner_form.new_company_name, class="form-control form-control-sm mb-2",
+                        placeholder=_('New Partner Company Name')) }}
+                        {{ render_field(link_partner_form.new_contact_email, class="form-control form-control-sm mb-2",
+                        placeholder=_('New Partner Contact Email')) }}
+                        {{ link_partner_form.submit_link_partner(class="btn btn-info btn-sm mt-2") }}
+                    </form>
+                </div>
+                {% elif project.is_archived %}
+                <p class="text-muted small">{{_('Partner linking disabled for archived projects.')}}</p>
+                {% endif %}
+
+                {% if partners %}
+                <ul class="item-list-stacked">
+                    {% for partner in partners %}
+                    <li>
+                        <div>
+                            <a href="{{ url_for('projects.list_projects_by_partner', partner_id=partner.id) }}">{{
+                                partner.company_name }}</a>
+                            <small class="text-muted">({{ partner.contact_email }})</small>
+                        </div>
+                        {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                        <div class="item-actions">
+                            <form method="POST"
+                                action="{{ url_for('projects.unlink_partner', project_slug=project.slug, partner_id=partner.id) }}"
+                                class="confirm-action-form"
+                                data-confirm-message="{{ _('Are you sure you want to unlink this partner?') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <button type="submit" class="btn btn-sm btn-outline-warning" title="{{_('Unlink')}}"><i
+                                        class="fas fa-unlink"></i></button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">{{ _('No partners linked yet.') }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Ethical Approvals -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ _('Linked Ethical Approvals') }} <span class="badge bg-secondary ms-2">{{
+                        ethical_approvals|length }}</span></h5>
+                {% if can_edit and link_ethical_approval_form and not project.is_archived %}
+                <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#linkEthicalApprovalForm" aria-expanded="false"
+                    aria-controls="linkEthicalApprovalForm">
+                    <i class="fas fa-plus"></i>
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if can_edit and link_ethical_approval_form and not project.is_archived %}
+                <div class="collapse" id="linkEthicalApprovalForm">
+                    <form method="POST" action="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}"
+                        class="mb-3 card-form-section">
+                        {{ link_ethical_approval_form.hidden_tag() }}
+                        <p class="fw-bold small mb-1">{{_('Update Linked Approvals')}}</p>
+                        {{ render_field(link_ethical_approval_form.ethical_approvals, class="form-select
+                        form-select-sm", size=5) }}
+                        {{ link_ethical_approval_form.submit_link_ethical_approval(class="btn btn-info btn-sm mt-2") }}
+                    </form>
+                </div>
+                {% elif project.is_archived %}
+                <p class="text-muted small">{{ _('Ethical Approval linking disabled for archived projects.') }}</p>
+                {% endif %}
+
+                {% if ethical_approvals %}
+                <ul class="item-list-inline">
+                    {% for ea in ethical_approvals %}
+                    <li class="mb-1">
+                        <span class="badge bg-light text-dark border p-2">
+                            <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=ea.id) }}"
+                                class="text-decoration-none text-dark">
+                                <i class="fas fa-shield-alt me-1 text-success"></i> {{ ea.reference_number }}
+                                ({{ea.overall_severity.value}})
+                            </a>
+                            {% if project_perms.can_edit_exp_groups and not project.is_archived %}
+                            <form method="POST"
+                                action="{{ url_for('projects.unlink_ethical_approval', project_slug=project.slug, ea_id=ea.id) }}"
+                                class="confirm-action-form"
+                                data-confirm-message="{{ _('Are you sure you want to unlink this ethical approval from the project?') }}"
+                                style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <button type="submit" class="btn btn-outline-danger unlink-btn"
+                                    title="{{_('Unlink EA')}}">×</button>
+                            </form>
+                            {% endif %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">{{ _('No ethical approvals linked yet.') }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Modals #}
+<div class="modal fade" id="archiveProjectModal" tabindex="-1" aria-labelledby="archiveProjectModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="archiveProjectModalLabel">{{ _('Archive Project Confirmation') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ _('Are you sure you want to archive the project "%(name)s"?', name=project.name) }}</p>
+                <div id="archiveImpactInfo" class="mb-3">
+                    <p>{{ _('Loading project impact information...') }}</p>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="cascadeArchiveGroupsCheckbox">
+                    <label class="form-check-label" for="cascadeArchiveGroupsCheckbox">{{ _('Also archive all associated
+                        active experimental groups.') }}</label>
+                </div>
+                <small class="text-muted">{{ _('Archived projects and their contents might be hidden from default views
+                    and some actions will be disabled.') }}</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <form id="archiveProjectForm" method="POST"
+                    action="{{ url_for('projects.archive_project', project_slug=project.slug) }}"
+                    style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <input type="hidden" name="cascade_archive_groups" id="hiddenCascadeArchiveGroups" value="false">
+                    <button type="submit" class="btn btn-warning">{{ _('Archive Project') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if can_delete_project %}
+<div class="modal fade" id="deleteProjectModal" tabindex="-1" aria-labelledby="deleteProjectModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteProjectModalLabel"><i class="fas fa-exclamation-triangle me-2"></i>{{
+                    _('Confirm Permanent Deletion') }}</h5><button type="button" class="btn-close btn-close-white"
+                    data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>{{ _('DANGER ZONE!') }}</strong></p>
+                <p>{{ _('Are you absolutely sure you want to permanently delete the project "%(name)s"?',
+                    name=project.name) }}</p>
+                <p class="text-danger fw-bold">{{ _('This action CANNOT be undone. It will also delete:') }}</p>
+                <ul>
+                    <li>{{ _('All Experimental Groups within this project.') }}</li>
+                    <li>{{ _('All DataTables associated with those groups.') }}</li>
+                    <li>{{ _('All Experiment Data Rows within those DataTables.') }}</li>
+                    <li>{{ _('All Attachments linked to this project.') }}</li>
+                </ul>
+                <p>{{ _('Please type the project slug "slug)s" below to confirm.', slug=project.slug) }}</p>
+                <input type="text" id="deleteConfirmSlug" class="form-control" placeholder="{{ project.slug }}">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <form id="deleteProjectCascadeForm" method="POST"
+                    action="{{ url_for('projects.delete_project_cascade', project_slug=project.slug) }}"
+                    style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" id="confirmDeleteProjectBtn" class="btn btn-danger" disabled>{{ _('Yes, Delete
+                        Everything') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="unlinkGroupModal" tabindex="-1" aria-labelledby="unlinkGroupModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="unlinkGroupModalLabel">{{ _('Manage Group Linkage') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="unlinkGroupFormModal" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="modal-body">
+                    <p>{{ _('You are about to modify the linkage for group:') }} <strong
+                            id="unlinkGroupNameModal"></strong>.</p>
+                    <p>{{ _("Since a group must belong to a project, you can either reassign it to another project within the same team or permanently delete it (along with its DataTables).") }}</p>
+
+                    <div class="mb-3">
+                        <label for="unlink_action_modal" class="form-label">{{ _('Action:') }}</label>
+                        <select name="unlink_action" id="unlink_action_modal" class="form-select">
+                            <option value="">-- {{_('Select Action')}} --</option>
+                            <option value="reassign">{{ _('Reassign to another Project') }}</option>
+                            <option value="delete">{{ _('Permanently Delete Group & its DataTables') }}</option>
+                        </select>
+                    </div>
+
+                    <div id="reassignProjectSectionModal" style="display: none;" class="mb-3">
+                        <label for="target_project_id_modal" class="form-label">{{ _('Target Project for Reassignment:') }}</label>
+                        <select name="target_project_id" id="target_project_id_modal" class="form-select">
+                        </select>
+                        <small class="form-text text-muted">{{_('Only projects from the same team where you have management rights are listed.')}}</small>
+                    </div>
+
+                    <div id="deleteGroupWarningModal" style="display: none;" class="alert alert-danger">
+                        <strong>{{_('Warning!')}}</strong> {{_('This will permanently delete the group and all its associated DataTables. This action cannot be undone.')}}
+                        <input type="hidden" name="cascade" value="true">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                    <button type="submit" id="confirmUnlinkActionBtnModal" class="btn btn-primary" disabled>{{ _('Confirm Action') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteWorkplanModal" tabindex="-1" aria-labelledby="deleteWorkplanModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteWorkplanModalLabel"><i class="fas fa-exclamation-triangle me-2"></i>{{ _('Confirm Workplan Deletion') }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ _('Are you sure you want to permanently delete the workplan "') }}<strong id="workplanNameToDelete"></strong>{{ _('"?') }}</p>
+                <p class="text-danger fw-bold">{{ _('This action CANNOT be undone. It will also delete all associated events and versions.') }}</p>
+                <div id="workplanDeleteImpactInfo" class="alert alert-info" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="submit" id="confirmDeleteWorkplanBtn" class="btn btn-danger">{{ _('Yes, Delete Workplan') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Object for JS -->
+<script type="application/json" id="project-config">
+{
+    "projectSlug": "{{ project.slug }}",
+    "urls": {
+        "archiveInfo": "{{ url_for('projects.get_project_archive_info', project_slug=project.slug) }}",
+        "manageableProjects": "{{ url_for('projects.api_get_manageable_projects_for_team', team_id=999999) }}",
+        "workplanDeleteInfo": "{{ url_for('workplans.get_workplan_delete_info', workplan_id=999999) }}",
+        "getTeamPermissions": "{{ url_for('projects.get_team_permissions', project_slug=project.slug, team_id=999999) }}",
+        "getUserPermissions": "{{ url_for('projects.get_user_permissions', project_slug=project.slug, user_id=999999) }}"
+    },
+    "i18n": {
+        "projectHas": "{{ _('This project currently has:') }}",
+        "activeGroups": "{{ _('active experimental group(s).') }}",
+        "activeDatatables": "{{ _('datatables in active groups.') }}",
+        "lastEntry": "{{ _('Last datatable entry in active groups:') }}",
+        "confirm": "{{ _('Are you sure?') }}",
+        "delete": "{{ _('Yes, Delete Group') }}",
+        "reassign": "{{ _('Reassign Group') }}",
+        "confirmAction": "{{ _('Confirm Action') }}",
+        "selectTarget": "{{ _('-- Select Target Project --') }}",
+        "workplanHasGroup": "{{ _('This workplan has been used to generate an experimental group (%s). Please delete the group first before deleting the workplan.') }}",
+        "updatePermissions": "{{ _('Update Permissions') }}"
+    }
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Load the external JS file -->
+<script src="{{ url_for('static', filename='js/project_view.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

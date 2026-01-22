@@ -1,0 +1,80 @@
+{# templates/components/modals.html #}
+{# Reusable modal component macros #}
+
+{# Basic modal #}
+{% macro modal(id, title, body='', footer='', size='', btn_close_text='') %}
+<div class="modal fade" id="{{ id }}" tabindex="-1" aria-labelledby="{{ id }}Label" aria-hidden="true">
+    <div class="modal-dialog {% if size %}modal-{{ size }}{% endif %}">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="{{ id }}Label">{{ title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+            </div>
+            {% if body %}
+            <div class="modal-body">
+                {{ body|safe }}
+            </div>
+            {% endif %}
+            {% if footer %}
+            <div class="modal-footer">
+                {{ footer|safe }}
+            </div>
+            {% else %}
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ btn_close_text or _('Close')
+                    }}</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# Confirm delete modal #}
+{% macro confirm_delete_modal(id, title, item_name='', form_action='') %}
+<div class="modal fade" id="{{ id }}" tabindex="-1" aria-labelledby="{{ id }}Label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="{{ id }}Label">{{ title }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="{{ _('Close') }}"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ _('Are you sure you want to delete') }} <strong>{{ item_name }}</strong>?</p>
+                <p class="text-danger">{{ _('This action cannot be undone.') }}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <form action="{{ form_action }}" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-danger">{{ _('Delete') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# Form modal #}
+{% macro form_modal(id, title, form_content='', btn_submit_text='', btn_cancel_text='', size='') %}
+<div class="modal fade" id="{{ id }}" tabindex="-1" aria-labelledby="{{ id }}Label" aria-hidden="true">
+    <div class="modal-dialog {% if size %}modal-{{ size }}{% endif %}">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="{{ id }}Label">{{ title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+            </div>
+            <div class="modal-body">
+                {{ form_content|safe }}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ btn_cancel_text or
+                    _('Cancel') }}</button>
+                <button type="submit" form="{{ id }}-form" class="btn btn-primary">{{ btn_submit_text or _('Save')
+                    }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}

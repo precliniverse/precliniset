@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Usage of Housing Condition Set') }} - {{ condition_set.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">{{ _('Usage of Housing Condition Set: ') }}<strong>{{ condition_set.name }}</strong></h1>
+    <p>{{ _('This set cannot be deleted because it is currently in use by the following datatables. Please reassign or delete these datatables to proceed.') }}</p>
+    <a href="{{ url_for('resources.manage_housing_conditions') }}" class="btn btn-secondary mb-3">← {{ _('Back to Housing Conditions') }}</a>
+
+    <div class="card">
+        <div class="card-header">
+            <h4>{{ _('Associated DataTables') }}</h4>
+        </div>
+        <div class="card-body">
+            {% if datatables %}
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>{{ _('DataTable ID') }}</th>
+                        <th>{{ _('Date') }}</th>
+                        <th>{{ _('Experimental Group') }}</th>
+                        <th>{{ _('Project') }}</th>
+                        <th>{{ _('Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dt in datatables %}
+                    <tr>
+                        <td>{{ dt.id }}</td>
+                        <td>{{ dt.date.strftime('%Y-%m-%d') if dt.date else _('N/A') }}</td>
+                        <td>
+                            {% if dt.group %}
+                                <a href="{{ url_for('groups.edit_group', id=dt.group.id) }}">{{ dt.group.name }}</a>
+                                {% if dt.group.is_archived %}
+                                    <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>
+                                {% endif %}
+                            {% else %}
+                                {{ _('N/A') }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if dt.group and dt.group.project %}
+                                <a href="{{ url_for('projects.view_project', id=dt.group.project.id) }}">{{ dt.group.project.name }}</a>
+                                {% if dt.group.project.is_archived %}
+                                    <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>
+                                {% endif %}
+                            {% else %}
+                                {{ _('N/A') }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('datatables.view_data_table', id=dt.id) }}" class="btn btn-sm btn-primary">{{ _('View DataTable') }}</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>{{ _('No datatables are currently using this housing condition set.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,615 @@
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('View DataTable') }}: {{ data_table.group.name }} - {{ data_table.protocol.name }}{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <style>
+        .outlier {
+            background-color: #ffcdd2 !important; 
+        }
+        .negative-age {
+            color: red;
+            font-weight: bold;
+        }
+        .table th, .table td {
+            font-size: 0.85rem; 
+            padding: 0.4rem;   
+            vertical-align: middle;
+            white-space: nowrap; 
+        }
+        .summary-table th, .summary-table td { 
+            font-size: 0.8rem;
+            padding: 0.3rem;
+            white-space: normal; 
+        }
+        .summary-label {
+            font-weight: bold;
+            background-color: #f8f9fa; 
+        }
+        .group-separator td {
+            border-top: 2px solid #343a40 !important; 
+            height: 2px; 
+            padding: 0 !important;
+        }
+        .table-responsive-main { 
+            overflow-x: auto; 
+            max-width: 100%;
+            border: 1px solid #dee2e6; 
+        }
+        .summary-value-cell {
+            font-size: 0.75rem; 
+        }
+        .metadata-col {
+            display: none;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4"> 
+<div class="d-flex justify-content-between align-items-center mb-0">
+    <div>
+        <h1 class="mb-0">{{ _('Data Table') }}</h1>
+        <div class="text-muted small mt-1">
+             <span class="me-3"><i class="fas fa-layer-group"></i> <strong>{{ _('Group') }}:</strong> <a href="{{ url_for('groups.edit_group', id=data_table.group.id) }}" class="text-decoration-none">{{ data_table.group.name }}</a></span>
+            <span class="me-3"><i class="fas fa-file-alt"></i> <strong>{{ _('Protocol') }}:</strong> <a href="{{ url_for('core_models.edit_model', model_type='protocol', id=data_table.protocol.id) }}" class="text-decoration-none">{{ data_table.protocol.name }}</a>
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-info" data-bs-toggle="modal" data-bs-target="#protocolDetailsModal" title="{{ _('Details') }}">
+                    <i class="fas fa-info-circle"></i>
+                </button>
+            </span>
+             <span class="me-3"><i class="fas fa-calendar-alt"></i> <strong>{{ _('Date') }}:</strong> <a href="{{ url_for('calendar.view_calendar', date=data_table.date) }}" class="text-decoration-none">{{ data_table.date }}</a></span>
+             <span class="me-3"><i class="fas fa-clipboard-check"></i> <strong>{{ _('EA') }}:</strong>
+                {% if data_table.group.ethical_approval %}
+                <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=data_table.group.ethical_approval.id) }}" class="text-decoration-none">
+                    {{ data_table.group.ethical_approval.reference_number }}
+                </a>
+                {% else %}
+                <span class="text-muted">{{ _('N/A') }}</span>
+                {% endif %}
+            </span>
+             <span class="me-3"><i class="fas fa-user"></i> <strong>{{ _('Assigned To') }}:</strong>
+                {% if data_table.assigned_to %}
+                    {{ data_table.assigned_to.email }}
+                {% else %}
+                     <span class="text-muted">{{ _('Unassigned') }}</span>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3 mb-4 d-flex gap-2">
+     <a href="{{ url_for('datatables.list_group_datatables', group_id=data_table.group_id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left"></i> {{ _('Back') }}
+    </a>
+    <a href="{{ url_for('datatables.edit_data_table', id=data_table.id) }}" class="btn btn-sm btn-primary">
+        <i class="fas fa-edit"></i> {{ _('Edit') }}
+    </a>
+    <a href="{{ url_for('datatables.analyze_datatable', datatable_id=data_table.id) }}" class="btn btn-sm btn-success">
+        <i class="fas fa-chart-bar"></i> {{ _('Analyze') }}
+    </a>
+    <button type="button" class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#referenceRangeModal">
+        <i class="fas fa-ruler-combined"></i> {{ _('Reference Range') }}
+    </button>
+    <button type="button" id="toggle-metadata-view" class="btn btn-sm btn-secondary">{{ _('Show Metadata') }}</button>
+</div>
+
+    {% if randomization_details and randomization_details.get('use_blinding') %}
+    <div class="alert {% if can_view_unblinded %}alert-warning{% else %}alert-info{% endif %} py-2" role="alert">
+        <i class="fas fa-eye-slash me-2"></i>
+        {% if can_view_unblinded %}
+            <strong>{{ _('Blinding Status:') }}</strong> {{ _("You are viewing unblinded data because you have the necessary permissions. Other users will only see 'Blinded Group' identifiers.") }}
+        {% else %}
+            <strong>{{ _('Blinding Status:') }}</strong> {{ _("Treatment group assignments are currently blinded to ensure study integrity.") }}
+        {% endif %}
+    </div>
+    {% endif %}
+    <hr>
+    {% if animal_model_grouping_params %}
+    <form method="POST" class="mb-4" id="viewOptionsForm"> 
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="row align-items-end">
+            <div class="col-md-6">
+                <label for="grouping_params" class="form-label"><strong>{{ _('Group Data By (Animal Model Parameters)') }}:</strong></label>
+                <select name="grouping_params" id="grouping_params" class="form-select" multiple>
+                    {% for param in animal_model_grouping_params %}
+                        <option value="{{ param }}" {% if param in selected_grouping_params %}selected{% endif %}>{{ param }}</option>
+                    {% endfor %}
+                </select>
+                <small class="form-text text-muted">{{ _('Select one or more parameters to group the data. Hold Ctrl/Cmd to select multiple.') }}</small>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" role="switch" id="exclude_outliers" name="exclude_outliers" 
+                            {% if exclude_outliers_checked %}checked{% endif %}>
+                    <label class="form-check-label" for="exclude_outliers">{{ _('Exclude Outliers from Stats') }}</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-info w-100">{{ _('Apply Options') }}</button>
+            </div>
+        </div>
+    </form>
+    <hr>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+        {{ _('No grouping parameters available from the Animal Model.') }}
+    </div>
+    {% endif %}
+
+    <h3>{{ _('Individual Animal Data & Group Summaries') }}</h3>
+    {% if exclude_outliers_checked %}
+        <div class="alert alert-warning alert-sm" role="alert">
+            <small><i class="fas fa-exclamation-triangle me-1"></i>         {{ _('Outliers (values beyond 1.5x IQR from Q1/Q3 of original group/overall data) are excluded from the summary statistics below, but are still shown and highlighted in the main data table.') }}</small>
+        </div>
+    {% endif %}
+    <div class="table-responsive-main mb-4"> 
+        <table class="table table-sm table-bordered table-hover" id="mainDataTable">
+            <thead class="table-light">
+                <tr>
+                    {% for header in all_table_headers %}
+                        <th class="{% if header in metadata_fields %}metadata-col{% endif %}">{{ header }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% set previous_group_key_str = namespace(value=None) %}
+                {% for row_data_dict in all_display_rows %}
+                    {% set current_row_group_key_parts = [] %}
+                    {% if selected_grouping_params %} 
+                        {% for group_param in selected_grouping_params %}
+                            {% set _dummy = current_row_group_key_parts.append(row_data_dict.get(group_param, 'N/A')|string) %}
+                        {% endfor %}
+                    {% endif %}
+                    {% set current_row_group_key_str = current_row_group_key_parts|join(' / ') if selected_grouping_params else "Overall" %}
+
+                    {% if selected_grouping_params and previous_group_key_str.value is not none and current_row_group_key_str != previous_group_key_str.value %}
+                        <tr class="group-separator">
+                            {% for _ in all_table_headers %}<td class="p-0"></td>{% endfor %}
+                        </tr>
+                    {% endif %}
+                    
+                    <tr>
+                        {% for header in all_table_headers %}
+                            {% set cell_value = row_data_dict.get(header, '') %}
+                            {% set is_outlier = row_data_dict.get('_outliers', {}).get(header, False) %}
+                            <td class="{{ 'outlier' if is_outlier else '' }} {% if header == 'Age (Days)' and cell_value is number and cell_value < 0 %}negative-age{% endif %} {% if header in metadata_fields %}metadata-col{% endif %}">
+                                {% if header == 'Blinded Group' %}
+                                    <span class="badge bg-info">{{ cell_value or '-' }}</span>
+                                {% elif cell_value is number and header not in ['ID', 'Age (Days)'] and cell_value is not none %}
+                                    {{ "%.3f"|format(cell_value|float) }}
+                                {% else %}
+                                    {{ cell_value }}
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                    {% set previous_group_key_str.value = current_row_group_key_str %}
+                {% else %}
+                    <tr>
+                        <td colspan="{{ all_table_headers|length }}" class="text-center text-muted">{{ _('No data to display.') }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if subgroup_summaries %}
+        <h3>{{ _('Subgroup Summaries') }}</h3>
+        <div class="table-responsive"> 
+            <table class="table table-sm table-bordered summary-table">
+                <thead class="table-light">
+                    <tr>
+                        {% if selected_grouping_params %}
+                            {% for group_param_header in selected_grouping_params %}
+                                <th>{{ group_param_header }}</th>
+                            {% endfor %}
+                        {% else %}
+                            <th>{{ _('Group') }}</th> 
+                        {% endif %}
+                        <th>{{ _('N (Initial)') }}</th>
+                        {% if exclude_outliers_checked %}
+                            <th>{{ _('N (Used for Stats)') }}</th>
+                        {% endif %}
+                        <th>{{ _('Age Range') }}</th>
+                        {% for param_name in protocol_field_names %}
+                            {% if param_name in numerical_protocol_cols %} 
+                                <th>{{ param_name }} <small>({{ _('Mean ± SEM') }})</small></th>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group_id_tuple_or_overall, summary_data in subgroup_summaries.items() %}
+                        <tr>
+                            {% if selected_grouping_params %}
+                                {% for val in group_id_tuple_or_overall %}
+                                    <td class="summary-label">{{ val }}</td>
+                                {% endfor %}
+                            {% else %}
+                                <td class="summary-label">{{ summary_data.label }}</td>
+                            {% endif %}
+                            <td>{{ summary_data.initial_animal_count }}</td>
+                                {% if exclude_outliers_checked %}
+                                <td>{{ summary_data.animal_count }}</td>
+                            {% endif %}
+                            <td>{{ summary_data.age_range }}</td>
+                            {% for param_name in protocol_field_names %}
+                                {% if param_name in numerical_protocol_cols %}
+                                    <td class="summary-value-cell">
+                                        {% set stats = summary_data.stats.get(param_name) %}
+                                        {% if stats and stats.mean is not none and stats.sem is not none %}
+                                            {{ "%.3f"|format(stats.mean|float) }} ± {{ "%.3f"|format(stats.sem|float) }}
+                                            <small class="text-muted d-block">(n={{ stats.count }})</small>
+                                        {% elif stats and stats.mean is not none %}
+                                            {{ "%.3f"|format(stats.mean|float) }}
+                                            <small class="text-muted d-block">(n={{ stats.count }})</small>
+                                        {% else %}
+                                            {{ _('N/A') }}
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
+    <div id="referenceRangeDisplay" class="mt-4">
+        <!-- Reference range data will be loaded here by JavaScript -->
+    </div>
+
+</div>
+<!-- Reference Range Modal -->
+<div class="modal fade" id="referenceRangeModal" tabindex="-1" aria-labelledby="referenceRangeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="referenceRangeModalLabel">{{ _('Select Reference Range') }}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+            <p class="text-muted small">{{ _('Select a pre-defined reference range to compare against your current data.') }}</p>
+            
+            <div class="mb-3">
+                <label for="refRangeSelect" class="form-label">{{ _('Available Reference Ranges') }}</label>
+                <select id="refRangeSelect" class="form-select">
+                    <option value="">-- {{ _('Select a range') }} --</option>
+                    {% for range in available_reference_ranges %}
+                    <option value="{{ range.id }}">{{ range.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+    
+            <div class="mb-3">
+                <label class="form-label">{{ _('Filter by Age (optional)') }}</label>
+                <div class="input-group">
+                    <span class="input-group-text">{{ _('Current Age ±') }}</span>
+                    <input type="number" id="refAgeTolerance" class="form-control" value="14">
+                    <span class="input-group-text">{{ _('days') }}</span>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" value="" id="refIgnoreAge">
+                    <label class="form-check-label" for="refIgnoreAge">
+                        {{ _('Include all ages (ignore age filter)') }}
+                    </label>
+                </div>
+            </div>
+    
+            <div id="ref-loading-spinner" class="text-center" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>{{ _('Calculating reference data...') }}</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+            <button type="button" class="btn btn-primary" id="fetchReferenceDataBtn">{{ _('Fetch & Apply Range') }}</button>
+        </div>
+        </div>
+    </div>
+    </div>
+
+<!-- Protocol Details Modal -->
+<div class="modal fade" id="protocolDetailsModal" tabindex="-1" aria-labelledby="protocolDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="protocolDetailsModalLabel">{{ _('Protocol Details') }}: {{ data_table.protocol.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if data_table.protocol.description %}
+                    <p><strong>{{ _('Description:') }}</strong></p>
+                    <p>{{ data_table.protocol.description }}</p>
+                {% else %}
+                    <p class="text-muted">{{ _('No description provided.') }}</p>
+                {% endif %}
+
+                <p><strong>{{ _('Severity:') }}</strong> {{ data_table.protocol.severity.value }}</p>
+
+                <hr>
+
+                {% if data_table.protocol.url %}
+                    <p><strong>{{ _('Reference URL:') }}</strong></p>
+                    <p><a href="{{ data_table.protocol.url }}" target="_blank">{{ data_table.protocol.url }}</a></p>
+                {% else %}
+                    <p class="text-muted">{{ _('No reference URL provided.') }}</p>
+                {% endif %}
+
+                <hr>
+
+                {% if data_table.protocol.attachments.first() %}
+                    {% set attachment = data_table.protocol.attachments.first() %}
+                    <p><strong>{{ _('Attachment:') }}</strong></p>
+                    <p>
+                        <a href="{{ url_for('core_models.download_protocol_attachment', protocol_id=data_table.protocol.id, attachment_id=attachment.id) }}" class="btn btn-sm btn-success">
+                            <i class="fas fa-download"></i> {{ attachment.filename }}
+                        </a>
+                    </p>
+                {% else %}
+                    <p class="text-muted">{{ _('No attachment provided.') }}</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" nonce="{{ csp_nonce }}"></script>
+
+<script nonce="{{ csp_nonce }}">
+    $(document).ready(function() {
+        $('#grouping_params').select2({
+            theme: "bootstrap-5",
+            placeholder: "{{ _('Select grouping parameters...') }}",
+            allowClear: true,
+            width: '100%'
+        });
+        $('#exclude_outliers').on('change', function() {
+            $('#viewOptionsForm').submit();
+        });
+    
+        // Initialize Select2 for the assignee dropdown
+        $('#assigned_to_id').select2({
+            theme: "bootstrap-5",
+            placeholder: "{{ _('Unassigned') }}",
+            allowClear: true
+        });
+
+        const toggleButtonView = document.getElementById('toggle-metadata-view');
+        const mainTable = document.getElementById('mainDataTable');
+        let metadataVisibleView = false;
+
+        if (toggleButtonView && mainTable) {
+            toggleButtonView.addEventListener('click', function() {
+                metadataVisibleView = !metadataVisibleView;
+                const headers = mainTable.querySelectorAll('th.metadata-col');
+                const cells = mainTable.querySelectorAll('td.metadata-col');
+
+                if (metadataVisibleView) {
+                    headers.forEach(th => th.style.display = 'table-cell');
+                    cells.forEach(td => td.style.display = 'table-cell');
+                    toggleButtonView.textContent = {{ _('Hide Metadata')|tojson }};
+                } else {
+                    headers.forEach(th => th.style.display = 'none');
+                    cells.forEach(td => td.style.display = 'none');
+                    toggleButtonView.textContent = {{ _('Show Metadata')|tojson }};
+                }
+            });
+        }
+    
+        const refModalEl = document.getElementById('referenceRangeModal');
+        const refRangeSelect = document.getElementById('refRangeSelect');
+        const fetchBtn = document.getElementById('fetchReferenceDataBtn');
+        const loadingSpinner = document.getElementById('ref-loading-spinner');
+        const ageToleranceInput = document.getElementById('refAgeTolerance');
+        const ignoreAgeCheckbox = document.getElementById('refIgnoreAge');
+        let availableRanges = [];
+
+        refModalEl.addEventListener('show.bs.modal', function () {
+            fetch("{{ url_for('reference_ranges.available_reference_ranges', datatable_id=data_table.id) }}")
+                .then(response => response.json())
+                .then(data => {
+                    availableRanges = data;
+                    refRangeSelect.innerHTML = '<option value="">-- {{ _("Select a range") }} --</option>';
+                    availableRanges.forEach(range => {
+                        const option = new Option(range.name, range.id);
+                        refRangeSelect.add(option);
+                    });
+                });
+        });
+    
+        ignoreAgeCheckbox.addEventListener('change', function() {
+            ageToleranceInput.disabled = this.checked;
+        });
+    
+        fetchBtn.addEventListener('click', function() {
+            const rangeId = refRangeSelect.value;
+            if (!rangeId) {
+                alert("{{ _('Please select a Reference Range.') }}");
+                return;
+            }
+            
+            const selectedRange = availableRanges.find(r => r.id == rangeId);
+            {% set first_row_age = all_display_rows[0].get('Age (Days)') if all_display_rows else None %}
+            const age_in_days = {{ first_row_age|tojson if first_row_age is not none else 'null' }};
+
+            if (selectedRange && selectedRange.min_age && selectedRange.max_age && age_in_days && !ignoreAgeCheckbox.checked) {
+                if (age_in_days < selectedRange.min_age || age_in_days > selectedRange.max_age) {
+                    if (!confirm("{{ _('The age of the animals in this datatable is outside the recommended age range for the selected reference. Do you want to continue?') }}")) {
+                        return;
+                    }
+                }
+            }
+
+            const payload = {
+                reference_range_id: parseInt(rangeId),
+                age_tolerance_days: ignoreAgeCheckbox.checked ? null : parseInt(ageToleranceInput.value),
+            };
+    
+            loadingSpinner.style.display = 'block';
+            fetchBtn.disabled = true;
+    
+            fetch("{{ url_for('datatables.calculate_reference_range', datatable_id=data_table.id) }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert("{{ _('Error:') }} " + data.error);
+                    return;
+                }
+                
+                const refStats = data.stats;
+                const numericalProtocolCols = JSON.parse('{{ numerical_protocol_cols_json | safe }}');
+    
+                const mainTable = document.getElementById('mainDataTable');
+                const headerRow = mainTable.querySelector('thead tr');
+                const bodyRows = mainTable.querySelectorAll('tbody tr:not(.group-separator)');
+                
+                headerRow.querySelectorAll('.ref-range-header').forEach(th => th.remove());
+                bodyRows.forEach(row => {
+                    row.querySelectorAll('.ref-range-cell').forEach(td => td.remove());
+                });
+
+                const headerIndexMap = new Map();
+                headerRow.querySelectorAll('th').forEach((th, index) => {
+                    headerIndexMap.set(th.textContent.trim(), index);
+                });
+
+                numericalProtocolCols.forEach(paramName => {
+                    if (refStats[paramName]) {
+                        const stats = refStats[paramName];
+                        const targetHeaderIndex = headerIndexMap.get(paramName);
+
+                        if (targetHeaderIndex !== undefined) {
+                            const newHeader = document.createElement('th');
+                            newHeader.className = 'ref-range-header';
+                            newHeader.textContent = `${paramName} (Ref. Range)`;
+                            headerRow.insertBefore(newHeader, headerRow.children[targetHeaderIndex + 1]);
+
+                            bodyRows.forEach(row => {
+                                const newCell = document.createElement('td');
+                                newCell.className = 'ref-range-cell';
+                                if (stats.std > 0) {
+                                    const lowerBound = stats.mean - 2 * stats.std;
+                                    const upperBound = stats.mean + 2 * stats.std;
+                                    newCell.textContent = `${lowerBound.toFixed(2)} - ${upperBound.toFixed(2)}`;
+                                } else {
+                                    newCell.textContent = 'N/A';
+                                }
+                                row.insertBefore(newCell, row.children[targetHeaderIndex + 1]);
+                            });
+                        }
+                    }
+                });
+
+                bodyRows.forEach(row => {
+                    numericalProtocolCols.forEach(paramName => {
+                        const headerIndex = Array.from(headerRow.children).findIndex(th => th.textContent.trim() === paramName);
+                        if (headerIndex > -1) {
+                            const valueCell = row.children[headerIndex];
+                            const value = parseFloat(valueCell.textContent);
+                            const stats = refStats[paramName];
+
+                            if (stats && stats.std > 0) {
+                                let cellClass = '';
+                                if (!isNaN(value)) {
+                                    if (value > stats.mean + 2 * stats.std || value < stats.mean - 2 * stats.std) {
+                                        cellClass = 'table-danger';
+                                    } else if (value > stats.mean + stats.std || value < stats.mean - stats.std) {
+                                        cellClass = 'table-warning';
+                                    }
+                                }
+                                valueCell.classList.remove('table-danger', 'table-warning');
+                                if (cellClass) {
+                                    valueCell.classList.add(cellClass);
+                                }
+                            }
+                        }
+                    });
+                });
+
+                const refRangeDisplayDiv = document.getElementById('referenceRangeDisplay');
+                refRangeDisplayDiv.innerHTML = '';
+
+                if (Object.keys(refStats).length > 0) {
+                    const refTable = document.createElement('table');
+                    refTable.className = 'table table-sm table-bordered summary-table mt-3';
+                    let tableHtml = `
+                        <thead class="table-light">
+                            <tr>
+                                <th>{{ _('Parameter') }}</th>
+                                <th>{{ _('Mean') }}</th>
+                                <th>{{ _('Std Dev') }}</th>
+                                <th>{{ _('N') }}</th>
+                                <th>{{ _('Min') }}</th>
+                                <th>{{ _('Max') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    `;
+                    for (const paramName in refStats) {
+                        const stats = refStats[paramName];
+                        tableHtml += `
+                            <tr>
+                                <td class="summary-label">${paramName}</td>
+                                <td>${stats.mean.toFixed(3)}</td>
+                                <td>${stats.std.toFixed(3)}</td>
+                                <td>${stats.n}</td>
+                                <td>${stats.min.toFixed(3)}</td>
+                                <td>${stats.max.toFixed(3)}</td>
+                            </tr>
+                        `;
+                    }
+                    tableHtml += `</tbody>`;
+                    refTable.innerHTML = tableHtml;
+                    refRangeDisplayDiv.appendChild(refTable);
+
+                    const downloadUrl = new URL("{{ url_for('datatables.download_reference_comparison', datatable_id=data_table.id) }}", window.location.origin);
+                    downloadUrl.searchParams.set('ref_dt_ids', data.reference_dt_ids.join(','));
+                    
+                    let downloadBtn = document.getElementById('download-reference-btn');
+                    if (!downloadBtn) {
+                        downloadBtn = document.createElement('a');
+                        downloadBtn.id = 'download-reference-btn';
+                        downloadBtn.className = 'btn btn-sm btn-success mb-3 ms-2';
+                        downloadBtn.innerHTML = `<i class="fas fa-download"></i> {{ _('Download Comparison') }}`;
+                        const analyzeBtn = document.querySelector('a[href*="/analyze/"]');
+                        if (analyzeBtn) {
+                            analyzeBtn.parentElement.insertBefore(downloadBtn, analyzeBtn.nextSibling);
+                        }
+                    }
+                    downloadBtn.href = downloadUrl.toString();
+                } else {
+                    refRangeDisplayDiv.innerHTML = `<div class="alert alert-info mt-3">{{ _('No reference range data available for the selected criteria.') }}</div>`;
+                }
+    
+                bootstrap.Modal.getInstance(refModalEl).hide();
+            })
+            .finally(() => {
+                loadingSpinner.style.display = 'none';
+                fetchBtn.disabled = false;
+            });
+        });
+    });
+</script>
+{% endblock %}

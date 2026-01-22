@@ -1,0 +1,605 @@
+{# templates/ethical_approvals/list_ethical_approvals.html #}
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    .table th,
+    .table td {
+        vertical-align: middle;
+    }
+
+    .actions-column {
+        width: 120px;
+        text-align: center;
+    }
+
+    .count-column {
+        width: 100px;
+        text-align: center !important;
+    }
+
+    .date-column {
+        width: 100px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>{{ title }}</h1>
+        <div>
+            <a href="{{ url_for('ethical_approvals.import_ethical_approval') }}" class="btn btn-info"><i
+                    class="fas fa-file-import me-1"></i> {{ _('Import from XML') }}</a>
+            <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#statisticsModal">
+                <i class="fas fa-chart-bar me-1"></i> {{ _('Statistics') }}
+            </button>
+            <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval') }}" class="btn btn-primary"><i
+                    class="fas fa-plus me-1"></i> {{ _('Create New Ethical Approval') }}</a>
+        </div>
+    </div>
+
+    {% if approval_summaries %}
+    <div class="table-responsive">
+        <table id="ethicalApprovalsTable" class="table table-striped table-hover table-bordered" style="width:100%;">
+            <thead>
+                <tr>
+                    <th>{{ _('Reference') }}</th>
+                    <th>{{ _('Title') }}</th>
+                    <th class="date-column">{{ _('Start Date') }}</th>
+                    <th class="date-column">{{ _('End Date') }}</th>
+                    <th>{{ _('Severity (EA)') }}</th>
+                    <th class="count-column">{{ _('Animals Linked') }}</th>
+                    <th class="count-column">{{ _('Animals Used') }}</th>
+                    <th class="count-column">{{ _('Groups Linked') }}</th>
+                    <th class="count-column">{{ _('DataTables Linked') }}</th>
+                    <th class="actions-column">{{ _('Actions') }}</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for summary_item in approval_summaries %}
+                {% set ethical_approval = summary_item.get('approval') %}
+                {% set animals_linked_count = summary_item.get('animals_linked_count', 0) %}
+                {% set animals_used_count = summary_item.get('animals_used_count', 0) %}
+                {% set contributing_groups_count = summary_item.get('contributing_groups_count', 0) %}
+                {% set linked_datatables_count = summary_item.get('linked_datatables_count', 0) %}
+                {% set highlight_row = (animals_used_count is number and animals_used_count >
+                ethical_approval.number_of_animals) if ethical_approval and
+                ethical_approval.number_of_animals is not none else false %}
+                <tr class="clickable-row{% if highlight_row %} table-danger{% endif %}"
+                    data-href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=ethical_approval.id) }}">
+                    <td>{{ ethical_approval.reference_number if ethical_approval else 'N/A' }}</td>
+                    <td title="{{ ethical_approval.title if ethical_approval else '' }}">{{ (ethical_approval.title |
+                        truncate(50)) if ethical_approval else 'N/A' }}</td>
+                    <td>{{ ethical_approval.start_date.strftime('%Y-%m-%d') if ethical_approval and
+                        ethical_approval.start_date else 'N/A' }}</td>
+                    <td>{{ ethical_approval.end_date.strftime('%Y-%m-%d') if ethical_approval and
+                        ethical_approval.end_date else 'N/A' }}</td>
+                    <td class="text-center">{{ ethical_approval.overall_severity.value if ethical_approval else 'N/A' }}
+                    </td>
+                    <td class="text-center animals-linked-cell" data-ea-id="{{ ethical_approval.id }}">
+                        <i class="fas fa-spinner fa-spin small text-muted"></i>
+                    </td>
+                    <td class="text-center animals-used-cell" data-ea-id="{{ ethical_approval.id }}"
+                        data-limit="{{ ethical_approval.number_of_animals if ethical_approval else 0 }}">
+                        <i class="fas fa-spinner fa-spin small text-muted"></i>
+                    </td>
+                    <td class="text-center">
+                        {% if contributing_groups_count > 0 %}
+                        <a href="{{ url_for('ethical_approvals.list_groups_for_ethical_approval', ethical_approval_id=ethical_approval.id) }}"
+                            class="badge bg-info text-dark text-decoration-none group-link-stop-propagation"
+                            title="{{ _('View %(count)s linked group(s)', count=contributing_groups_count) }}">
+                            {{ contributing_groups_count }}
+                        </a>
+                        {% else %}
+                        <span class="badge bg-secondary">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if linked_datatables_count > 0 %}
+                        <a href="{{ url_for('ethical_approvals.list_datatables_for_ethical_approval', ethical_approval_id=ethical_approval.id) }}"
+                            class="badge bg-primary text-white text-decoration-none datatable-link-stop-propagation"
+                            title="{{ _('View %(count)s linked DataTable(s)', count=linked_datatables_count) }}">
+                            {{ linked_datatables_count }}
+                        </a>
+                        {% else %}
+                        <span class="badge bg-secondary">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if can_manage %}
+                        <button type="button" class="btn btn-sm btn-danger delete-ea-btn delete-ea-btn-stop-propagation"
+                            data-ea-id="{{ ethical_approval.id }}" data-ea-ref="{{ ethical_approval.reference_number }}"
+                            title="{{ _('Delete Ethical Approval') }}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# Server-side Pagination Controls #}
+    {% if total_pages is defined and total_pages > 1 %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                {{ _('Showing') }} {{ ((page-1)*per_page + 1) }} - {{ [page*per_page, total_count]|min }} {{ _('of') }}
+                {{ total_count }} {{ _('ethical approvals') }}
+            </div>
+            <ul class="pagination mb-0">
+                {# First Page #}
+                <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                    <a class="page-link"
+                        href="{{ url_for('ethical_approvals.list_ethical_approvals', page=1, per_page=per_page) }}">
+                        <i class="fas fa-angle-double-left"></i>
+                    </a>
+                </li>
+
+                {# Previous Page #}
+                <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                    <a class="page-link"
+                        href="{{ url_for('ethical_approvals.list_ethical_approvals', page=page-1, per_page=per_page) }}">
+                        <i class="fas fa-angle-left"></i>
+                    </a>
+                </li>
+
+                {# Page Numbers - Show up to 5 pages centered around current #}
+                {% set start_page = [1, page - 2]|max %}
+                {% set end_page = [total_pages, page + 2]|min %}
+
+                {% if start_page > 1 %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+
+                {% for p in range(start_page, end_page + 1) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                    <a class="page-link"
+                        href="{{ url_for('ethical_approvals.list_ethical_approvals', page=p, per_page=per_page) }}">{{ p
+                        }}</a>
+                </li>
+                {% endfor %}
+
+                {% if end_page < total_pages %} <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+
+                    {# Next Page #}
+                    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                        <a class="page-link"
+                            href="{{ url_for('ethical_approvals.list_ethical_approvals', page=page+1, per_page=per_page) }}">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                    </li>
+
+                    {# Last Page #}
+                    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                        <a class="page-link"
+                            href="{{ url_for('ethical_approvals.list_ethical_approvals', page=total_pages, per_page=per_page) }}">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+            </ul>
+        </div>
+    </nav>
+    {% elif total_count is defined and total_count > 0 %}
+    <div class="text-muted small mt-3">
+        {{ _('Showing %(total)s ethical approvals', total=total_count) }}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <p class="alert alert-info">{{ _('No ethical approvals found.') }}</p>
+    {% endif %}
+
+    <!-- Delete Ethical Approval Modal -->
+    <div class="modal fade" id="deleteEthicalApprovalModal" tabindex="-1"
+        aria-labelledby="deleteEthicalApprovalModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteEthicalApprovalModalLabel">{{ _('Confirm Deletion of Ethical
+                        Approval') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="deleteEthicalApprovalForm" method="POST" action=""> {# Action set by JS #}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <div class="modal-body">
+                        <p>{{ _('You are about to delete Ethical Approval:') }} <strong id="eaToDeleteRef"></strong>.
+                        </p>
+                        <div id="eaDeleteInfo" class="mb-3">
+                            <p class="text-center"><i class="fas fa-spinner fa-spin"></i> {{ _('Loading information...')
+                                }}</p>
+                        </div>
+
+                        <div id="eaDeleteOptions" style="display: none;">
+                            <p><strong id="eaLinkedGroupsMessage"></strong></p>
+                            <div class="mb-3">
+                                <label for="delete_action_ea" class="form-label">{{ _('Action:') }}</label>
+                                <select name="delete_action" id="delete_action_ea" class="form-select form-select-sm">
+                                    <option value="delete_ea_only">{{ _("Delete only this Ethical Approval (groups' EA
+                                        link will be removed)") }}</option>
+                                    <option value="reassign_groups">{{ _('Reassign linked groups to another Ethical
+                                        Approval first') }}</option>
+                                </select>
+                            </div>
+
+                            <div id="reassignEASection" style="display: none;" class="mb-3">
+                                <label for="target_ea_id_for_reassign" class="form-label">{{ _('Reassign groups to:')
+                                    }}</label>
+                                <select name="target_ea_id_for_reassign" id="target_ea_id_for_reassign"
+                                    class="form-select form-select-sm">
+                                    {# Options populated by JS #}
+                                </select>
+                                <small class="form-text text-muted">{{_('Select another approval to move the groups to.
+                                    Only EAs with sufficient severity will be listed.')}}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel')
+                            }}</button>
+                        <button type="submit" id="confirmDeleteEABtn" class="btn btn-danger">{{ _('Proceed') }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Modal -->
+    <div class="modal fade" id="statisticsModal" tabindex="-1" aria-labelledby="statisticsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="statisticsModalLabel">{{ _('Extract Animal Usage Statistics') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="statisticsForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <p class="form-label" id="severityFilterLabel">{{ _('Include Severities:') }}</p>
+                            <div id="severityFilter" role="group" aria-labelledby="severityFilterLabel">
+                                {% for severity in ['NONE', 'LIGHT', 'MODERATE', 'SEVERE'] %}
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="severity_{{ severity }}"
+                                        name="severities" value="{{ severity }}" checked>
+                                    <label class="form-check-label" for="severity_{{ severity }}">{{
+                                        _(severity.capitalize()) }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="startDate" class="form-label">{{ _('Start Date (DataTables Creation):')
+                                }}</label>
+                            <input type="date" class="form-control" id="startDate" name="start_date" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="endDate" class="form-label">{{ _('End Date (DataTables Creation):') }}</label>
+                            <input type="date" class="form-control" id="endDate" name="end_date" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel')
+                            }}</button>
+                        <button type="submit" class="btn btn-primary" id="exportStatisticsBtn">{{ _('Export to XLSX')
+                            }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        const table = $('#ethicalApprovalsTable').DataTable({
+            "language": {
+                "search": "{{ _('Search:') }}",
+                "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+                "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+                "infoEmpty": "{{ _('Showing 0 to 0 of 0 entries') }}",
+                "infoFiltered": "{{ _('(filtered from _MAX_ total entries)') }}",
+                "paginate": {
+                    "first": "{{ _('First') }}",
+                    "last": "{{ _('Last') }}",
+                    "next": "{{ _('Next') }}",
+                    "previous": "{{ _('Previous') }}"
+                },
+                "aria": {
+                    "sortAscending": ": {{ _('activate to sort column ascending') }}",
+                    "sortDescending": ": {{ _('activate to sort column descending') }}"
+                }
+            },
+            "columnDefs": [
+                { "orderable": false, "targets": 9 },
+                { "className": "text-center", "targets": [4, 5, 6, 7, 8, 9] },
+                { "className": "cursor-pointer", "targets": [0, 1, 2, 3, 4, 5, 6, 7, 8] }
+            ],
+            "order": [[2, "desc"]]
+        });
+
+        // AJAX Load Animal Counts
+        function loadAnimalCounts() {
+            const cells = document.querySelectorAll('.animals-used-cell');
+            // Use Set to ensure unique IDs, then map back to numbers
+            const eaIds = [...new Set(Array.from(cells).map(td => {
+                const id = parseInt(td.dataset.eaId);
+                return isNaN(id) ? null : id;
+            }).filter(id => id !== null))];
+
+            if (eaIds.length === 0) return;
+
+            // Reset cells to spinner if they are being re-loaded (optional, but good for pagination)
+            // But we only want to reset if they don't have data yet? 
+            // Actually, keep them as is until updated to avoid flicker if they have old data?
+            // For now, let's assume if the function is called, we want to refresh.
+
+            fetch("{{ url_for('ethical_approvals.get_animals_usage_counts') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': "{{ csrf_token() }}"
+                },
+                body: JSON.stringify({ ea_ids: eaIds })
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    // Iterate over requested IDs to ensure we handle missing data
+                    eaIds.forEach(eaId => {
+                        const linkedCell = document.querySelector(`.animals-linked-cell[data-ea-id="${eaId}"]`);
+                        const usedCell = document.querySelector(`.animals-used-cell[data-ea-id="${eaId}"]`);
+
+                        if (data[eaId]) {
+                            const counts = data[eaId];
+                            if (linkedCell) {
+                                linkedCell.innerHTML = `<strong>${counts.linked}</strong>`;
+                                table.cell(linkedCell).data(`<strong>${counts.linked}</strong>`);
+                            }
+
+                            if (usedCell) {
+                                const limit = parseInt(usedCell.dataset.limit) || 0;
+                                const usedCount = counts.used;
+                                usedCell.innerHTML = `<strong>${usedCount} / ${limit}</strong>`;
+                                // Update internal data without drawing yet
+                                table.cell(usedCell).data(`<strong>${usedCount} / ${limit}</strong>`);
+
+                                if (usedCount > limit && limit > 0) {
+                                    usedCell.closest('tr').classList.add('table-danger');
+                                } else {
+                                    usedCell.closest('tr').classList.remove('table-danger');
+                                }
+                            }
+                        } else {
+                            // Handle case where data came back empty for this ID
+                            if (linkedCell && linkedCell.innerHTML.includes('fa-spinner')) {
+                                linkedCell.innerHTML = '<span class="text-muted">-</span>';
+                            }
+                            if (usedCell && usedCell.innerHTML.includes('fa-spinner')) {
+                                usedCell.innerHTML = '<span class="text-muted">-</span>';
+                            }
+                        }
+                    });
+
+                    // Trigger single draw to update sorting/filtering data, but prevent recursive loop
+                    isInternalUpdate = true;
+                    table.draw(false);
+                    isInternalUpdate = false;
+                })
+                .catch(error => {
+                    console.error('Error loading animal counts:', error);
+                    document.querySelectorAll('.animals-linked-cell, .animals-used-cell').forEach(cell => {
+                        // Only show err if still loading
+                        if (cell.innerHTML.includes('fa-spinner')) {
+                            cell.innerHTML = '<span class="text-danger" title="Error">Err</span>';
+                        }
+                    });
+                });
+        }
+
+        let isInternalUpdate = false;
+
+        // Bind to DataTables draw event to reload counts on pagination/filtering
+        table.on('draw', function () {
+            if (isInternalUpdate) return;
+            loadAnimalCounts();
+        });
+
+        // Initial load
+        loadAnimalCounts();
+
+        document.querySelectorAll('.clickable-row').forEach(row => {
+            row.addEventListener('click', function (event) {
+                // Prevent opening the link if a child element (like a button or link) was clicked
+                if (event.target.tagName === 'A' || event.target.tagName === 'BUTTON' || event.target.closest('a') || event.target.closest('button')) {
+                    return;
+                }
+                const url = this.dataset.href;
+                if (url) {
+                    window.location.href = url;
+                }
+            });
+        });
+
+        document.querySelectorAll('.group-link-stop-propagation, .datatable-link-stop-propagation, .delete-ea-btn-stop-propagation').forEach(element => {
+            element.addEventListener('click', function (event) {
+                event.stopPropagation();
+            });
+        });
+
+        const deleteEAModalEl = document.getElementById('deleteEthicalApprovalModal');
+        if (deleteEAModalEl) {
+            const deleteEAModalInstance = new bootstrap.Modal(deleteEAModalEl);
+            const eaToDeleteRefEl = document.getElementById('eaToDeleteRef');
+            const eaDeleteInfoEl = document.getElementById('eaDeleteInfo');
+            const eaDeleteOptionsEl = document.getElementById('eaDeleteOptions');
+            const eaLinkedGroupsMessageEl = document.getElementById('eaLinkedGroupsMessage');
+            const deleteActionEASelect = document.getElementById('delete_action_ea');
+            const reassignEASectionEl = document.getElementById('reassignEASection');
+            const targetEASelectEl = document.getElementById('target_ea_id_for_reassign');
+            const confirmDeleteEABtn = document.getElementById('confirmDeleteEABtn');
+            const deleteEAForm = document.getElementById('deleteEthicalApprovalForm');
+
+            document.querySelectorAll('.delete-ea-btn').forEach(button => {
+                button.addEventListener('click', function () {
+                    const currentEAIdToDelete = this.dataset.eaId;
+                    const eaRef = this.dataset.eaRef;
+
+                    if (eaToDeleteRefEl) eaToDeleteRefEl.textContent = eaRef;
+                    if (deleteEAForm) deleteEAForm.action = `{{ url_for('ethical_approvals.delete_ethical_approval', ea_id=0) }}`.replace('/0', `/${currentEAIdToDelete}`);
+
+                    if (eaDeleteInfoEl) eaDeleteInfoEl.innerHTML = `<p class="text-center"><i class="fas fa-spinner fa-spin"></i> {{ _('Loading information...') }}</p>`;
+                    if (eaDeleteOptionsEl) eaDeleteOptionsEl.style.display = 'none';
+                    if (reassignEASectionEl) reassignEASectionEl.style.display = 'none';
+                    if (deleteActionEASelect) deleteActionEASelect.value = 'delete_ea_only';
+                    if (confirmDeleteEABtn) {
+                        confirmDeleteEABtn.textContent = "{{ _('Delete This Approval Only') }}";
+                        confirmDeleteEABtn.disabled = false;
+                    }
+
+                    fetch(`{{ url_for('ethical_approvals.get_ea_delete_info', ea_id=0) }}`.replace('/0', `/${currentEAIdToDelete}`))
+                        .then(response => {
+                            if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data.error) {
+                                if (eaDeleteInfoEl) eaDeleteInfoEl.innerHTML = `<p class="text-danger">${data.error}</p>`;
+                                if (confirmDeleteEABtn) confirmDeleteEABtn.disabled = true;
+                                return;
+                            }
+                            if (eaDeleteInfoEl) eaDeleteInfoEl.innerHTML = '';
+                            if (eaDeleteOptionsEl) eaDeleteOptionsEl.style.display = 'block';
+
+                            let linkedGroupsMsg = "";
+                            if (data.linked_groups_count > 0) {
+                                linkedGroupsMsg = `{{ _('This Ethical Approval is linked to %(count)s experimental group(s).', count='${data.linked_groups_count}') }}`;
+                                if (data.max_protocol_severity_in_linked_groups && data.max_protocol_severity_in_linked_groups !== 'NONE') {
+                                    linkedGroupsMsg += ` {{ _('The highest protocol severity used by these groups is %(severity)s.', severity='${data.max_protocol_severity_in_linked_groups}') }}`;
+                                }
+                                if (deleteActionEASelect) deleteActionEASelect.disabled = false;
+
+                                if (targetEASelectEl) {
+                                    targetEASelectEl.innerHTML = '<option value="">-- {{_("Select Target EA")}} --</option>';
+                                    if (data.other_ethical_approvals_for_reassign && data.other_ethical_approvals_for_reassign.length > 0) {
+                                        data.other_ethical_approvals_for_reassign.forEach(ea => {
+                                            targetEASelectEl.innerHTML += `<option value="${ea.id}">${ea.text}</option>`;
+                                        });
+                                        const reassignOption = deleteActionEASelect.querySelector('option[value="reassign_groups"]');
+                                        if (reassignOption) reassignOption.disabled = false;
+                                    } else {
+                                        targetEASelectEl.innerHTML += '<option value="" disabled>{{_("No other suitable EAs (equal/higher severity) available for reassignment.")}}</option>';
+                                        const reassignOption = deleteActionEASelect.querySelector('option[value="reassign_groups"]');
+                                        if (reassignOption) reassignOption.disabled = true;
+                                        if (deleteActionEASelect.value === 'reassign_groups') {
+                                            deleteActionEASelect.value = 'delete_ea_only';
+                                            if (reassignEASectionEl) reassignEASectionEl.style.display = 'none';
+                                            if (confirmDeleteEABtn) confirmDeleteEABtn.textContent = "{{ _('Delete This Approval Only') }}";
+                                        }
+                                    }
+                                }
+                            } else {
+                                linkedGroupsMsg = `{{ _('This Ethical Approval is not linked to any experimental groups.') }}`;
+                                if (deleteActionEASelect) {
+                                    deleteActionEASelect.value = 'delete_ea_only';
+                                    deleteActionEASelect.disabled = true;
+                                }
+                                if (reassignEASectionEl) reassignEASectionEl.style.display = 'none';
+                                if (confirmDeleteEABtn) confirmDeleteEABtn.textContent = "{{ _('Delete Ethical Approval') }}";
+                            }
+                            if (eaLinkedGroupsMessageEl) eaLinkedGroupsMessageEl.innerHTML = linkedGroupsMsg;
+                            if (deleteActionEASelect) deleteActionEASelect.dispatchEvent(new Event('change'));
+                        })
+                        .catch(err => {
+                            console.error("Error fetching EA delete info:", err);
+                            if (eaDeleteInfoEl) eaDeleteInfoEl.innerHTML = `<p class="text-danger">{{ _('Could not load details.') }}</p>`;
+                            if (confirmDeleteEABtn) confirmDeleteEABtn.disabled = true;
+                        });
+                    deleteEAModalInstance.show();
+                });
+            });
+
+            if (deleteActionEASelect) {
+                deleteActionEASelect.addEventListener('change', function () {
+                    const reassignSelected = this.value === 'reassign_groups';
+                    if (reassignEASectionEl) reassignEASectionEl.style.display = reassignSelected ? 'block' : 'none';
+                    if (confirmDeleteEABtn) {
+                        if (reassignSelected) {
+                            confirmDeleteEABtn.textContent = "{{ _('Reassign & Delete') }}";
+                            confirmDeleteEABtn.disabled = (targetEASelectEl.value === "" || targetEASelectEl.options.length <= 1 || (targetEASelectEl.selectedOptions[0] && targetEASelectEl.selectedOptions[0].disabled));
+                        } else {
+                            confirmDeleteEABtn.textContent = "{{ _('Delete This Approval Only') }}";
+                            confirmDeleteEABtn.disabled = false;
+                        }
+                    }
+                });
+            }
+            if (targetEASelectEl) {
+                targetEASelectEl.addEventListener('change', function () {
+                    if (deleteActionEASelect && deleteActionEASelect.value === 'reassign_groups' && confirmDeleteEABtn) {
+                        confirmDeleteEABtn.disabled = (this.value === "");
+                    }
+                });
+            }
+        }
+
+        // Statistics Modal Logic
+        const statisticsForm = document.getElementById('statisticsForm');
+        if (statisticsForm) {
+            statisticsForm.addEventListener('submit', function (event) {
+                event.preventDefault();
+                const formData = new FormData(statisticsForm);
+                const severities = Array.from(statisticsForm.querySelectorAll('input[name="severities"]:checked')).map(cb => cb.value);
+                const startDate = formData.get('start_date');
+                const endDate = formData.get('end_date');
+                const csrfToken = formData.get('csrf_token');
+
+                if (!startDate || !endDate) {
+                    alert("{{ _('Please select both start and end dates.') }}");
+                    return;
+                }
+                if (new Date(startDate) > new Date(endDate)) {
+                    alert("{{ _('Start date cannot be after end date.') }}");
+                    return;
+                }
+                if (severities.length === 0) {
+                    alert("{{ _('Please select at least one severity level.') }}");
+                    return;
+                }
+
+                const queryParams = new URLSearchParams();
+                queryParams.append('start_date', startDate);
+                queryParams.append('end_date', endDate);
+                severities.forEach(s => queryParams.append('severities', s));
+
+                const url = `{{ url_for('ethical_approvals.export_statistics') }}?${queryParams.toString()}`;
+
+                // For file downloads, it's often better to just redirect or open in a new tab
+                // rather than using fetch, as fetch doesn't handle file downloads directly.
+                window.location.href = url;
+
+                // Close the modal after initiating download
+                const statisticsModalEl = document.getElementById('statisticsModal');
+                const statisticsModalInstance = bootstrap.Modal.getInstance(statisticsModalEl);
+                if (statisticsModalInstance) {
+                    statisticsModalInstance.hide();
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

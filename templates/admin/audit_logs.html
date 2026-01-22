@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2"><i class="fas fa-history me-2 text-primary"></i>{{ _('Audit Trail') }}</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">{{ _('Home') }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ _('Audit Trail') }}</li>
+            </ol>
+        </nav>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3">
+            <h5 class="card-title mb-0 text-secondary">{{ _('Recent Changes') }}</h5>
+            <small class="text-muted">{{ _('Showing the last 1000 events.') }}</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle" id="auditTable">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>{{ _('Timestamp') }}</th>
+                            <th>{{ _('User') }}</th>
+                            <th>{{ _('Action') }}</th>
+                            <th>{{ _('Resource') }}</th>
+                            <th>{{ _('ID') }}</th>
+                            <th>{{ _('Details') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td data-sort="{{ log.timestamp.isoformat() }}">
+                                {{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </td>
+                            <td>
+                                {% if log.user %}
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-light rounded-circle text-center me-2"
+                                        style="width: 30px; height: 30px; line-height: 30px;">
+                                        <i class="fas fa-user text-secondary"></i>
+                                    </div>
+                                    <span>{{ log.user.email }}</span>
+                                </div>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ _('System') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.action == 'UPDATE' %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-edit me-1"></i>UPDATE</span>
+                                {% elif log.action == 'INSERT' %}
+                                <span class="badge bg-success"><i class="fas fa-plus-circle me-1"></i>INSERT</span>
+                                {% elif log.action == 'DELETE' %}
+                                <span class="badge bg-danger"><i class="fas fa-trash-alt me-1"></i>DELETE</span>
+                                {% else %}
+                                <span class="badge bg-dark">{{ log.action }}</span>
+                                {% endif %}
+                            </td>
+                            <td><code class="text-primary fw-bold">{{ log.resource_type }}</code></td>
+                            <td><small class="text-muted font-monospace">{{ log.resource_id }}</small></td>
+                            <td>
+                                {% if log.changes %}
+                                <button class="btn btn-sm btn-outline-primary view-changes"
+                                    data-changes='{{ log.changes | tojson }}' data-action="{{ log.action }}"
+                                    data-resource="{{ log.resource_type }}"
+                                    data-user="{{ log.user.email if log.user else 'System' }}"
+                                    data-date="{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}">
+                                    <i class="fas fa-eye me-1"></i>{{ _('View Diff') }}
+                                </button>
+                                {% else %}
+                                <span class="text-muted small">No changes logged</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for viewing changes -->
+<div class="modal fade" id="changesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <div>
+                    <h5 class="modal-title" id="modalTitle"></h5>
+                    <div id="modalSubtitle" class="text-muted small mt-1"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="changesContainer"></div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+    $(document).ready(function () {
+        $('#auditTable').DataTable({
+            "order": [[0, "desc"]],
+            "pageLength": 25,
+            "language": { "search": "{{ _('Filter logs:') }}" }
+        });
+
+        $('#auditTable').on('click', '.view-changes', function () {
+            const changes = $(this).data('changes');
+            const action = $(this).data('action');
+            const resource = $(this).data('resource');
+            const user = $(this).data('user');
+            const date = $(this).data('date');
+
+            // Mise à jour du titre et sous-titre de la modale
+            $('#modalTitle').text(`${action} on ${resource}`);
+            $('#modalSubtitle').html(`<i class="fas fa-user-circle me-1"></i> ${user} &nbsp;|&nbsp; <i class="far fa-clock me-1"></i> ${date}`);
+
+            const truncate = (val, max = 200) => {
+                let s = typeof val === 'string' ? val : JSON.stringify(val);
+                return s.length > max ? s.substring(0, max) + '... (truncated)' : s;
+            };
+
+            let html = '<div class="table-responsive"><table class="table table-striped mb-0">';
+            html += '<thead class="table-light"><tr><th style="width: 30%">Field</th><th>Change Details</th></tr></thead><tbody>';
+
+            // Logique d'affichage (Compatible Ancien format et Nouveau format Delta)
+            if (changes.before && changes.after) {
+                // ANCIEN FORMAT (Snapshot complet)
+                const allKeys = new Set([...Object.keys(changes.before), ...Object.keys(changes.after)]);
+                allKeys.forEach(field => {
+                    const valBefore = JSON.stringify(changes.before[field]);
+                    const valAfter = JSON.stringify(changes.after[field]);
+                    if (valBefore !== valAfter) {
+                        html += `<tr>
+                            <td class="fw-bold font-monospace">${field}</td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <div class="text-danger small mb-1"><i class="fas fa-minus me-2"></i>${truncate(valBefore)}</div>
+                                    <div class="text-success small"><i class="fas fa-plus me-2"></i><strong>${truncate(valAfter)}</strong></div>
+                                </div>
+                            </td>
+                        </tr>`;
+                    }
+                });
+            } else {
+                // NOUVEAU FORMAT (Delta / DeepDiff)
+                for (const [field, diff] of Object.entries(changes)) {
+                    html += `<tr><td class="fw-bold font-monospace align-middle">${field}</td><td>`;
+
+                    // Cas simple : { old: ..., new: ... }
+                    if (diff && typeof diff === 'object' && 'old' in diff && 'new' in diff) {
+                        html += `
+                            <div class="d-flex flex-column">
+                                <span class="text-danger small mb-1"><i class="fas fa-minus-circle me-2"></i>${truncate(diff.old)}</span>
+                                <span class="text-success small"><i class="fas fa-plus-circle me-2"></i><strong>${truncate(diff.new)}</strong></span>
+                            </div>`;
+                    }
+                    // Cas complexe (DeepDiff brut ou autre structure)
+                    else {
+                        if (diff && typeof diff === 'object') {
+                            let diffHtml = '<div class="deep-diff-container">';
+
+                            // Values Changed
+                            if (diff.values_changed) {
+                                Object.entries(diff.values_changed).forEach(([path, change]) => {
+                                    const cleanPath = path.replace('root', '').replace(/\[/g, '.').replace(/\]/g, '');
+                                    diffHtml += `<div class="mb-2">
+                                        <div class="small fw-bold text-muted">${cleanPath}</div>
+                                        <div class="text-danger small"><i class="fas fa-minus me-2"></i>${JSON.stringify(change.old_value)}</div>
+                                        <div class="text-success small"><i class="fas fa-plus me-2"></i><strong>${JSON.stringify(change.new_value)}</strong></div>
+                                    </div>`;
+                                });
+                            }
+
+                            // Added items
+                            const added = diff.iterable_item_added || diff.dictionary_item_added;
+                            if (added) {
+                                Object.entries(added).forEach(([path, val]) => {
+                                    diffHtml += `<div class="mb-2"><span class="badge bg-success me-2">Added</span><small class="text-muted">${path}</small><pre class="mt-1 small border p-1 bg-light">${JSON.stringify(val, null, 2)}</pre></div>`;
+                                });
+                            }
+
+                            // Removed items
+                            const removed = diff.iterable_item_removed || diff.dictionary_item_removed;
+                            if (removed) {
+                                Object.entries(removed).forEach(([path, val]) => {
+                                    diffHtml += `<div class="mb-2"><span class="badge bg-danger me-2">Removed</span><small class="text-muted">${path}</small></div>`;
+                                });
+                            }
+
+                            // Type changes
+                            if (diff.type_changes) {
+                                Object.entries(diff.type_changes).forEach(([path, change]) => {
+                                    const cleanPath = path.replace('root', '').replace(/\[/g, '.').replace(/\]/g, '');
+                                    diffHtml += `<div class="mb-2">
+                                        <div class="small fw-bold text-muted">${cleanPath} <span class="badge bg-info ms-1">Type Change</span></div>
+                                        <div class="text-danger small"><i class="fas fa-minus me-2"></i>${truncate(change.old_value)}</div>
+                                        <div class="text-success small"><i class="fas fa-plus me-2"></i><strong>${truncate(change.new_value)}</strong></div>
+                                    </div>`;
+                                });
+                            }
+
+                            if (diffHtml === '<div class="deep-diff-container">') {
+                                diffHtml += `<pre class="mb-0 small bg-white border rounded p-2 text-muted">${truncate(diff, 500)}</pre>`;
+                            }
+                            diffHtml += '</div>';
+                            html += diffHtml;
+                        } else {
+                            html += `<pre class="mb-0 small bg-white border rounded p-2 text-muted">${truncate(diff, 500)}</pre>`;
+                        }
+                    }
+                    html += `</td></tr>`;
+                }
+            }
+
+            html += '</tbody></table></div>';
+            $('#changesContainer').html(html);
+            $('#changesModal').modal('show');
+        });
+    });
+</script>
+{% endblock %}

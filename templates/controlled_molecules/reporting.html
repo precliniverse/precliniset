@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{{ _('Controlled Molecules Reporting') }}</h1>
+        <a href="{{ url_for('controlled_molecules.export_report', **request.args) }}" class="btn btn-success shadow-sm">
+            <i class="fas fa-file-excel fa-sm"></i> {{ _('Export to Excel') }}
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ _('Filters') }}</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="form-row align-items-end">
+                <div class="form-group col-md-3">
+                    <label for="start_date">{{ _('Start Date') }}</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+                </div>
+                <div class="form-group col-md-3">
+                    <label for="end_date">{{ _('End Date') }}</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+                </div>
+                <div class="form-group col-md-3">
+                    <label for="molecule_id">{{ _('Molecule') }}</label>
+                    <select class="form-control" id="molecule_id" name="molecule_id">
+                        <option value="">{{ _('-- All Molecules --') }}</option>
+                        {% for m in molecules %}
+                        <option value="{{ m.id }}" {% if molecule_id==m.id %}selected{% endif %}>{{ m.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-3">
+                    <button type="submit" class="btn btn-primary mb-2 mr-2">{{ _('Filter') }}</button>
+                    <a href="{{ url_for('controlled_molecules.reporting') }}" class="btn btn-secondary mb-2">{{
+                        _('Reset') }}</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm" id="reportingTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Date') }}</th>
+                            <th>{{ _('Molecule') }}</th>
+                            <th>{{ _('Volume') }}</th>
+                            <th>{{ _('Animals') }}</th>
+                            <th>{{ _('Group') }}</th>
+                            <th>{{ _('Project') }}</th>
+                            <th>{{ _('User') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record, datatable, group, molecule in results %}
+                        <tr>
+                            <td>{{ datatable.date }}</td>
+                            <td>
+                                {{ molecule.name }}
+                                <br><small class="text-muted">{{ molecule.regulation_category.value }}</small>
+                            </td>
+                            <td>{{ record.volume_used }} {{ molecule.unit }}</td>
+                            <td>
+                                {{ record.number_of_animals }}
+                                {% if record.animal_ids %}
+                                <i class="fas fa-info-circle text-info"
+                                    title="{{ record.animal_ids | join(', ') }}"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('groups.group_details', id=group.id) }}">{{ group.name }}</a>
+                            </td>
+                            <td>{{ group.project_id }}</td>
+                            <td>{{ record.recorded_by.username }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+    $(document).ready(function () {
+        $('#reportingTable').DataTable({
+            "order": [[0, "desc"]],
+            "pageLength": 50,
+            "dom": 'Bfrtip',
+            "buttons": ['copy', 'csv', 'print'],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.24/i18n/French.json"
+            }
+        });
+    });
+</script>
+{% endblock %}

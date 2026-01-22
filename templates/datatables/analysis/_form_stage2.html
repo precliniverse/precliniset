@@ -1,0 +1,249 @@
+{# templates/datatables/analysis/_form_stage2.html #}
+<div id="propose-workflow-stage" {% if analysis_stage !='propose_workflow' %}style="display: none;" {% endif %}>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-dark">
+            <h5 class="mb-0">{{ _('Step 2: Review Data & Select Tests') }}</h5>
+            <input type="hidden" name="analysis_stage" id="analysis_stage_2" value="execute_analysis">
+        </div>
+        <div class="card-body">
+
+            {# --- Data Checks & Warnings --- #}
+            {% if analysis_results.checks_by_parameter %}
+            <div class="mb-4">
+                <h6 class="fw-bold"><i class="fas fa-clipboard-check me-2"></i>{{ _('Data Health Checks') }}</h6>
+                <div class="accordion" id="dataChecksAccordion">
+                    {% for param, checks in analysis_results.checks_by_parameter.items() %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingCheck{{ loop.index }}">
+                            <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseCheck{{ loop.index }}">
+                                {% if checks.error %}
+                                <span class="badge bg-danger me-2">Error</span>
+                                {% elif checks.warning %}
+                                <span class="badge bg-warning text-dark me-2">Warning</span>
+                                {% else %}
+                                <span class="badge bg-success me-2">OK</span>
+                                {% endif %}
+                                {{ param }}
+                            </button>
+                        </h2>
+                        <div id="collapseCheck{{ loop.index }}" class="accordion-collapse collapse"
+                            data-bs-parent="#dataChecksAccordion">
+                            <div class="accordion-body small">
+                                <ul class="list-unstyled mb-0">
+                                    <li><strong>Count:</strong> {{ checks.n }} ({{ checks.n_missing }} missing)</li>
+                                    <li><strong>Normality:</strong> {{ checks.normality }} (p={{
+                                        "%.3f"|format(checks.shapiro_p) if checks.shapiro_p else 'N/A' }})</li>
+                                    <li><strong>Variance:</strong> {{ checks.homogeneity }} (p={{
+                                        "%.3f"|format(checks.levene_p) if checks.levene_p else 'N/A' }})</li>
+                                    {% if checks.error %}<li class="text-danger fw-bold">{{ checks.error }}</li>{% endif
+                                    %}
+                                    {% if checks.warning %}<li class="text-warning fw-bold">{{ checks.warning }}</li>{%
+                                    endif %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {# --- Proposed Tests --- #}
+            <div class="mb-4">
+                <h6 class="fw-bold"><i class="fas fa-vials me-2"></i>{{ _('Proposed Statistical Tests') }}</h6>
+
+                {% if analysis_results.repeated_measures_test_suggestions %}
+                {# Repeated Measures Single Proposal #}
+                {% set rm_suggestions = analysis_results.repeated_measures_test_suggestions %}
+                {% set rm_possible_tests = rm_suggestions.get('possible_tests', []) %}
+                {% set rm_suggested_test = None %}
+                {% for test in rm_possible_tests %}
+                {% if test.get('suggested', False) and not rm_suggested_test %}
+                {% set rm_suggested_test = test %}
+                {% endif %}
+                {% endfor %}
+
+                <div class="alert alert-primary">
+                    <strong>{{ _('Repeated Measures Design Detected') }}</strong><br>
+                    {% if rm_suggested_test %}
+                    {{ _('Proposed Test:') }} <b>{{ rm_suggested_test.name }}</b>
+                    <input type="hidden" name="chosen_test_rm_set" value="{{ rm_suggested_test.key }}">
+                    <div class="small text-muted mt-1">{{ rm_suggested_test.reason }}</div>
+                    {% else %}
+                    {{ _('No specific test was automatically suggested.') }}
+                    {% endif %}
+
+                    <div class="mt-2">
+                        <label class="form-label small fw-bold">{{ _('Graph Type') }}</label>
+                        <select name="graph_type_rm_set" class="form-select form-select-sm" style="max-width: 200px;">
+                            <option value="Box Plot" selected>{{ _('Box Plot') }}</option>
+                            <option value="Violin Plot">{{ _('Violin Plot') }}</option>
+                            <option value="Bar (Mean/SEM)">{{ _('Bar (Mean/SEM)') }}</option>
+                            <option value="Scatter Plot">{{ _('Scatter Plot') }}</option>
+                            <option value="Line Plot (Mean/SEM)">{{ _('Line Plot (Mean/SEM)') }}</option>
+                        </select>
+                    </div>
+
+                    {% if not rm_suggested_test %}
+                    <div class="mt-3">
+                        <label class="form-label small fw-bold">{{ _('Select Test Manually') }}</label>
+                        <select name="chosen_test_rm_set" class="form-select form-select-sm" style="max-width: 300px;">
+                            {% for test in rm_possible_tests %}
+                            <option value="{{ test.key }}">{{ test.name }}</option>
+                            {% endfor %}
+                            <option value="none" selected>-- {{ _('No Test (Summary Only)') }} --</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                {# Independent Layout #}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>{{ _('Parameter') }}</th>
+                                <th class="text-center">{{ _('Normality') }}</th>
+                                <th class="text-center">{{ _('Equal Variance') }}</th>
+                                <th>{{ _('Graph Type') }}</th>
+                                <th>{{ _('Suggested Test') }}</th>
+                                <th>{{ _('Reason') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if analysis_results.checks_by_parameter %}
+                            {% for param, checks in analysis_results.checks_by_parameter.items() %}
+                            <tr>
+                                <td><strong>{{ param }}</strong></td>
+
+                                {# Normality Column #}
+                                <td class="text-center small">
+                                    {% if checks.get('all_groups_normal') %}
+                                    <span class="badge bg-success"
+                                        title="All groups passed Shapiro-Wilk test (p >= 0.05)">
+                                        <i class="fas fa-check"></i> Normal
+                                    </span>
+                                    {% elif checks.get('any_group_not_normal') %}
+                                    <span class="badge bg-warning text-dark"
+                                        title="One or more groups failed Shapiro-Wilk test (p < 0.05)">
+                                        <i class="fas fa-exclamation-triangle"></i> Not Normal
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" title="Normality could not be assessed">
+                                        <i class="fas fa-question"></i> N/A
+                                    </span>
+                                    {% endif %}
+                                    {# Show p-values if available #}
+                                    {% if checks.get('normality_results') %}
+                                    <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                                        {% for group, result in checks.normality_results.items() %}
+                                        {% if result.get('p_value') %}
+                                        {{ group[:10] }}: p={{ "%.3f"|format(result.p_value) }}{% if not loop.last %},{%
+                                        endif %}
+                                        {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+
+                                {# Equal Variance Column #}
+                                <td class="text-center small">
+                                    {% if checks.get('equal_variance') %}
+                                    <span class="badge bg-success" title="Levene's test passed (p >= 0.05)">
+                                        <i class="fas fa-check"></i> Equal
+                                    </span>
+                                    {% if checks.get('variance_results') and checks.variance_results.get('p_value') %}
+                                    <div class="text-muted" style="font-size: 0.75rem;">
+                                        p={{ "%.3f"|format(checks.variance_results.p_value) }}
+                                    </div>
+                                    {% endif %}
+                                    {% elif checks.get('variance_results') and checks.variance_results.get('p_value') %}
+                                    <span class="badge bg-warning text-dark" title="Levene's test failed (p < 0.05)">
+                                        <i class="fas fa-exclamation-triangle"></i> Unequal
+                                    </span>
+                                    <div class="text-muted" style="font-size: 0.75rem;">
+                                        p={{ "%.3f"|format(checks.variance_results.p_value) }}
+                                    </div>
+                                    {% else %}
+                                    <span class="badge bg-secondary" title="Variance equality could not be assessed">
+                                        <i class="fas fa-question"></i> N/A
+                                    </span>
+                                    {% endif %}
+                                </td>
+
+                                {# Graph Selection #}
+                                <td>
+                                    <select name="chosen_graph_{{ param }}" class="form-select form-select-sm">
+                                        {# Logic for default graph: Violin if not normal, else Box #}
+                                        {% set default_graph = 'Box Plot' %}
+                                        {% if checks.get('any_group_not_normal') %}
+                                        {% set default_graph = 'Violin Plot' %}
+                                        {% endif %}
+
+                                        <option value="Box Plot" {% if default_graph=='Box Plot' %}selected{% endif %}>
+                                            {{ _('Box Plot') }}</option>
+                                        <option value="Violin Plot" {% if default_graph=='Violin Plot' %}selected{%
+                                            endif %}>{{ _('Violin Plot') }}</option>
+                                        <option value="Bar (Mean/SEM)">{{ _('Bar (Mean/SEM)') }}</option>
+                                        <option value="Scatter Plot">{{ _('Scatter Plot') }}</option>
+                                    </select>
+                                </td>
+
+                                {# Test Selection #}
+                                <td>
+                                    {# Find the suggested test #}
+                                    {% set possible_tests = checks.get('possible_tests', []) %}
+                                    {% set suggestion = None %}
+                                    {% for test in possible_tests %}
+                                    {% if test.get('suggested', False) and not suggestion %}
+                                    {% set suggestion = test %}
+                                    {% endif %}
+                                    {% endfor %}
+
+                                    <select name="chosen_test_{{ param }}" class="form-select form-select-sm">
+                                        {% for test in possible_tests %}
+                                        {% if test.get('suggested', False) %}
+                                        <option value="{{ test.key }}" selected>⭐ {{ test.name }}</option>
+                                        {% else %}
+                                        <option value="{{ test.key }}">{{ test.name }}</option>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td class="small text-muted">{{ suggestion.reason if suggestion else '' }}</td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">{{ _('No parameters checked.') }}</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-secondary" id="btn-back-to-step1">{{ _('Back') }}</button>
+                <button type="button" class="btn btn-success" id="btn-execute-analysis">
+                    <i class="fas fa-play me-1"></i> {{ _('Run Analysis') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+    document.getElementById('btn-back-to-step1')?.addEventListener('click', function () {
+        document.getElementById('propose-workflow-stage').style.display = 'none';
+        document.getElementById('initial-selection-stage').style.display = 'block';
+    });
+
+    document.getElementById('btn-execute-analysis')?.addEventListener('click', function () {
+        const form = document.getElementById('analysis-form');
+        document.getElementById('analysis_stage').value = 'execute_analysis';
+        form.submit();
+    });
+</script>

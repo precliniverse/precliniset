@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Manage Housing Parameters') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">{{ _('Manage Housing Parameters') }}</h1>
+    <a href="{{ url_for('resources.manage_static_lists') }}" class="btn btn-secondary mb-3">← {{ _('Back to Lists') }}</a>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">{{ _('Create New Parameter') }}</div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('resources.manage_housing_parameters') }}" id="addParameterForm">
+                        {{ form.hidden_tag() }}
+                        {{ render_field(form.name, class="form-control") }}
+                        {{ render_field(form.description, class="form-control", rows=2) }}
+                        {{ render_field(form.data_type, class="form-select") }}
+                        <div class="mb-3" id="allowed_values_container">
+                            {{ render_field(form.allowed_values, class="form-control") }}
+                        </div>
+                        {{ render_field(form.default_value, class="form-control") }}
+                        {{ render_field(form.unit, class="form-control") }}
+                        {{ form.submit(class="btn btn-primary mt-3") }}
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">{{ _('Existing Parameters') }}</div>
+                <div class="card-body">
+                    {% if parameters %}
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>{{ _('Name') }}</th>
+                                <th>{{ _('Type') }}</th>
+                                <th>{{ _('Unit') }}</th>
+                                <th>{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in parameters %}
+                            <tr>
+                                <td>
+                                    <strong>{{ p.name }}</strong>
+                                    {% if p.description %}<p class="mb-0 text-muted"><small>{{ p.description }}</small></p>{% endif %}
+                                </td>
+                                <td><span class="badge bg-secondary">{{ p.data_type.value }}</span></td>
+                                <td>{{ p.unit or '' }}</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editParameterModal-{{ p.id }}">{{ _('Edit') }}</button>
+                                    <form method="POST" action="{{ url_for('resources.delete_housing_parameter', id=p.id) }}" style="display:inline;" onsubmit="return confirm('{{ _('Are you sure?') }}');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-danger">{{ _('Delete') }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p>{{ _('No housing parameters found.') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% for p in parameters %}
+<!-- Edit Parameter Modal -->
+<div class="modal fade" id="editParameterModal-{{ p.id }}" tabindex="-1" aria-labelledby="editParameterModalLabel-{{ p.id }}" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editParameterModalLabel-{{ p.id }}">{{ _('Edit Housing Parameter') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('resources.edit_housing_parameter', id=p.id) }}">
+        <div class="modal-body">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            {{ render_field(form.name, class="form-control", value=p.name) }}
+            {{ render_field(form.description, class="form-control", rows=2, value=p.description) }}
+            {{ render_field(form.data_type, class="form-select", value=p.data_type.name) }}
+            <div class="mb-3">
+                {{ render_field(form.allowed_values, class="form-control", value=p.allowed_values) }}
+            </div>
+            {{ render_field(form.default_value, class="form-control", value=p.default_value) }}
+            {{ render_field(form.unit, class="form-control", value=p.unit) }}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+          <button type="submit" class="btn btn-primary">{{ _('Save changes') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    function setupForm(formElement) {
+        const dataTypeSelect = formElement.querySelector('select[name="data_type"]');
+        const allowedValuesInput = formElement.querySelector('input[name="allowed_values"]');
+        if (!dataTypeSelect || !allowedValuesInput) return;
+
+        const allowedValuesContainer = allowedValuesInput.closest('.mb-3');
+
+        function toggleAllowedValues() {
+            if (dataTypeSelect.value === 'CATEGORY') {
+                allowedValuesContainer.style.display = '';
+            } else {
+                allowedValuesContainer.style.display = 'none';
+            }
+        }
+
+        dataTypeSelect.addEventListener('change', toggleAllowedValues);
+        toggleAllowedValues(); // Initial check
+    }
+
+    // Setup for the main "Add" form
+    const addForm = document.getElementById('addParameterForm');
+    if (addForm) {
+        setupForm(addForm);
+    }
+
+    // Setup for all "Edit" modals
+    document.querySelectorAll('.modal').forEach(modal => {
+        setupForm(modal);
+        modal.addEventListener('shown.bs.modal', function () {
+            setupForm(modal);
+        });
+    });
+});
+</script>
+{% endblock %}

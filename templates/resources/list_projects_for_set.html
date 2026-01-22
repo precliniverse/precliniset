@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Projects Using Set') }} "{{ condition_set.name }}"{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('resources.manage_housing_condition_sets') }}" class="btn btn-sm btn-outline-secondary mb-3"><i class="fas fa-arrow-left"></i> {{ _('Back to All Sets') }}</a>
+    <h1 class="mb-2">{{ _('Projects Using Set') }} <em>{{ condition_set.name }}</em></h1>
+    <p class="lead">{{ condition_set.description }}</p>
+    <hr>
+
+    <div class="card">
+        <div class="card-header">
+            {{ _('Projects') }}
+        </div>
+        <div class="card-body">
+            {% if projects %}
+            <ul class="list-group">
+                {% for project in projects %}
+                <li class="list-group-item">
+                    <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}">{{ project.name }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>{{ _('No projects are currently using this housing condition set.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,794 @@
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Edit' if model and model.id else 'Create') }} {{ model_type.capitalize() }} Model</h1>
+    <a href="{{ url_for('core_models.manage_models') }}" class="btn btn-secondary mb-3">← {{ _('Back to All Models')
+        }}</a>
+    {% if model and model.id and model_type == 'protocol' %}
+    <a href="{{ url_for('core_models.download_protocol', protocol_id=model.id) }}" class="btn btn-success mb-3"><i
+            class="fas fa-download"></i> {{ _('Download as XLSX') }}</a>
+    {% endif %}
+
+    <form method="POST" id="editModelForm" enctype="multipart/form-data">
+        {{ form.hidden_tag() }}
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                {{ render_field(form.name, class="form-control", placeholder=_('Enter model name')) }}
+            </div>
+            {% if model_type == 'protocol' %}
+            <div class="col-md-6 mb-3">
+                {{ render_field(form.severity, class="form-select") }}
+            </div>
+            <div class="col-md-12 mb-3">
+                {{ render_field(form.description, class="form-control", rows=3) }}
+            </div>
+            <div class="col-md-6 mb-3">
+                {{ render_field(form.url, class="form-control", placeholder=_('https://example.com/protocol_reference'))
+                }}
+            </div>
+            <div class="col-md-6 mb-3">
+                {{ render_field(form.attachment, class="form-control") }}
+                {% if model and model.attachments.first() %}
+                <div class="mt-2">
+                    <strong>{{ _('Current Attachment:') }}</strong>
+                    <a href="{{ url_for('core_models.download_protocol_attachment', protocol_id=model.id, attachment_id=model.attachments.first().id) }}"
+                        target="_blank">
+                        {{ model.attachments.first().filename }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% if config['TM_ENABLED'] %}
+            <div class="col-md-12 mb-3">
+                <label for="required_skills" class="form-label">{{ _('Required Skills') }}</label>
+                <select id="required_skills" name="required_skills" class="form-select" multiple
+                    data-skill-ids="{{ (model.external_skill_ids | join(',')) if model and model.external_skill_ids else '' }}">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-md-12 mb-3">
+                {{ render_field(form.controlled_molecules, class="form-select", multiple=True) }}
+                <small class="text-muted">{{ _('Select controlled molecules used in this protocol.') }}</small>
+            </div>
+            <div class="col-md-12 mb-3" id="import_pipelines_container">
+                {{ render_field(form.import_pipelines, class="form-select", multiple=True) }}
+                <small class="text-muted">{{ _('Select custom import pipelines linked to this protocol.') }}</small>
+            </div>
+            <div class="col-md-12 mb-3">
+                <div class="form-check form-switch">
+                    {{ form.enable_import_wizard(class="form-check-input", role="switch") }}
+                    {{ form.enable_import_wizard.label(class="form-check-label") }}
+                </div>
+                <small class="text-muted">{{ form.enable_import_wizard.description }}</small>
+            </div>
+            {% endif %}
+        </div>
+
+        <h3 class="mt-4">{{ _('Analytes') }}</h3>
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="analyte_search" class="form-label">{{ _('Search and Add Analytes') }}</label>
+                    <input type="text" id="analyte_search" class="form-control"
+                        placeholder="{{ _('Start typing to search for analytes by name or description...') }}">
+                    <div id="analyte_search_results" class="list-group mt-1"></div>
+                </div>
+                {% if current_user.is_super_admin or current_user.is_team_admin %}
+                <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#createAnalyteModal">
+                    <i class="fas fa-plus-circle"></i> {{ _('Create New Analyte') }}
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <h4 class="mt-4">{{ _('Selected Analytes') }}</h4>
+        <div id="selected_analytes" class="list-group">
+            {% if selected_analytes_data %}
+            {% for analyte in selected_analytes_data %}
+            <div class="list-group-item p-2" data-id="{{ analyte.id }}" draggable="true">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <input type="hidden" name="analytes" value="{{ analyte.id }}">
+                    <span class="badge bg-dark analyte-index" title="{{ _('Analyte Index') }}">#{{ loop.index }}</span>
+                    <strong class="me-2" title="{{ analyte.name }}">{{ analyte.name | truncate(15) }}</strong>
+                    <span class="badge bg-secondary me-2">{{ analyte.data_type }}</span>
+
+                    {% if analyte.unit %}
+                    <span class="me-2 text-muted">({{ analyte.unit }})</span>
+                    {% endif %}
+
+                    {% if analyte.name not in ['ID', 'Date of Birth'] %}
+                    {% if model_type == 'protocol' %}
+                    <div class="input-group input-group-sm me-2" style="width: 150px;">
+                        <span class="input-group-text">{{ _('Default') }}</span>
+                        {% if analyte.data_type == 'DATE' %}
+                        <input type="date" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% elif analyte.data_type == 'CATEGORY' and analyte.allowed_values %}
+                        <input list="datalist-{{ analyte.id }}" name="default_value_{{ analyte.id }}"
+                            class="form-control" value="{{ analyte.default_value or '' }}"
+                            data-allowed-values="{{ analyte.allowed_values }}">
+                        <datalist id="datalist-{{ analyte.id }}">
+                            {% for val in analyte.allowed_values.split(';') %}{% set clean_val = val.strip() %}{% if
+                            clean_val %}<option value="{{ clean_val }}">{% endif %}{% endfor %}
+                        </datalist>
+                        {% elif analyte.data_type == 'FLOAT' %}
+                        <input type="number" step="any" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% elif analyte.data_type == 'INT' %}
+                        <input type="number" step="1" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% else %}
+                        <input type="text" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% endif %}
+                    </div>
+                    <div class="input-group input-group-sm me-2" style="width: 200px;">
+                        <span class="input-group-text"><i class="fas fa-calculator"></i></span>
+                        <input type="text" name="calculation_formula_{{ analyte.id }}" class="form-control"
+                            placeholder="{{ _('Formula e.g. ([#1]+[#2])/2') }}"
+                            value="{{ analyte.calculation_formula or '' }}">
+                        <span class="input-group-text p-0">
+                            <button type="button" class="btn btn-link btn-sm text-info p-1" data-bs-toggle="popover"
+                                data-bs-trigger="hover focus" title="{{ _('Formula Help') }}"
+                                data-bs-content="{{ _('Use [#1], [#2] for indices, or [Analyte Name]. Math functions: sqrt, log, log10, exp, abs, round, min, max, pow. Animal context available: [Weight], [Age (Days)], etc.') }}">
+                                <i class="fas fa-question-circle"></i>
+                            </button>
+                        </span>
+                    </div>
+                    {% if analyte.data_type == 'CATEGORY' and analyte.allowed_values %}
+                    <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#collapse-{{ analyte.id }}" aria-expanded="false"
+                        aria-controls="collapse-{{ analyte.id }}" title="{{ _('View allowed values') }}">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    {% endif %}
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                            name="is_metadata_{{ analyte.id }}" id="is_metadata_{{ analyte.id }}" {% if
+                            analyte.is_metadata %}checked{% endif %}>
+                        <label class="form-check-label" for="is_metadata_{{ analyte.id }}">{{ _('Metadata') }}</label>
+                    </div>
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                            name="is_sensitive_{{ analyte.id }}" id="is_sensitive_{{ analyte.id }}" {% if
+                            analyte.is_sensitive %}checked{% endif %}>
+                        <label class="form-check-label" for="is_sensitive_{{ analyte.id }}">{{ _('Sensitive') }}</label>
+                    </div>
+                    {% elif model_type == 'animal' %}
+                    <div class="input-group input-group-sm me-2" style="width: 150px;">
+                        <span class="input-group-text">{{ _('Default') }}</span>
+                        {% if analyte.data_type == 'DATE' %}
+                        <input type="date" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% elif analyte.data_type == 'CATEGORY' and analyte.allowed_values %}
+                        <input list="datalist-{{ analyte.id }}" name="default_value_{{ analyte.id }}"
+                            class="form-control" value="{{ analyte.default_value or '' }}"
+                            data-allowed-values="{{ analyte.allowed_values }}">
+                        <datalist id="datalist-{{ analyte.id }}">
+                            {% for val in analyte.allowed_values.split(';') %}{% set clean_val = val.strip() %}{% if
+                            clean_val %}<option value="{{ clean_val }}">{% endif %}{% endfor %}
+                        </datalist>
+                        {% elif analyte.data_type == 'FLOAT' %}
+                        <input type="number" step="any" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% elif analyte.data_type == 'INT' %}
+                        <input type="number" step="1" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% else %}
+                        <input type="text" name="default_value_{{ analyte.id }}" class="form-control"
+                            value="{{ analyte.default_value or '' }}">
+                        {% endif %}
+                    </div>
+                    {% if analyte.data_type == 'CATEGORY' and analyte.allowed_values %}
+                    <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#collapse-{{ analyte.id }}" aria-expanded="false"
+                        aria-controls="collapse-{{ analyte.id }}" title="{{ _('View allowed values') }}">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    {% endif %}
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                            name="is_metadata_{{ analyte.id }}" id="is_metadata_{{ analyte.id }}" {% if
+                            analyte.is_metadata %}checked{% endif %}>
+                        <label class="form-check-label" for="is_metadata_{{ analyte.id }}">{{ _('Metadata') }}</label>
+                    </div>
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                            name="is_sensitive_{{ analyte.id }}" id="is_sensitive_{{ analyte.id }}" {% if
+                            analyte.is_sensitive %}checked{% endif %}>
+                        <label class="form-check-label" for="is_sensitive_{{ analyte.id }}">{{ _('Sensitive') }}</label>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+
+                    <button type="button" class="btn btn-sm btn-danger remove-analyte-btn ms-auto"><i
+                            class="fas fa-trash-alt"></i></button>
+                </div>
+                {% if analyte.data_type == 'CATEGORY' and analyte.allowed_values %}
+                <div class="collapse mt-2" id="collapse-{{ analyte.id }}">
+                    <div class="card card-body bg-light">
+                        <small class="text-muted">{{ _('Allowed values:') }}</small>
+                        <ul class="list-unstyled mb-0 small">
+                            {% for val in analyte.allowed_values.split(';') %}
+                            {% set clean_val = val.strip() %}
+                            {% if clean_val %}<li>{{ clean_val }}</li>{% endif %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">{{ _('Save Model') }}</button>
+        </div>
+    </form>
+</div>
+
+<!-- Create Analyte Modal -->
+<div class="modal fade" id="createAnalyteModal" tabindex="-1" aria-labelledby="createAnalyteModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createAnalyteModalLabel">{{ _('Create New Analyte') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createAnalyteForm">
+                    <div class="mb-3">
+                        <label for="new_analyte_name" class="form-label">{{ _('Name') }}</label>
+                        <input type="text" id="new_analyte_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_analyte_description" class="form-label">{{ _('Description') }}</label>
+                        <textarea id="new_analyte_description" class="form-control"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_analyte_unit" class="form-label">{{ _('Unit') }}</label>
+                        <input type="text" id="new_analyte_unit" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_analyte_data_type" class="form-label">{{ _('Data Type') }}</label>
+                        <select id="new_analyte_data_type" class="form-select">
+                            {% for dt in data_types %}
+                            <option value="{{ dt.name }}">{{ dt.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3" id="allowed_values_wrapper" style="display: none;">
+                        <label for="new_analyte_allowed_values" class="form-label">{{ _('Allowed Values') }}</label>
+                        <input type="text" id="new_analyte_allowed_values" class="form-control"
+                            placeholder="{{ _('Semicolon-separated values') }}">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+                <button type="button" class="btn btn-primary" id="saveNewAnalyteBtn">{{ _('Create and Add') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if model_type == 'protocol' %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        $('#controlled_molecules').select2({
+            theme: 'bootstrap-5',
+            placeholder: "{{ _('Select molecules') }}",
+            allowClear: true
+        });
+        $('#import_pipelines').select2({
+            theme: 'bootstrap-5',
+            placeholder: "{{ _('Select pipelines') }}",
+            allowClear: true
+        });
+
+        // Toggle import pipelines visibility based on wizard checkbox
+        const wizardCheckbox = document.getElementById('enable_import_wizard');
+        const pipelinesContainer = document.getElementById('import_pipelines_container');
+        
+        function togglePipelines() {
+            if (wizardCheckbox && pipelinesContainer) {
+                if (wizardCheckbox.checked) {
+                    pipelinesContainer.style.display = 'block';
+                } else {
+                    pipelinesContainer.style.display = 'none';
+                }
+            }
+        }
+
+        if (wizardCheckbox) {
+            wizardCheckbox.addEventListener('change', togglePipelines);
+            togglePipelines(); // Initial state
+        }
+    });
+</script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+{% endif %}
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialize Select2 for skills
+        {% if model_type == 'protocol' %}
+        // Function to resolve skill names from IDs
+        async function resolveSkillNames(skillIds) {
+            if (!skillIds || skillIds.length === 0) return [];
+
+            try {
+                const response = await fetch('{{ url_for("core_models.proxy_tm_skills") }}');
+                const allSkills = await response.json();
+
+                return allSkills.filter(skill => skillIds.includes(skill.id.toString()))
+                    .map(skill => ({ id: skill.id, text: skill.name }));
+            } catch (error) {
+                console.error('Error resolving skill names:', error);
+                return [];
+            }
+        }
+
+        // Initialize Select2 for skills
+        const skillsSelect = $('#required_skills');
+        skillsSelect.select2({
+            placeholder: 'Select required skills',
+            ajax: {
+                url: '{{ url_for("core_models.proxy_tm_skills") }}',
+                dataType: 'json',
+                delay: 250,
+                data: function (params) {
+                    return {
+                        q: params.term // search term
+                    };
+                },
+                processResults: function (data) {
+                    return {
+                        results: data.map(function (skill) {
+                            return {
+                                id: skill.id,
+                                text: skill.name
+                            };
+                        })
+                    };
+                },
+                cache: true
+            },
+            minimumInputLength: 0
+        });
+
+        // Load existing skills on page load
+        const existingSkillIds = skillsSelect.data('skill-ids');
+        if (existingSkillIds) {
+            const skillIdsArray = existingSkillIds.split(',').filter(id => id.trim());
+            resolveSkillNames(skillIdsArray).then(function (resolvedSkills) {
+                resolvedSkills.forEach(function (skill) {
+                    const option = new Option(skill.text, skill.id, true, true);
+                    skillsSelect.append(option);
+                });
+                skillsSelect.trigger('change');
+            });
+        }
+        {% endif %}
+
+        // Enable popovers
+        var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+        var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl)
+        });
+
+        const searchInput = document.getElementById('analyte_search');
+        const searchResults = document.getElementById('analyte_search_results');
+        const selectedAnalytesContainer = document.getElementById('selected_analytes');
+        const modelType = document.getElementById('editModelForm').baseURI.includes('/animal') ? 'animal' : 'protocol';
+        const allAnalytes = {{ all_analytes_data | tojson
+    }};
+
+    searchInput.addEventListener('keyup', function () {
+        const query = searchInput.value.toLowerCase();
+        searchResults.innerHTML = '';
+
+        if (query.length < 2) {
+            return;
+        }
+
+        const filteredAnalytes = allAnalytes.filter(analyte => {
+            const name = (analyte.name || '').toLowerCase();
+            const description = (analyte.description || '').toLowerCase();
+            return name.includes(query) || description.includes(query);
+        });
+
+        filteredAnalytes.forEach(analyte => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+
+            const analyteName = analyte.name || 'Undefined Analyte';
+            const description = analyte.description ? `(${analyte.description})` : '(No description)';
+            item.innerHTML = `<strong>${analyteName}</strong> <small class="text-muted">${description}</small>`;
+
+            item.dataset.analyte = JSON.stringify(analyte);
+            item.addEventListener('click', function (e) {
+                e.preventDefault();
+                addAnalyteToSelection(analyte);
+                searchInput.value = '';
+                searchResults.innerHTML = '';
+            });
+            searchResults.appendChild(item);
+        });
+    });
+
+    function addAnalyteToSelection(analyte) {
+        // Ensure analyte object and its properties are safely accessed
+        const analyteId = (analyte && analyte.id) ? analyte.id.toString() : '';
+        if (document.querySelector(`#selected_analytes [data-id='${analyteId}']`)) {
+            return; // Already selected
+        }
+
+        const itemWrapper = document.createElement('div');
+        itemWrapper.className = 'list-group-item p-2';
+        itemWrapper.dataset.id = analyteId;
+
+        let defaultValueInputHtml;
+        const analyteDataType = (analyte && analyte.data_type) ? analyte.data_type.toString() : ''; // Ensure data_type is a string
+
+        if (analyteDataType === 'DATE') {
+            defaultValueInputHtml = `<input type="date" name="default_value_${analyteId}" class="form-control" value="">`;
+        } else if (analyteDataType === 'CATEGORY' && analyte && analyte.allowed_values) {
+            const options = analyte.allowed_values.split(';')
+                .map(val => val.trim()).filter(val => val)
+                .map(val => `<option value="${val}"></option>`).join('');
+            defaultValueInputHtml = `
+            <input list="datalist-${analyteId}" name="default_value_${analyteId}" class="form-control" data-allowed-values="${analyte.allowed_values}">
+            <datalist id="datalist-${analyteId}">${options}</datalist>`;
+        } else if (analyteDataType === 'FLOAT') {
+            defaultValueInputHtml = `<input type="number" step="any" name="default_value_${analyteId}" class="form-control" value="">`;
+        } else if (analyteDataType === 'INT') {
+            defaultValueInputHtml = `<input type="number" step="1" name="default_value_${analyteId}" class="form-control" value="">`;
+        } else {
+            defaultValueInputHtml = `<input type="text" name="default_value_${analyteId}" class="form-control" value="">`;
+        }
+
+        let extraFields = '';
+        let collapseHtml = '';
+
+        if (analyte && analyte.name !== 'ID' && analyte.name !== 'Date of Birth') {
+            if (modelType === 'protocol') {
+                let categoryButton = '';
+                if (analyteDataType === 'CATEGORY' && analyte && analyte.allowed_values) {
+                    categoryButton = `
+                <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${analyteId}" aria-expanded="false" aria-controls="collapse-${analyteId}" title="{{ _('View allowed values') }}">
+                    <i class="fas fa-list"></i>
+                </button>`;
+
+                    const valuesList = analyte.allowed_values.split(';')
+                        .map(val => val.trim()).filter(val => val)
+                        .map(val => `<li>${val}</li>`).join('');
+
+                    collapseHtml = `
+                <div class="collapse mt-2" id="collapse-${analyteId}">
+                    <div class="card card-body bg-light">
+                        <small class="text-muted">{{ _('Allowed values:') }}</small>
+                        <ul class="list-unstyled mb-0 small">
+                            ${valuesList}
+                        </ul>
+                    </div>
+                </div>`;
+                }
+                extraFields = `
+                <div class="input-group input-group-sm me-2" style="width: 150px;">
+                    <span class="input-group-text">{{ _('Default') }}</span>
+                    ${defaultValueInputHtml}
+                </div>
+                <div class="input-group input-group-sm me-2" style="width: 200px;">
+                    <span class="input-group-text"><i class="fas fa-calculator"></i></span>
+                    <input type="text" name="calculation_formula_${analyteId}" class="form-control" placeholder="{{ _('Formula e.g. ([#1]+[#2])/2') }}" value="${(analyte && analyte.calculation_formula) ? analyte.calculation_formula : ''}">
+                    <span class="input-group-text p-0">
+                        <button type="button" class="btn btn-link btn-sm text-info p-1" data-bs-toggle="popover" 
+                            data-bs-trigger="hover focus" title="{{ _('Formula Help') }}" 
+                            data-bs-content="{{ _('Use [#1], [#2] for indices, or [Analyte Name]. Math functions: sqrt, log, log10, exp, abs, round, min, max, pow. Animal context available: [Weight], [Age (Days)], etc.') }}">
+                            <i class="fas fa-question-circle"></i>
+                        </button>
+                    </span>
+                </div>
+                ${categoryButton}
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" role="switch" name="is_metadata_${analyteId}" id="is_metadata_${analyteId}">
+                    <label class="form-check-label" for="is_metadata_${analyteId}}">{{ _('Metadata') }}</label>
+                </div>
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" role="switch" name="is_sensitive_${analyteId}" id="is_sensitive_${analyteId}">
+                    <label class="form-check-label" for="is_sensitive_${analyteId}}">{{ _('Sensitive') }}</label>
+                </div>
+            `;
+            } else if (modelType === 'animal') {
+                let categoryButton = '';
+                if (analyteDataType === 'CATEGORY' && analyte && analyte.allowed_values) {
+                    categoryButton = `
+                <button class="btn btn-sm btn-outline-secondary me-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${analyteId}" aria-expanded="false" aria-controls="collapse-${analyteId}" title="{{ _('View allowed values') }}">
+                    <i class="fas fa-list"></i>
+                </button>`;
+
+                    const valuesList = analyte.allowed_values.split(';')
+                        .map(val => val.trim()).filter(val => val)
+                        .map(val => `<li>${val}</li>`).join('');
+
+                    collapseHtml = `
+                <div class="collapse mt-2" id="collapse-${analyteId}">
+                    <div class="card card-body bg-light">
+                        <small class="text-muted">{{ _('Allowed values:') }}</small>
+                        <ul class="list-unstyled mb-0 small">
+                            ${valuesList}
+                        </ul>
+                    </div>
+                </div>`;
+                }
+                extraFields = `
+                <div class="input-group input-group-sm me-2" style="width: 150px;">
+                    <span class="input-group-text">{{ _('Default') }}</span>
+                    ${defaultValueInputHtml}
+                </div>
+                ${categoryButton}
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" role="switch" name="is_metadata_${analyteId}" id="is_metadata_${analyteId}">
+                    <label class="form-check-label" for="is_metadata_${analyteId}}">{{ _('Metadata') }}</label>
+                </div>
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" role="switch" name="is_sensitive_${analyteId}" id="is_sensitive_${analyteId}">
+                    <label class="form-check-label" for="is_sensitive_${analyteId}}">{{ _('Sensitive') }}</label>
+                </div>
+            `;
+            }
+        }
+
+        const unitHtml = (analyte && analyte.unit) ? `<span class="me-2 text-muted">(${analyte.unit})</span>` : '';
+
+        itemWrapper.innerHTML = `
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <input type="hidden" name="analytes" value="${analyteId}">
+            <span class="badge bg-dark analyte-index">#</span>
+            <strong class="me-2" title="${(analyte && analyte.name) ? analyte.name : ''}">${String((analyte && analyte.name) || '').substring(0, 15)}</strong>
+            <span class="badge bg-secondary me-2">${analyteDataType}</span>
+            ${unitHtml}
+            ${extraFields}
+            <button type="button" class="btn btn-sm btn-danger remove-analyte-btn ms-auto"><i class="fas fa-trash-alt"></i></button>
+        </div>
+        ${collapseHtml}
+    `;
+
+        if (analyte && analyte.id && analyte.id.toString().startsWith('new_')) {
+            const details = {
+                name: analyte.name,
+                description: analyte.description,
+                unit: analyte.unit,
+                data_type: analyte.data_type,
+                allowed_values: analyte.allowed_values
+            };
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = `new_analyte_details_${analyteId}`;
+            hiddenInput.value = JSON.stringify(details);
+            // Append to the inner flex container, not the main wrapper
+            itemWrapper.querySelector('.d-flex').appendChild(hiddenInput);
+        }
+
+        selectedAnalytesContainer.appendChild(itemWrapper);
+        updateIndices();
+        initPopovers();
+    }
+
+    function updateIndices() {
+        document.querySelectorAll('.analyte-index').forEach((badge, idx) => {
+            badge.textContent = '#' + (idx + 1);
+        });
+    }
+
+    function initPopovers() {
+        // Initialize Bootstrap popovers
+        const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+        popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl);
+        });
+    }
+
+    // Initial run
+    initPopovers();
+
+    selectedAnalytesContainer.addEventListener('click', function (e) {
+        if (e.target.closest('.remove-analyte-btn')) {
+            e.target.closest('.list-group-item').remove();
+            updateIndices();
+        }
+    });
+
+    // Drag and Drop functionality
+    let draggedItem = null;
+
+    selectedAnalytesContainer.addEventListener('dragstart', (e) => {
+        draggedItem = e.target.closest('.list-group-item');
+        if (draggedItem) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', draggedItem.innerHTML);
+            draggedItem.classList.add('dragging');
+        }
+    });
+
+    selectedAnalytesContainer.addEventListener('dragover', (e) => {
+        e.preventDefault(); // Allow drop
+        const afterElement = getDragAfterElement(selectedAnalytesContainer, e.clientY);
+        const currentDraggable = document.querySelector('.dragging');
+        if (currentDraggable && e.target.closest('.list-group-item') && e.target.closest('.list-group-item') !== currentDraggable) {
+            const dropTarget = e.target.closest('.list-group-item');
+            if (dropTarget) {
+                dropTarget.classList.add('drag-over');
+            }
+        }
+    });
+
+    selectedAnalytesContainer.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        if (e.target.closest('.list-group-item') && e.target.closest('.list-group-item') !== draggedItem) {
+            e.target.closest('.list-group-item').classList.add('drag-over');
+        }
+    });
+
+    selectedAnalytesContainer.addEventListener('dragleave', (e) => {
+        if (e.target.closest('.list-group-item')) {
+            e.target.closest('.list-group-item').classList.remove('drag-over');
+        }
+    });
+
+    selectedAnalytesContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (draggedItem) {
+            const dropTarget = e.target.closest('.list-group-item');
+            if (dropTarget && dropTarget !== draggedItem) {
+                const afterElement = getDragAfterElement(selectedAnalytesContainer, e.clientY);
+                if (afterElement == null) {
+                    selectedAnalytesContainer.appendChild(draggedItem);
+                } else {
+                    selectedAnalytesContainer.insertBefore(draggedItem, afterElement);
+                }
+            }
+        }
+        // Clean up drag-over class from all items
+        document.querySelectorAll('.list-group-item.drag-over').forEach(item => item.classList.remove('drag-over'));
+        updateIndices();
+    });
+
+    selectedAnalytesContainer.addEventListener('dragend', () => {
+        if (draggedItem) {
+            draggedItem.classList.remove('dragging');
+        }
+        draggedItem = null;
+        // Ensure all drag-over classes are removed
+        document.querySelectorAll('.list-group-item.drag-over').forEach(item => item.classList.remove('drag-over'));
+    });
+
+    function getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.list-group-item:not(.dragging)')];
+
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // New Analyte Modal Logic
+    const createAnalyteModalEl = document.getElementById('createAnalyteModal');
+    const createAnalyteModal = new bootstrap.Modal(createAnalyteModalEl);
+    const newAnalyteDataType = document.getElementById('new_analyte_data_type');
+    const allowedValuesWrapper = document.getElementById('allowed_values_wrapper');
+
+    newAnalyteDataType.addEventListener('change', function () {
+        allowedValuesWrapper.style.display = this.value === 'CATEGORY' ? 'block' : 'none';
+    });
+
+    document.getElementById('saveNewAnalyteBtn').addEventListener('click', function () {
+        const name = document.getElementById('new_analyte_name').value;
+        const description = document.getElementById('new_analyte_description').value;
+        const unit = document.getElementById('new_analyte_unit').value;
+        const dataType = document.getElementById('new_analyte_data_type').value;
+        const allowedValues = document.getElementById('new_analyte_allowed_values').value;
+
+        if (!name) {
+            // A more robust user feedback mechanism would be better
+            const nameInput = document.getElementById('new_analyte_name');
+            nameInput.classList.add('is-invalid');
+            nameInput.addEventListener('input', () => nameInput.classList.remove('is-invalid'), { once: true });
+            return;
+        }
+
+        const newAnalyte = {
+            id: 'new_' + Date.now(),
+            name: name,
+            description: description,
+            unit: unit,
+            data_type: dataType,
+            allowed_values: allowedValues
+        };
+
+        addAnalyteToSelection(newAnalyte);
+        createAnalyteModal.hide();
+        document.getElementById('createAnalyteForm').reset();
+        allowedValuesWrapper.style.display = 'none';
+    });
+
+    document.getElementById('editModelForm').addEventListener('submit', function (event) {
+        let isValid = true;
+        const categoryInputs = document.querySelectorAll('input[data-allowed-values]');
+
+        categoryInputs.forEach(input => {
+            const allowedValuesRaw = input.dataset.allowedValues || '';
+            // Ensure allowedValues is treated as a string before splitting
+            const allowedValues = allowedValuesRaw.toString().split(';').map(v => v.trim());
+            const currentValue = input.value.trim();
+
+            // The value is invalid if it's not empty and not in the allowed list
+            if (currentValue && !allowedValues.includes(currentValue)) {
+                // Using a more prominent feedback mechanism
+                input.classList.add('is-invalid');
+
+                // Find the parent list-group-item to find the analyte name
+                const parentItem = input.closest('.list-group-item');
+                const analyteName = parentItem ? parentItem.querySelector('strong').title : 'this field';
+
+                // Remove existing feedback to avoid duplicates
+                const existingFeedback = input.parentElement.querySelector('.invalid-feedback');
+                if (existingFeedback) {
+                    existingFeedback.remove();
+                }
+
+                const feedback = document.createElement('div');
+                feedback.className = 'invalid-feedback d-block'; // d-block to make it visible
+                feedback.textContent = `'${currentValue}' is not a valid value for ${analyteName}. Please select a value from the list or clear the input.`;
+                input.parentElement.appendChild(feedback);
+
+                // Clean up the error message on next input
+                input.addEventListener('input', () => {
+                    input.classList.remove('is-invalid');
+                    const feedbackToRemove = input.parentElement.querySelector('.invalid-feedback');
+                    if (feedbackToRemove) {
+                        feedbackToRemove.remove();
+                    }
+                }, { once: true });
+
+                isValid = false;
+            } else {
+                // Clean up any previous validation errors if the input is now valid
+                input.classList.remove('is-invalid');
+                const existingFeedback = input.parentElement.querySelector('.invalid-feedback');
+                if (existingFeedback) {
+                    existingFeedback.remove();
+                }
+            }
+        });
+
+        if (!isValid) {
+            event.preventDefault();
+            const firstInvalid = document.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.focus();
+            }
+            // Optionally, flash a general message at the top
+            // This part would require a flash message container in your base template
+        }
+    });
+});
+</script>
+{% endblock %}

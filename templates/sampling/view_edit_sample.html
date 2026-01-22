@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <style>
+        .type-specific-section { display: none; }
+        .form-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 1.25rem;
+            margin-top: 1.5rem;
+            background-color: #fdfdfd;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ title }}</h1>
+    <p>
+        <strong>{{ _('Group:') }}</strong> <a href="{{ url_for('groups.edit_group', id=group.id) }}">{{ group.name }}</a><br>
+        <strong>{{ _('Animal ID (from group):') }}</strong> {{ animal_id_display }}
+        {% if parent_sample %}
+        <br><strong>{{ _('Parent Sample ID:') }}</strong> <a href="{{ url_for('sampling.view_edit_sample', sample_id=parent_sample.id) }}">{{ parent_sample.display_id or parent_sample.id }}</a>
+        {% if parent_sample.collection_conditions %}
+        <br><strong>{{ _('Parent Collection Conditions:') }}</strong>
+        {% for condition in parent_sample.collection_conditions %}
+            <span class="badge bg-light text-dark">{{ condition.name }}</span>
+        {% endfor %}
+        {% endif %}
+        {% if parent_sample.sample_type.name == 'BLOOD' and parent_sample.anticoagulant %}
+        <br><strong>{{ _('Parent Anticoagulant:') }}</strong> {{ parent_sample.anticoagulant.value }}
+        {% endif %}
+        {% endif %}
+    </p>
+    <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-secondary mb-3"><i class="fas fa-arrow-left"></i> {{ _('Back to Group Samples List') }}</a>
+
+    {% if derived_samples %}
+    <div class="card shadow-sm mt-4 mb-4">
+        <div class="card-header">
+            <strong>{{ _('Derived Samples') }}</strong>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                {% for derived in derived_samples %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{{ url_for('sampling.view_edit_sample', sample_id=derived.id) }}">{{ derived.display_id or derived.id }}</a>
+                            <small class="text-muted">
+                                ({{ derived.derived_type.name if derived.derived_type else _('N/A') }})
+                                {% if derived.staining %}
+                                <span class="badge bg-secondary">{{ derived.staining.name }}</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">{{ derived.status.value }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <strong>{{ _('Editing Sample for Animal ID:') }} {{ animal_id_display }}</strong>
+            </div>
+            <div class="card-body">
+                
+                <div class="form-section">
+                    <h5 class="mb-3">{{ _('Core Information') }}</h5>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">{{ render_field(form.sample_type, class="form-select") }}</div>
+                        <div class="col-md-4 mb-3">{{ render_field(form.collection_date, class="form-control") }}</div>
+                        <div class="col-md-4 mb-3">{{ render_field(form.storage_id, class="form-select", id="storage_select") }}</div>
+                    </div>
+                    <div class="mb-3 form-check form-switch">
+                        {{ form.is_terminal(class="form-check-input") }}
+                        {{ form.is_terminal.label(class="form-check-label") }}
+                    </div>
+                </div>
+
+                {% if sample.derived_type %}
+                <div class="form-section">
+                    <h5 class="mb-3">{{ _('Derivation Details') }}</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">{{ _('Derived Type') }}</label>
+                            <p class="form-control-plaintext">{{ sample.derived_type.name }}</p>
+                        </div>
+                        {% if sample.staining %}
+                        <div class="col-md-6">
+                            <label class="form-label">{{ _('Staining') }}</label>
+                            <p class="form-control-plaintext">{{ sample.staining.name }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if not sample.derived_type %}
+                <!-- Sections spécifiques au type -->
+                <div id="blood_fields" class="type-specific-section form-section">
+                    <h5>{{ _('Blood Details') }}</h5>
+                    <div class="row">
+                        <div class="col-md-4">{{ render_field(form.anticoagulant, class="form-select") }}</div>
+                        <div class="col-md-4">{{ render_field(form.volume, class="form-control") }}</div>
+                        <div class="col-md-4">{{ render_field(form.volume_unit, class="form-control") }}</div>
+                    </div>
+                </div>
+
+                <div id="urine_fields" class="type-specific-section form-section">
+                    <h5>{{ _('Urine Details') }}</h5>
+                    <div class="row">
+                        <div class="col-md-6">{{ render_field(form.volume, class="form-control") }}</div>
+                        <div class="col-md-6">{{ render_field(form.volume_unit, class="form-control") }}</div>
+                    </div>
+                </div>
+
+                <div id="biological_tissue_fields" class="type-specific-section form-section">
+                    <h5>{{ _('Biological Tissue Details') }}</h5>
+                    <div class="row">
+                        <div class="col-md-6">{{ render_field(form.organ_id, class="form-select", id="organ_select") }}</div>
+                        <div class="col-md-6">{{ render_field(form.piece_id, class="form-control") }}</div>
+                    </div>
+                    <div class="mt-3">{{ render_field(form.collection_conditions, class="form-select", id="conditions_select", multiple="multiple") }}</div>
+                </div>
+
+                <div id="other_fields" class="type-specific-section form-section">
+                    <h5>{{ _('Other Details') }}</h5>
+                    {{ render_field(form.other_description, class="form-control", rows="3") }}
+                </div>
+                {% endif %}
+
+                <div class="form-section">
+                    <h5>{{ _('Sample Status') }}</h5>
+                    <div class="row align-items-end">
+                        <div class="col-md-4">{{ render_field(form.status, class="form-select", id="status_select") }}</div>
+                        <div class="col-md-8">
+                            <div id="shipment_fields" class="type-specific-section">
+                                {{ render_field(form.shipment_destination, class="form-control", placeholder=_("Enter destination...")) }}
+                                <p class="form-text">{{ _("The shipment date will be set to today.") }}</p>
+                            </div>
+                            <div id="destruction_fields" class="type-specific-section">
+                                <p class="form-text">{{ _("The destruction date will be set to today.") }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h5>{{ _('General Notes') }}</h5>
+                     {{ render_field(form.notes, class="form-control", rows="3", placeholder=_("General notes for this sample...")) }}
+                </div>
+            </div>
+        </div>
+        <div class="mt-4">{{ form.submit(class="btn btn-primary") }}</div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" nonce="{{csp_nonce }}"></script>
+<script nonce="{{csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    $('#storage_select, #organ_select').select2({ theme: "bootstrap-5", width: '100%', allowClear: true });
+    $('#conditions_select').select2({ 
+        theme: "bootstrap-5", 
+        placeholder: "{{ _('Select conditions...') }}", 
+        width: '100%'
+    }).val({{ form.collection_conditions.data|default([])|tojson|safe }}).trigger('change');
+
+    const sampleTypeSelect = document.getElementById('sample_type');
+    const statusSelect = document.getElementById('status_select');
+
+    function toggleTypeSpecificFields() {
+        const selectedType = sampleTypeSelect.value;
+        document.querySelectorAll('.type-specific-section').forEach(el => {
+            if (!el.id.includes('shipment_fields') && !el.id.includes('destruction_fields')) {
+                el.style.display = 'none';
+            }
+        });
+        
+        if (selectedType) {
+            const sectionId = `${selectedType.toLowerCase()}_fields`;
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.style.display = 'block';
+            }
+        }
+    }
+
+    function toggleStatusSpecificFields() {
+        const selectedStatus = statusSelect.value;
+        document.getElementById('shipment_fields').style.display = (selectedStatus === 'SHIPPED') ? 'block' : 'none';
+        document.getElementById('destruction_fields').style.display = (selectedStatus === 'DESTROYED') ? 'block' : 'none';
+    }
+
+    sampleTypeSelect.addEventListener('change', toggleTypeSpecificFields);
+    const initialStatus = '{{ sample.status.name }}';
+
+    statusSelect.addEventListener('change', function() {
+        const newStatus = this.value;
+        if ((initialStatus === 'SHIPPED' || initialStatus === 'DESTROYED') && newStatus !== initialStatus) {
+            if (!confirm("{{ _('This sample was marked as Shipped/Destroyed. Are you sure you want to change its status and return it to the inventory?') }}")) {
+                this.value = initialStatus;
+                // Trigger change to revert UI, especially for Select2
+                $(this).trigger('change');
+                return; 
+            }
+        }
+        toggleStatusSpecificFields();
+    });
+
+    toggleTypeSpecificFields();
+    toggleStatusSpecificFields();
+});
+</script>
+{% endblock %}

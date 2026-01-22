@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Create/Edit Reference Range') }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<style>
+    #includedAnimalsTable .remove-btn,
+    #searchResultsTable .add-btn {
+        cursor: pointer;
+    }
+
+    #includedAnimalsTable .remove-btn {
+        color: #dc3545;
+    }
+
+    #searchResultsTable .add-btn {
+        color: #198754;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Create/Edit Reference Range') }}</h1>
+    <a href="{{ url_for('reference_ranges.list_reference_ranges') }}" class="btn btn-secondary mb-3">
+        <i class="fas fa-arrow-left"></i> {{ _('Back to List') }}
+    </a>
+
+    <form id="referenceRangeForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>{{ _('1. General Information') }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="name" class="form-label">{{ _('Reference Range Name') }}</label>
+                    <input type="text" id="name" name="name" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">{{ _('Description') }}</label>
+                    <textarea id="description" name="description" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="team_id" class="form-label">{{ _('Owning Team') }}</label>
+                    <select id="team_id" name="team_id" class="form-select" required>
+                        {% for team in teams %}
+                        <option value="{{ team.id }}">{{ team.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="analyte_id" class="form-label">{{ _('Analyte') }}</label>
+                        <select id="analyte_id" name="analyte_id" class="form-select" required>
+                            <option value="">-- {{ _('Search for an Analyte') }} --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="protocol_id" class="form-label">{{ _('Protocol') }}</label>
+                        <select id="protocol_id" name="protocol_id" class="form-select" required>
+                            <option value="">-- {{ _('Select Analyte First') }} --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="animal_model_id" class="form-label">{{ _('Animal Model') }}</label>
+                        <select id="animal_model_id" name="animal_model_id" class="form-select" required>
+                            <option value="">-- {{ _('Select Protocol First') }} --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="min_age" class="form-label">{{ _('Minimum Age (days)') }}</label>
+                        <input type="number" id="min_age" name="min_age" class="form-control">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="max_age" class="form-label">{{ _('Maximum Age (days)') }}</label>
+                        <input type="number" id="max_age" name="max_age" class="form-control">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>{{ _('Sharing Settings') }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="is_globally_shared" name="is_globally_shared">
+                    <label class="form-check-label" for="is_globally_shared">{{ _('Share Globally') }}</label>
+                    <small class="form-text text-muted d-block">{{ _('If checked, this reference range will be
+                        accessible to all users.') }}</small>
+                </div>
+                <div class="mb-3">
+                    <label for="shared_with_team_ids" class="form-label">{{ _('Share with Specific Teams') }}</label>
+                    <select id="shared_with_team_ids" name="shared_with_team_ids" class="form-select" multiple>
+                        {% for team in all_teams %}
+                        <option value="{{ team.id }}">{{ team.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">{{ _('This option is disabled if "Share Globally" is checked.')
+                        }}</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>{{ _('2. Find and Add Animals') }}</h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">{{ _('The Protocol and Animal Model selected above are used to find relevant
+                    animals.') }}</p>
+                <div id="search-filters">
+                    <!-- Dynamic parameter filters will be added here -->
+                </div>
+                <button type="button" id="searchBtn" class="btn btn-info mt-2">{{ _('Search for Animals') }}</button>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">{{ _('3. Search Results') }}</h4>
+                    <button type="button" id="selectAllBtn" class="btn btn-sm btn-success">{{ _('Select All')
+                        }}</button>
+                </div>
+            </div>
+            <div class="card-body table-responsive">
+                <table id="searchResultsTable" class="table table-striped" style="width:100%">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">{{ _('4. Included Animals') }}</h4>
+                    <div>
+                        <button type="button" id="deleteSelectedBtn" class="btn btn-sm btn-danger me-2" style="display:none;">
+                            <i class="fas fa-trash-alt"></i> {{ _('Delete Selected') }}
+                        </button>
+                        {% if ref_range %}
+                        <a href="{{ url_for('reference_ranges.download_reference_range_data', range_id=ref_range.id) }}"
+                            class="btn btn-sm btn-success">
+                            <i class="fas fa-download"></i> {{ _('Download Data') }}
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <input type="text" id="filterIncludedAnimals" class="form-control" placeholder="{{ _('Filter animals...') }}">
+                </div>
+                <div class="table-responsive">
+                    <table id="includedAnimalsTable" class="table table-bordered table-hover" style="width:100%">
+                        <thead>
+                            <tr id="includedAnimalsTableHeader">
+                                <th><input type="checkbox" id="selectAllIncluded"></th>
+                                <th>{{ _('Animal ID') }}</th>
+                                <th>{{ _('Group') }}</th>
+                                <th>{{ _('Project') }}</th>
+                                {% for col in extra_columns %}
+                                <th>{{ col }}</th>
+                                {% endfor %}
+                                <th>{{ _('Action') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for animal in included_animals_details %}
+                            <tr data-group-id="{{ animal.group_id }}" data-animal-index="{{ animal.animal_index }}"
+                                data-animal-unique-id="{{ animal.group_id }}-{{ animal.animal_index }}"
+                                data-animal-info='{{ animal|tojson }}'>
+                                <td><input type="checkbox" class="animal-checkbox"></td>
+                                <td>{{ animal.animal_id }}</td>
+                                <td>{{ animal.group_name }}</td>
+                                <td>{{ animal.project_name }}</td>
+                                {% for col in extra_columns %}
+                                <td>{{ animal[col] if animal[col] is not none else '' }}</td>
+                                {% endfor %}
+                                <td><i class="fas fa-trash-alt remove-btn"></i></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">{{ _('Save Reference Range') }}</button>
+    </form>
+
+    {% if ref_range %}
+    <!-- Charts for this reference range -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4>{{ _('Data Visualizations') }}</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>{{ _('Scatter Plot') }}</h5>
+                    <div id="range-scatter-plot" style="height: 400px;"></div>
+                </div>
+                <div class="col-md-6">
+                    <h5>{{ _('Timeline Evolution') }}</h5>
+                    <div id="range-timeline-plot" style="height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script id="existing-data-json" type="application/json">
+    {{ existing_data_json|safe }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{csp_nonce }}">
+    // Configuration object for reference_ranges_edit.js
+    window.ReferenceRangeConfig = {
+        isEditing: {{ 'true' if ref_range else 'false' }},
+        existingData: {{ existing_data_json|safe }},
+        rangeId: {{ ref_range.id if ref_range else 'null' }},
+        urls: {
+            searchAnalytes: "{{ url_for('reference_ranges.search_analytes') }}",
+            getProtocols: "/reference_ranges/api/get_protocols_for_analyte",
+            getFilters: "/reference_ranges/api/get_reference_search_filters",
+            searchAnimals: "/reference_ranges/api/search_animals_for_reference",
+            submit: "{{ url_for('reference_ranges.create_edit_reference_range', range_id=ref_range.id if ref_range else None) }}",
+            rangeData: "/reference_ranges/api/reference_range"
+        },
+        translations: {
+            searchAnalyte: "{{ _('Search for an Analyte') }}",
+            any: "{{ _('Any') }}",
+            selectProtocolAndModel: "{{ _('Please select a protocol and animal model to search.') }}",
+            searching: "{{ _('Searching...') }}",
+            action: "{{ _('Action') }}",
+            noAnimalsFound: "{{ _('No animals found matching your criteria.') }}",
+            searchError: "{{ _('Error during search.') }}",
+            confirmDeleteSelected: "{{ _('Are you sure you want to delete the selected animals?') }}",
+            error: "{{ _('Error:') }}",
+            unexpectedError: "{{ _('An unexpected error occurred.') }}",
+            loading: "{{ _('Loading...') }}",
+            selectProtocolFirst: "{{ _('Select Protocol First') }}",
+            selectProtocol: "{{ _('Select Protocol') }}",
+            selectAnalyteFirst: "{{ _('Select Analyte First') }}",
+            selectModel: "{{ _('Select Animal Model') }}",
+            animalId: "{{ _('Animal ID') }}",
+            group: "{{ _('Group') }}",
+            project: "{{ _('Project') }}"
+        }
+    };
+</script>
+<script src="{{ url_for('static', filename='js/reference_ranges_edit.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

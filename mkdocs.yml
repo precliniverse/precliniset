@@ -1,0 +1,65 @@
+site_name: Precliniverse Documentation
+site_description: Technical Manual and API Guide for Precliniverse
+site_url: https://docs.precliniverse.com
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Features:
+      - Project Management: features/projects.md
+      - Experimental Groups & Data: features/groups.md
+      - Advanced Import Wizard: features/import_wizard.md
+      - Import Pipelines: features/pipelines.md
+      - Biobanking & Samples: features/samples.md
+      - Ethical Approvals: features/ethics.md
+  - Administration:
+      - Users & Teams: features/admin.md
+      - Audit Trail & compliance: features/audit.md
+  - Deployment & Ops:
+      - Installation Guide: deployment.md
+  - Developer Guide:
+      - API Overview: api/overview.md
+      - Live API Reference: /api/v1/redoc
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: true

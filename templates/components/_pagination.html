@@ -1,0 +1,90 @@
+{# 
+  Reusable Pagination Component
+  
+  Usage: 
+    {% include 'components/_pagination.html' with context %}
+  
+  Required variables:
+    - page: Current page number
+    - total_pages: Total number of pages
+    - total_count: Total number of items
+    - per_page: Items per page
+  
+  Optional:
+    - endpoint: The endpoint to use for links (defaults to current endpoint)
+    - show_archived: Whether to include show_archived in query string
+    - search_query: Search query to preserve
+#}
+
+{% macro render_pagination(page, total_pages, total_count, per_page, endpoint=None, show_archived=False, search_query='') %}
+{% if total_pages > 1 %}
+<nav aria-label="Page navigation" class="pagination-container mt-4">
+  <div class="row align-items-center">
+    <div class="col-md-4 text-muted small">
+      {{ _('Showing %(start)s - %(end)s of %(total)s items', 
+         start=((page-1)*per_page + 1), 
+         end=[page*per_page, total_count]|min,
+         total=total_count) }}
+    </div>
+    <div class="col-md-8">
+      <ul class="pagination justify-content-end mb-0">
+        {# First Page #}
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+          <a class="page-link" href="{{ url_for(endpoint or request.endpoint, page=1, per_page=per_page, show_archived=show_archived, q=search_query) }}" aria-label="First">
+            <i class="fas fa-angle-double-left"></i>
+          </a>
+        </li>
+        
+        {# Previous Page #}
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+          <a class="page-link" href="{{ url_for(endpoint or request.endpoint, page=page-1, per_page=per_page, show_archived=show_archived, q=search_query) }}" aria-label="Previous">
+            <i class="fas fa-angle-left"></i>
+          </a>
+        </li>
+        
+        {# Page Numbers - Show up to 5 pages centered around current #}
+        {% set start_page = [1, page - 2]|max %}
+        {% set end_page = [total_pages, page + 2]|min %}
+        
+        {% if start_page > 1 %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        
+        {% for p in range(start_page, end_page + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for(endpoint or request.endpoint, page=p, per_page=per_page, show_archived=show_archived, q=search_query) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        
+        {% if end_page < total_pages %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        
+        {# Next Page #}
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+          <a class="page-link" href="{{ url_for(endpoint or request.endpoint, page=page+1, per_page=per_page, show_archived=show_archived, q=search_query) }}" aria-label="Next">
+            <i class="fas fa-angle-right"></i>
+          </a>
+        </li>
+        
+        {# Last Page #}
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+          <a class="page-link" href="{{ url_for(endpoint or request.endpoint, page=total_pages, per_page=per_page, show_archived=show_archived, q=search_query) }}" aria-label="Last">
+            <i class="fas fa-angle-double-right"></i>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+{% elif total_count > 0 %}
+<div class="text-muted small mt-3">
+  {{ _('Showing %(total)s items', total=total_count) }}
+</div>
+{% endif %}
+{% endmacro %}
+
+{# Auto-render if variables are available in context #}
+{% if page is defined and total_pages is defined %}
+  {{ render_pagination(page, total_pages, total_count|default(0), per_page|default(25), show_archived=show_archived|default(false), search_query=search_query|default('')) }}
+{% endif %}

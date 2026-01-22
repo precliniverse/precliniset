@@ -1,0 +1,120 @@
+# app/datatables/analysis_utils.py
+import keyword
+import re
+import pandas as pd
+from flask import current_app
+from flask_babel import lazy_gettext
+
+def sanitize_df_columns_for_patsy(df, columns_to_sanitize):
+    renamed_cols = {}
+    sanitized_mapping = {}
+    for col_name in columns_to_sanitize:
+        if col_name not in df.columns:
+            continue
+
+        name_safe_for_formula = col_name.replace(' ', '_')
+        is_valid_identifier = re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*', name_safe_for_formula) is not None
+        is_keyword = keyword.iskeyword(name_safe_for_formula)
+
+        if is_valid_identifier and not is_keyword:
+            if col_name != name_safe_for_formula:
+                renamed_cols[col_name] = name_safe_for_formula
+            sanitized_mapping[col_name] = name_safe_for_formula
+        else:
+            sanitized_mapping[col_name] = col_name
+
+    if renamed_cols:
+        df.rename(columns=renamed_cols, inplace=True)
+    return sanitized_mapping
+
+def quote_name(name):
+    name_safe = name.replace(' ', '_')
+    is_valid_identifier = re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*', name_safe) is not None
+    is_keyword = keyword.iskeyword(name_safe)
+
+    if not is_valid_identifier or is_keyword:
+         escaped_name = name.replace("'", "\\'")
+         return f"Q('{escaped_name}')"
+    else:
+         return name_safe
+
+def detect_outliers(series, method='iqr', threshold=1.5):
+    """Detect outliers using IQR or standard deviation method"""
+    if series.empty or series.nunique() < 2:
+        return pd.Series([False] * len(series), index=series.index)
+    if method == 'iqr':
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        if iqr == 0:
+            return pd.Series([False] * len(series), index=series.index)
+        lower = q1 - threshold * iqr
+        upper = q3 + threshold * iqr
+        return (series < lower) | (series > upper)
+    elif method == 'std':
+        mean = series.mean()
+        std = series.std()
+        if std == 0 or pd.isna(std):
+            return pd.Series([False] * len(series), index=series.index)
+        return (series < mean - threshold*std) | (series > mean + threshold*std)
+    else:
+        current_app.logger.warning(f"Unknown outlier detection method '{method}', defaulting to IQR.")
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        if iqr == 0:
+            return pd.Series([False] * len(series), index=series.index)
+        lower = q1 - threshold * iqr
+        upper = q3 + threshold * iqr
+        return (series < lower) | (series > upper)
+
+def identify_outliers_and_calc_stats(df_group, numerical_cols):
+    """Calculates basic stats and identifies outliers for a dataframe group."""
+    group_stats = {}
+    df_outlier_flags = pd.DataFrame(False, index=df_group.index, columns=numerical_cols)
+    
+    for col in numerical_cols:
+        if col in df_group.columns and pd.api.types.is_numeric_dtype(df_group[col]):
+            series = df_group[col].dropna()
+            if not series.empty:
+                mean = series.mean()
+                sd = series.std() if len(series) > 1 else 0
+                sem = series.sem() if len(series) > 1 else 0
+                count = len(series)
+
+                is_outlier_for_col_series = detect_outliers(series, method='iqr', threshold=1.5)
+                
+                aligned_outlier_mask = pd.Series(False, index=df_group.index)
+                valid_indices = is_outlier_for_col_series.index.intersection(aligned_outlier_mask.index)
+                aligned_outlier_mask.loc[valid_indices] = is_outlier_for_col_series.loc[valid_indices]                
+                df_outlier_flags[col] = aligned_outlier_mask
+
+                q1 = series.quantile(0.25)
+                q3 = series.quantile(0.75)
+                iqr_val = q3 - q1
+                lower_bound_iqr = q1 - 1.5 * iqr_val if pd.notnull(iqr_val) and iqr_val != 0 else None
+                upper_bound_iqr = q3 + 1.5 * iqr_val if pd.notnull(iqr_val) and iqr_val != 0 else None
+
+                group_stats[col] = {
+                    'mean': mean, 'sd': sd, 'sem': sem, 'count': count, 
+                    'lower_bound_iqr': lower_bound_iqr, 'upper_bound_iqr': upper_bound_iqr
+                }
+            else:
+                group_stats[col] = {'mean': None, 'sd': None, 'sem': None, 'count': 0}
+        else:
+            group_stats[col] = {'mean': None, 'sd': None, 'sem': None, 'count': 0}
+            
+    return df_outlier_flags, group_stats
+
+def get_age_range_from_df_view_helper(df_group_local):
+    """Helper to format age range string."""
+    age_range_str_local = lazy_gettext('N/A') 
+    if 'Age (Days)' in df_group_local.columns and not df_group_local['Age (Days)'].isnull().all():
+        min_age = df_group_local['Age (Days)'].min()
+        max_age = df_group_local['Age (Days)'].max()
+        if pd.notnull(min_age) and pd.notnull(max_age):
+            if min_age == max_age:
+                age_range_str_local = f"{int(min_age)} {lazy_gettext('days')}"
+            else:
+                age_range_str_local = f"{int(min_age)} - {int(max_age)} {lazy_gettext('days')}"
+    return age_range_str_local

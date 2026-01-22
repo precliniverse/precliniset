@@ -1,0 +1,36 @@
+{# templates/datatables/analysis/_macros.html #}
+
+{% macro render_stats_table(datatable) %}
+{% if datatable and datatable.rows %}
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-bordered table-hover mb-0">
+        <thead class="table-light">
+            <tr>
+                {% for col in datatable.columns %}
+                <th scope="col" class="text-nowrap">{{ col }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in datatable.rows %}
+            <tr>
+                {% for col in datatable.columns %}
+                <td>
+                    {% set val = row.get(col) %}
+                    {% if val is number %}
+                    {# specialized formatting could go here if needed #}
+                    {{ "%.4f"|format(val) }}
+                    {% else %}
+                    {{ val }}
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-muted fst-italic small p-2">{{ _('No data available') }}</div>
+{% endif %}
+{% endmacro %}

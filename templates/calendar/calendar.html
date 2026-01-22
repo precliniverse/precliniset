@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+    #calendar-container {
+        display: flex;
+        gap: 1rem;
+    }
+
+    #calendar-filters {
+        flex: 0 0 250px;
+    }
+
+    #calendar {
+        flex-grow: 1;
+    }
+
+    .fc-event {
+        cursor: pointer;
+    }
+
+    .fc-event-main {
+        font-size: 0.8em;
+    }
+
+    .fc-daygrid-event {
+        white-space: normal;
+    }
+
+    .fc-event.highlight {
+        border: 2px solid #ffc107;
+        /* Bootstrap warning yellow */
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.7);
+    }
+
+    .fc-event.draft-event {
+        opacity: 0.7;
+        background-image: repeating-linear-gradient(45deg,
+                rgba(255, 255, 255, 0.15),
+                rgba(255, 255, 255, 0.15) 10px,
+                transparent 10px,
+                transparent 20px);
+    }
+
+    .fc-event.unassigned-event {
+        background-color: #dc3545;
+        /* Bootstrap danger red */
+        border-color: #dc3545;
+    }
+
+    /* Corrected class for weekend highlighting */
+    .fc-day-weekend {
+        background-color: #fcf8e3;
+        /* A light yellow */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1>{{ title }}</h1>
+
+    <div id="calendar-container">
+        <div id="calendar-filters">
+            <div class="card">
+                <div class="card-header">{{ _('Filters') }}</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">{{ _('Filter by Assignee') }}</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="filter-select-all">
+                            <label class="form-check-label" for="filter-select-all">
+                                {{ _('Select All') }}
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="filter-unassigned-only">
+                            <label class="form-check-label" for="filter-unassigned-only">
+                                {{ _('Unassigned Only') }}
+                            </label>
+                        </div>
+                        <hr>
+                        <div id="team-members-checkboxes">
+                            <!-- Team members will be loaded here by JavaScript -->
+                        </div>
+                    </div>
+                    {# Future filters can be added here #}
+                </div>
+            </div>
+        </div>
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<!-- Event Move Confirmation Modal -->
+<div class="modal fade" id="eventMoveModal" tabindex="-1" aria-labelledby="eventMoveModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="eventMoveModalLabel">{{ _('Confirm Event Move') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="eventMoveInfo"></p>
+                <div class="mb-3">
+                    <label for="eventMoveComment" class="form-label">{{ _('Comment (Optional)') }}</label>
+                    <textarea id="eventMoveComment" class="form-control" rows="3"
+                        placeholder="{{ _('e.g., Rescheduled due to equipment availability.') }}"></textarea>
+                    <small class="form-text text-muted">{{ _('This comment will be saved in the version history.')
+                        }}</small>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="notifyTeamCheckboxCalendar" checked>
+                    <label class="form-check-label" for="notifyTeamCheckboxCalendar">
+                        {{ _('Notify team members of this change by email') }}
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelMoveBtn">{{ _('Cancel Move') }}</button>
+                <button type="button" class="btn btn-primary" id="confirmMoveBtn">{{ _('Confirm') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://unpkg.com/@popperjs/core@2" nonce="{{ csp_nonce }}"></script>
+<script src="https://unpkg.com/tippy.js@6" nonce="{{ csp_nonce }}"></script>
+
+<!-- Configuration Object for JS -->
+<script type="application/json" id="calendar-config">
+{
+    "initialDate": {{ request.args.get('date') | tojson | safe }},
+    "currentUserId": {{ current_user.id }},
+    "csrfToken": "{{ csrf_token() }}",
+    "urls": {
+        "eventsJson": "{{ url_for('calendar.events_json') }}",
+        "tmEvents": "{{ url_for('calendar.tm_events') }}",
+        "teamMembersJson": "{{ url_for('calendar.team_members_json') }}"
+    },
+    "i18n": {
+        "confirmMoveDt": "{{ _('Are you sure you want to move this ad-hoc DataTable to %s?') }}",
+        "errorUpdateDt": "{{ _('Error updating DataTable:') }}",
+        "unexpectedError": "{{ _('An unexpected error occurred.') }}",
+        "projectedAge": "{{ _('Projected animal age at new date:') }}",
+        "moveEventMsg": {{ _('You are moving the event "<strong>{title}</strong>" by <strong>{days}</strong> day(s).') | tojson | safe }},
+        "confirm": "{{ _('Confirm') }}"
+    }
+}
+</script>
+
+<!-- Load the external JS file -->
+<script src="{{ url_for('static', filename='js/calendar_view.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <style>
+        .summary-row { cursor: pointer; }
+        .summary-row:hover { background-color: #f1f1f1; }
+        .table-active { background-color: #e2e6ea !important; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ title }}</h1>
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <p>
+                <strong>{{ _('Team:') }}</strong> {{ storage.team.name }}<br>
+                <strong>{{ _('Capacity:') }}</strong> {{ storage.capacity if storage.capacity else _('N/A') }}<br>
+                <strong>{{ _('Location Details:') }}</strong> {{ storage.location_details if storage.location_details else _('N/A') }}
+            </p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('storage.manage_storages') }}" class="btn btn-secondary btn-sm mb-2"><i class="fas fa-arrow-left"></i> {{ _('Back to List') }}</a>
+            {% if current_user.is_super_admin or user_has_permission(current_user, 'Storage', 'edit', team_id=storage.team_id) %}
+            <a href="{{ url_for('storage.edit_storage', storage_id=storage.id) }}" class="btn btn-primary btn-sm mb-2"><i class="fas fa-edit"></i> {{ _('Edit') }}</a>
+            {% endif %}
+            <a href="{{ url_for('storage.download_inventory', storage_id=storage.id) }}" class="btn btn-success btn-sm mb-2"><i class="fas fa-download"></i> {{ _('Download Inventory') }}</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Summary Panel -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">{{ _('Contents Summary') }}</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if grouped_samples_data %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ _('Project') }}</th>
+                                    <th>{{ _('Type') }}</th>
+                                    <th class="text-end">{{ _('Count') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in grouped_samples_data %}
+                                <tr class="summary-row" data-project-slug="{{ item.project_slug }}" data-sample-type="{{ item.sample_type_enum }}">
+                                    <td>{{ item.project_name }}</td>
+                                    <td>{{ item.sample_type }}</td>
+                                    <td class="text-end"><span class="badge bg-secondary rounded-pill">{{ item.count }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-3 text-muted text-center">{{ _('Storage is empty.') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main List Panel -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                    <h5 class="mb-0">{{ _('Stored Samples') }}</h5>
+                    <div class="d-flex gap-2">
+                        <select id="projectFilter" class="form-select form-select-sm" style="width: 200px;">
+                            <option value="">{{ _('All Projects') }}</option>
+                            {% for p_name, p_slug in projects %}
+                                <option value="{{ p_slug }}">{{ p_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button id="resetFiltersBtn" class="btn btn-sm btn-outline-secondary">{{ _('Reset') }}</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <table id="storageSamplesTable" class="table table-sm table-striped table-hover w-100" style="font-size: 0.85rem;">
+                        <thead>
+                            <tr>
+                                <th>{{ _('ID') }}</th>
+                                <th>{{ _('Animal') }}</th>
+                                <th>{{ _('Type') }}</th>
+                                <th>{{ _('Details') }}</th>
+                                <th>{{ _('Date') }}</th>
+                                <th>{{ _('Notes') }}</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- Configuration Object for JS -->
+<script type="application/json" id="storage-view-config">
+{
+    "storageId": {{ storage.id }},
+    "urls": {
+        "serverSideData": "{{ url_for('sampling.samples_server_side') }}"
+    },
+    "i18n": {
+        "searchPlaceholder": "{{ _('Search samples...') }}",
+        "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+        "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+        "first": "{{ _('First') }}",
+        "last": "{{ _('Last') }}",
+        "next": "{{ _('Next') }}",
+        "previous": "{{ _('Previous') }}"
+    }
+}
+</script>
+
+<!-- Load the external JS file -->
+<script src="{{ url_for('static', filename='js/storage_view.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

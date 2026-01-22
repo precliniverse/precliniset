@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">{{ _('Usage for Staining: %(staining_name)s', staining_name=staining.name) }}</h1>
+    <a href="{{ url_for('resources.manage_stainings') }}" class="btn btn-secondary mb-3">← {{ _('Back to Stainings') }}</a>
+
+    <div class="row">
+        <div class="col-md-12">
+            <h2>{{ _('Samples') }}</h2>
+            {% if samples %}
+                <ul class="list-group">
+                    {% for sample in samples %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('sampling.view_edit_sample', sample_id=sample.id) }}">{{ sample.display_id or sample.id }} ({{ sample.sample_type.value }})</a>
+                            <span>
+                                {% if sample.experimental_group %}
+                                    {{ _('Group:') }} <a href="{{ url_for('groups.edit_group', group_id=sample.experimental_group.id) }}">{{ sample.experimental_group.name }}</a>
+                                {% endif %}
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{{ _('This staining is not used by any samples.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

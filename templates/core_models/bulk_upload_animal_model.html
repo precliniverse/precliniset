@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Bulk Upload Animal Models') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Bulk Upload Animal Models from XLSX') }}</h1>
+    <p>
+        {{ _('Use this tool to create multiple animal models and link analytes in a single operation.') }}
+        <a href="{{ url_for('core_models.download_animal_model_template') }}">{{ _('Download the template here.') }}</a>
+    </p>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ render_field(form.file) }}
+                </div>
+                {{ form.submit_upload(class="btn btn-primary") }}
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

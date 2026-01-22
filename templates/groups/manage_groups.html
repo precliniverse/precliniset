@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% from "components/project_sidebar.html" import project_sidebar with context %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="row">
+        <!-- Left Sidebar -->
+        <div class="col-md-3 col-lg-2 d-none d-md-block px-1">
+            {{ project_sidebar(sidebar_data) }}
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 id="page-title">{{ _('All Experimental Groups') }}</h2>
+                <a href="{{ url_for('groups.edit_group') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>{{
+                    _('Create New Group') }}</a>
+            </div>
+
+            <!-- Filters Toolbar -->
+            <div class="row mb-3">
+                <div class="col-md-auto">
+                    <select class="form-select filter-input" id="team_filter">
+                        <option value="">{{ _('All Teams') }}</option>
+                        {% for team in user_teams %}
+                        <option value="{{ team.id }}">{{ team.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <select class="form-select filter-input" id="model_filter">
+                        <option value="">{{ _('All Models') }}</option>
+                        {% for model in animal_models %}
+                        <option value="{{ model.id }}">{{ model.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <select class="form-select filter-input" id="status_filter">
+                        <option value="false">{{ _('Active Only') }}</option>
+                        <option value="all">{{ _('All Statuses') }}</option>
+                        <option value="true">{{ _('Archived Only') }}</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Batch Actions Toolbar -->
+            <div id="batchActions" class="alert alert-info py-2 shadow-sm" style="display:none;">
+                <span id="selectedCount" class="fw-bold">0</span> {{ _('groups selected.') }}
+                <div class="btn-group btn-group-sm ms-3">
+                    <button type="button" class="btn btn-warning" id="actionArchiveSelected"><i
+                            class="fas fa-archive me-1"></i>{{ _('Archive') }}</button>
+                    <button type="button" class="btn btn-info" id="actionUnarchiveSelected"><i
+                            class="fas fa-box-open me-1"></i>{{ _('Unarchive') }}</button>
+                    <button type="button" class="btn btn-danger" id="actionDeleteSelected"><i
+                            class="fas fa-trash me-1"></i>{{ _('Delete') }}</button>
+                </div>
+                <div id="selectAllBanner" class="mt-2 small" style="display:none;">
+                    <span id="selectAllMessage"></span>
+                    <a href="#" id="selectAllMatchingBtn" class="fw-bold">{{ _('Select all matching') }}</a>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table class="table table-hover table-striped mb-0" id="groupsServerTable" style="width:100%;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 20px;"><input type="checkbox" id="selectAllServer"
+                                        class="form-check-input"></th>
+                                <th>{{ _('Group Name') }}</th>
+                                <th>{{ _('Project') }}</th>
+                                <th>{{ _('Team') }}</th>
+                                <th>{{ _('Model') }}</th>
+                                <th>{{ _('Animals') }}</th>
+                                <th>{{ _('Status') }}</th>
+                                <th class="text-end">{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'components/_declare_death_modal.html' %}
+
+{# Config #}
+<script id="groups-list-config" type="application/json">
+    {
+        "urls": {
+            "serverSideData": "{{ url_for('api.server_side_groups_server_side_group_list') }}",
+            "batchArchive": "{{ url_for('groups.batch_archive_groups') }}",
+            "batchUnarchive": "{{ url_for('groups.batch_unarchive_groups') }}",
+            "batchDelete": "{{ url_for('groups.batch_delete_groups') }}"
+        },
+        "i18n": {
+            "searchPlaceholder": "{{ _('Search groups...') }}",
+            "lengthMenu": "{{ _('Show _MENU_ groups') }}",
+            "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+            "first": "{{ _('First') }}",
+            "last": "{{ _('Last') }}",
+            "next": "{{ _('Next') }}",
+            "previous": "{{ _('Previous') }}",
+            "allPageSelected": "{{ _('All %s entries on this page are selected.') }}",
+            "allMatchingSelected": "{{ _('All %s matching entries are selected.') }}",
+            "selectAllMatching": "{{ _('Select all %s matching') }}",
+            "clearSelection": "{{ _('Clear selection') }}",
+            "noGroupsSelected": "{{ _('Please select at least one group.') }}",
+            "confirmArchive": "{{ _('Are you sure you want to archive this group?') }}",
+            "confirmUnarchive": "{{ _('Are you sure you want to unarchive this group?') }}",
+            "confirmDelete": "{{ _('Are you sure you want to delete this group?') }}",
+            "confirmDeleteBatch": "{{ _('Are you sure you want to delete the selected groups? This action cannot be undone.') }}",
+            "generalError": "{{ _('An error occurred. Please try again.') }}"
+        },
+        "csrfToken": "{{ csrf_token() }}"
+    }
+</script>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/groups_list.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

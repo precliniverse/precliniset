@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ _('Precliniset Test Email') }}</title>
+    <style>
+        /* Basic styling for email clients */
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+            border-radius: 5px;
+        }
+        .header {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0d6efd; /* A blue color similar to your app's theme */
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #777777;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            {{ _('Precliniset Test Email') }}
+        </div>
+        <p>
+            {{ _('Hello,') }}
+        </p>
+        <p>
+            {{ _('This is a test email sent from your Precliniset application to verify that the SMTP settings are configured correctly.') }}
+        </p>
+        <p>
+            {{ _('If you have received this, your email configuration is working!') }}
+        </p>
+        <div class="footer">
+            {{ _('This is an automated message from your Precliniset instance.') }}
+        </div>
+    </div>
+</body>
+</html>

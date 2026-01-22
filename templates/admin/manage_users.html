@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+{% block title %}Manage Users{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <style>
+        .table th, .table td { vertical-align: middle; }
+        .actions-column { width: 180px; text-align: center; }
+        .checkbox-column { width: 40px; text-align: center; }
+        .action-btn-group .btn { margin-right: 5px; }
+        .action-btn-group .btn:last-child { margin-right: 0; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h1>Manage Users</h1>
+
+    <!-- Invite New User Form -->
+    <div class="card p-3 mb-4 shadow-sm">
+        <div class="card-header">
+            <h5>Invite New User</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.manage_users') }}" novalidate>
+                {{ invite_form.csrf_token }}
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        {{ invite_form.email.label(class="form-label") }}
+                        {{ invite_form.email(class="form-control form-control-sm", placeholder="Enter user's email") }}
+                        {% if invite_form.email.errors %}
+                            <div class="invalid-feedback d-block">\
+                                {% for error in invite_form.email.errors %}{{ error }}{% endfor %}\
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        {{ invite_form.team_id.label(class="form-label") }}
+                        {{ invite_form.team_id(class="form-select form-select-sm") }}
+                        {% if invite_form.team_id.errors %}
+                            <div class="invalid-feedback d-block">\
+                                {% for error in invite_form.team_id.errors %}{{ error }}{% endfor %}\
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-2">
+                        {{ invite_form.role_id.label(class="form-label") }}
+                        {{ invite_form.role_id(class="form-select form-select-sm") }}
+                        {% if invite_form.role_id.errors %}
+                            <div class="invalid-feedback d-block">\
+                                {% for error in invite_form.role_id.errors %}{{ error }}{% endfor %}\
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-2">
+                        {{ invite_form.submit_invite_member(class="btn btn-success btn-sm w-100") }}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+
+    <!-- Global Search Input -->
+    <div class="mb-3">
+        <input type="text" class="form-control" id="globalSearchInput" placeholder="Search users (email, status, teams)">
+    </div>
+
+    <!-- Batch Actions and User Table Form -->
+    <form method="POST" action="{{ url_for('admin.batch_update_users') }}" id="batch-actions-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>User List</span>
+                <div id="batch-actions-container" style="display: none;">
+                    <div class="input-group input-group-sm">
+                        <select class="form-select" name="batch_action" id="batch-action-select" required>
+                            <option value="" selected disabled>-- Select Action --</option>
+                            <option value="activate">Activate Selected</option>
+                            <option value="deactivate">Deactivate Selected</option>
+                            <option value="validate">Validate Email for Selected</option>
+                            <optgroup label="Add to Team">
+                                {% for team in all_teams %}
+                                    <option value="add_to_team_{{ team.id }}">{{ team.name }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            <option value="delete">Delete Selected</option>
+                        </select>
+                        <button class="btn btn-secondary" type="submit" id="batch-action-submit">Apply</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="checkbox-column"><input type="checkbox" id="select-all-users"></th>
+                                <th data-sort-column="email" data-sort-type="text">Email <i class="bi bi-arrow-down-up"></i></th>
+                                <th data-sort-column="status" data-sort-type="status">Status <i class="bi bi-arrow-down-up"></i></th>
+                                <th data-sort-column="teams" data-sort-type="text">Teams <i class="bi bi-arrow-down-up"></i></th>
+                                <th class="actions-column">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                                <tr>
+                                    <td class="checkbox-column"><input type="checkbox" name="user_ids" value="{{ user.id }}" class="user-checkbox"></td>
+                                    <td>{{ user.email }}</td>
+                                    <td>
+                                        {% if user.is_active %}
+                                            <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="bi bi-slash-circle-fill me-1"></i>Inactive</span>
+                                        {% endif %}
+                                        {% if not user.email_confirmed %}
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>Not Confirmed</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% for membership in user.memberships %}
+                                            <a href="{{ url_for('admin.manage_team_members', team_id=membership.team.id) }}" class="badge bg-info text-dark me-1 mb-1 text-decoration-none">
+                                                {{ membership.team.name }}
+                                            </a>
+                                        {% else %}
+                                            <span class="text-muted small"><em>No teams</em></span>
+                                        {% endfor %}
+                                    </td>
+                                    <td class="actions-column">
+                                        <div class="action-btn-group">
+                                            <!-- Add to Team -->
+                                            <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#addToTeamModal-{{ user.id }}" title="Add to Team"><i class="bi bi-plus-circle"></i></button>
+
+                                            <!-- Activate/Deactivate Toggle -->
+                                            {% if user.is_active %}
+                                                <button type="submit" form="form-deactivate-{{ user.id }}" class="btn btn-outline-secondary btn-sm" title="Deactivate User"><i class="bi bi-person-fill-slash"></i></button>
+                                            {% else %}
+                                                <button type="submit" form="form-activate-{{ user.id }}" class="btn btn-outline-success btn-sm" title="Activate User"><i class="bi bi-person-fill-check"></i></button>
+                                            {% endif %}
+
+                                            <!-- Validate Email -->
+                                            {% if not user.email_confirmed %}
+                                                <button type="submit" form="form-validate-{{ user.id }}" class="btn btn-outline-info btn-sm" title="Validate Email"><i class="bi bi-envelope-check-fill"></i></button>
+                                            {% endif %}
+
+                                            <!-- Delete User -->
+                                            <button type="button" class="btn btn-outline-danger btn-sm confirm-user-delete-btn" data-user-email="{{ user.email }}" data-form-id="form-delete-{{ user.id }}" title="Delete User"><i class="bi bi-trash3-fill"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">No users found matching your criteria.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- Hidden forms for single-user actions -->
+    {% for user in users %}
+        <form id="form-activate-{{ user.id }}" method="POST" action="{{ url_for('admin.update_user', user_id=user.id) }}" class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="activate"></form>
+        <form id="form-deactivate-{{ user.id }}" method="POST" action="{{ url_for('admin.update_user', user_id=user.id) }}" class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="deactivate"></form>
+        <form id="form-validate-{{ user.id }}" method="POST" action="{{ url_for('admin.update_user', user_id=user.id) }}" class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="validate"></form>
+        <form id="form-delete-{{ user.id }}" method="POST" action="{{ url_for('admin.update_user', user_id=user.id) }}" class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete"></form>
+    {% endfor %}
+
+    <!-- Modals for "Add to Team" -->
+    {% for user in users %}
+    <div class="modal fade" id="addToTeamModal-{{ user.id }}" tabindex="-1" aria-labelledby="addToTeamModalLabel-{{ user.id }}" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addToTeamModalLabel-{{ user.id }}">Add {{ user.email }} to a Team</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST" action="{{ url_for('admin.add_user_to_team', user_id=user.id) }}">
+                    <div class="modal-body">
+                        {{ add_to_team_form.hidden_tag() }}
+                        {{ render_field(add_to_team_form.team, class="form-select") }}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        {{ add_to_team_form.submit_add_user(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+const allRoles = {{ all_roles | tojson | safe }};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAllCheckbox = document.getElementById('select-all-users');
+    const userCheckboxes = document.querySelectorAll('.user-checkbox');
+    const batchActionsContainer = document.getElementById('batch-actions-container');
+    const batchActionSubmit = document.getElementById('batch-action-submit');
+    const batchActionSelect = document.getElementById('batch-action-select');
+
+    // Global Search element
+    const globalSearchInput = document.getElementById('globalSearchInput');
+    const userTableBody = document.querySelector('.table tbody');
+    const userTableRows = userTableBody ? Array.from(userTableBody.querySelectorAll('tr')) : [];
+
+    let sortColumn = null;
+    let sortDirection = 'asc'; // 'asc' or 'desc'
+
+    function toggleBatchActions() {
+        const anyChecked = document.querySelectorAll('.user-checkbox:checked').length > 0;
+        batchActionsContainer.style.display = anyChecked ? 'flex' : 'none';
+
+        const actionSelected = batchActionSelect.value !== "";
+        batchActionSubmit.disabled = !(anyChecked && actionSelected);
+    }
+
+    function applyFiltersAndSort() {
+        const searchTerm = globalSearchInput ? globalSearchInput.value.toLowerCase() : '';
+
+        userTableRows.forEach(row => {
+            const emailCell = row.children[1] ? row.children[1].textContent.toLowerCase() : '';
+            const statusCell = row.children[2] ? row.children[2].textContent.toLowerCase() : '';
+            const teamsCell = row.children[3] ? row.children[3].textContent.toLowerCase() : '';
+
+            const rowText = `${emailCell} ${statusCell} ${teamsCell}`;
+            const match = rowText.includes(searchTerm);
+
+            if (match) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // After filtering, apply sorting
+        if (sortColumn) {
+            sortTable(sortColumn, sortDirection);
+        }
+    }
+
+    function sortTable(column, direction) {
+        const sortedRows = [...userTableRows];
+
+        sortedRows.sort((a, b) => {
+            let aValue, bValue;
+
+            if (column === 'email') {
+                aValue = a.children[1] ? a.children[1].textContent.toLowerCase() : '';
+                bValue = b.children[1] ? b.children[1].textContent.toLowerCase() : '';
+            } else if (column === 'status') {
+                // Custom sort for status: Active > Not Confirmed > Inactive
+                const getStatusRank = (statusText) => {
+                    if (statusText.includes('active')) return 3;
+                    if (statusText.includes('not confirmed')) return 2;
+                    if (statusText.includes('inactive')) return 1;
+                    return 0; // Fallback
+                };
+                aValue = getStatusRank(a.children[2] ? a.children[2].textContent.toLowerCase() : '');
+                bValue = getStatusRank(b.children[2] ? b.children[2].textContent.toLowerCase() : '');
+            } else if (column === 'teams') {
+                aValue = a.children[3] ? a.children[3].textContent.toLowerCase() : '';
+                bValue = b.children[3] ? b.children[3].textContent.toLowerCase() : '';
+            }
+
+            if (aValue < bValue) {
+                return direction === 'asc' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
+
+        // Clear existing rows and append sorted ones
+        if (userTableBody) {
+            while (userTableBody.firstChild) {
+                userTableBody.removeChild(userTableBody.firstChild);
+            }
+            sortedRows.forEach(row => userTableBody.appendChild(row));
+        }
+    }
+
+    // Event listener for global search input
+    if (globalSearchInput) globalSearchInput.addEventListener('input', applyFiltersAndSort);
+
+    // Event listeners for sorting
+    document.querySelectorAll('.table th[data-sort-column]').forEach(header => {
+        header.style.cursor = 'pointer'; // Indicate sortable
+        header.addEventListener('click', function() {
+            const column = this.dataset.sortColumn;
+            const currentDirection = this.dataset.sortDirection || 'asc';
+            const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+
+            // Reset arrows for all headers
+            document.querySelectorAll('.table th[data-sort-column] i').forEach(icon => {
+                icon.className = 'bi bi-arrow-down-up';
+            });
+
+            // Update clicked header's arrow
+            const icon = this.querySelector('i');
+            if (icon) {
+                icon.className = newDirection === 'asc' ? 'bi bi-arrow-up' : 'bi bi-arrow-down';
+            }
+
+            this.dataset.sortDirection = newDirection;
+            sortColumn = column;
+            sortDirection = newDirection;
+            applyFiltersAndSort(); // Re-apply filters and then sort
+        });
+    });
+
+    selectAllCheckbox.addEventListener('change', function() {
+        userCheckboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+        toggleBatchActions();
+    });
+
+    userCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (!this.checked) {
+                selectAllCheckbox.checked = false;
+            } else {
+                if (document.querySelectorAll('.user-checkbox:not(:checked)').length === 0) {
+                    selectAllCheckbox.checked = true;
+                }
+            }
+            toggleBatchActions();
+        });
+    });
+    
+    batchActionSelect.addEventListener('change', toggleBatchActions);
+
+    // Role filtering for invite form
+    const teamSelect = document.querySelector('select[name="team_id"]');
+    const roleSelect = document.querySelector('select[name="role_id"]');
+    if (teamSelect && roleSelect && allRoles) {
+        function updateRoles() {
+            const teamId = teamSelect.value;
+            roleSelect.innerHTML = '<option value="">-- Select Role --</option>';
+            allRoles.forEach(function(role) {
+                if (role.team_id == null || parseInt(role.team_id) === parseInt(teamId)) {
+                    const option = new Option(role.name, role.id);
+                    roleSelect.appendChild(option);
+                }
+            });
+        }
+        teamSelect.addEventListener('change', updateRoles);
+        // Initial population (empty if no team)
+        updateRoles();
+    }
+
+    document.getElementById('batch-actions-form').addEventListener('submit', function(event) {
+        if (batchActionSelect.value === "") {
+            alert("Please select a batch action.");
+            event.preventDefault();
+            return;
+        }
+        if (batchActionSelect.value === "delete") {
+            if (!confirm("DANGER! Are you sure you want to DELETE all selected users? This action cannot be undone.")) {
+                event.preventDefault();
+            }
+        }
+    });
+
+    document.querySelectorAll('.confirm-user-delete-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const userEmail = this.dataset.userEmail;
+            const formId = this.getAttribute('data-form-id');
+            const message = `DANGER! Are you absolutely sure you want to DELETE this user: ${userEmail}? This action cannot be undone.`;
+            if (confirm(message)) {
+                document.getElementById(formId).submit();
+            }
+        });
+    });
+
+    // Initial call to apply filters and sorting on page load
+    applyFiltersAndSort();
+    toggleBatchActions();
+});
+</script>
+{% endblock %}

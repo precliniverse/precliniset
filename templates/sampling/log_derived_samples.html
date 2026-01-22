@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Create Derived Samples') }}{% endblock %}
+
+{% block head_extra %}
+    {{ super() }}
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <style>
+        .form-section-title {
+            background-color: #e9ecef;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0.25rem;
+            font-weight: bold;
+        }
+        .derivation-plan-entry {
+            border-bottom: 1px solid #dee2e6;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+        }
+        .derivation-plan-entry:last-child {
+            border-bottom: none;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ _('Create Derived Samples') }}</h2>
+        <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> {{ _('Back to Group Samples') }}
+        </a>
+    </div>
+
+    <p class="text-muted">{{ _('Define a derivation plan that will be applied to ALL selected parent samples.') }}</p>
+
+    <div class="form-section-title mt-4">{{ _('Parent Samples') }}</div>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>{{ _('Parent Sample ID') }}</th>
+                    <th>{{ _('Animal ID') }}</th>
+                    <th>{{ _('Type') }}</th>
+                    <th>{{ _('Organ') }}</th>
+                    <th>{{ _('Available Volume') }}</th>
+                    <th>{{ _('Status') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for parent_sample in parent_samples %}
+                <tr data-parent-id="{{ parent_sample.id }}" data-parent-volume="{{ parent_sample.volume or '' }}" data-parent-unit="{{ parent_sample.volume_unit or '' }}">
+                    <td>{{ parent_sample.display_id or parent_sample.id }}</td>
+                    <td>{{ parent_sample.animal_display_id }}</td>
+                    <td>{{ parent_sample.sample_type.value }}</td>
+                    <td>{{ parent_sample.organ.name if parent_sample.organ else 'N/A' }}</td>
+                    <td class="available-volume">{{ parent_sample.volume or 'N/A' }} {{ parent_sample.volume_unit or '' }}</td>
+                    <td><span class="badge bg-info">{{ parent_sample.status.value }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <form id="derivedSampleForm">
+        {{ form.csrf_token }}
+
+        <div class="form-section-title mt-4">{{ _('Common Details for ALL New Derived Samples') }}</div>
+        <div class="row mb-3">
+            <div class="col-md-4">
+                {{ form.collection_date.label(class="form-label form-label-sm") }}
+                {{ form.collection_date(class="form-control form-control-sm") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.default_storage_id.label(class="form-label form-label-sm") }}
+                {{ form.default_storage_id(class="form-select form-select-sm") }}
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check form-switch">
+                    {{ form.is_terminal_event(class="form-check-input") }}
+                    {{ form.is_terminal_event.label(class="form-check-label") }}
+                </div>
+            </div>
+        </div>
+        <div class="mb-3">
+            {{ form.event_notes.label(class="form-label form-label-sm") }}
+            {{ form.event_notes(class="form-control form-control-sm", rows=2) }}
+        </div>
+
+        <div class="form-section-title mt-5">{{ _('Derivation Plan') }}</div>
+        <div id="derivation-plan-container" class="p-3 border rounded">
+            {# Derivation plan entries will be added here by JavaScript #}
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-3" id="addDerivationToPlanBtn">
+            <i class="fas fa-plus"></i> {{ _('Add to Derivation Plan') }}
+        </button>
+
+        <div class="mt-4 pt-3 border-top">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="updateParentStatus" name="update_parent_status">
+                <label class="form-check-label" for="updateParentStatus">{{ _("Mark parent sample(s) as 'Used for Derivation'") }}</label>
+            </div>
+            <button type="button" class="btn btn-primary btn-lg" id="submitDerivedSamplesBtn">
+                <i class="fas fa-save"></i> {{ _('Create All Derived Samples') }}
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Template for a single derivation plan entry -->
+<template id="derivation-plan-template">
+    <div class="derivation-plan-entry">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <label class="form-label form-label-sm">{{ _('Derived Type') }}</label>
+                <select name="derived_type_id" class="form-select form-select-sm derived-type-select" required></select>
+            </div>
+            <div class="col-md-2 volume-field" style="display: none;">
+                <label class="form-label form-label-sm">{{ _('Volume') }}</label>
+                <input type="number" step="any" name="volume" class="form-control form-control-sm volume-input">
+            </div>
+            <div class="col-md-2 staining-field" style="display: none;">
+                <label class="form-label form-label-sm">{{ _('Staining') }}</label>
+                <select name="staining_id" class="form-select form-select-sm staining-select">
+                    <option value="">{{ _('None') }}</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label form-label-sm">{{ _('Quantity') }}</label>
+                <input type="number" name="quantity" class="form-control form-control-sm" value="1" min="1" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label form-label-sm">{{ _('Storage') }}</label>
+                <select name="storage_id" class="form-select form-select-sm storage-select">
+                    <option value="">{{ _('Use Default') }}</option>
+                </select>
+            </div>
+            <div class="col-md-1 text-end">
+                <label class="form-label form-label-sm d-block"> </label>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-derivation-btn" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="col-12">
+                <label class="form-label form-label-sm">{{ _('Notes') }}</label>
+                <textarea name="notes" class="form-control form-control-sm" rows="1"></textarea>
+            </div>
+        </div>
+    </div>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    const storageLocations = JSON.parse('{{ storage_locations_json | safe }}');
+    const derivationOptions = JSON.parse('{{ derivation_options_json | safe }}');
+    const stainingOptions = JSON.parse('{{ staining_options_json | safe }}');
+    const parentSampleType = "{{ parent_samples[0].sample_type.name if parent_samples else '' }}";
+
+    function initializeSelect2(element, placeholder) {
+        $(element).select2({
+            theme: "bootstrap-5",
+            placeholder: placeholder,
+            width: '100%',
+            allowClear: true
+        });
+    }
+
+    function addDerivationToPlan() {
+        const planContainer = document.getElementById('derivation-plan-container');
+        const template = document.getElementById('derivation-plan-template');
+        const clone = template.content.cloneNode(true);
+        const derivationEntry = clone.querySelector('.derivation-plan-entry');
+
+        const derivedTypeSelect = derivationEntry.querySelector('.derived-type-select');
+        derivedTypeSelect.innerHTML = '<option value="">{{ _("Select Type") }}</option>';
+        if (derivationOptions[parentSampleType]) {
+            derivationOptions[parentSampleType].forEach(opt => {
+                derivedTypeSelect.innerHTML += `<option value="${opt.id}">${opt.name}</option>`;
+            });
+        }
+
+        const storageSelect = derivationEntry.querySelector('.storage-select');
+        storageLocations.forEach(loc => {
+            storageSelect.innerHTML += `<option value="${loc.id}">${loc.text}</option>`;
+        });
+
+        const stainingSelect = derivationEntry.querySelector('.staining-select');
+        stainingOptions.forEach(opt => {
+            stainingSelect.innerHTML += `<option value="${opt.id}">${opt.name}</option>`;
+        });
+
+        derivationEntry.querySelector('.remove-derivation-btn').addEventListener('click', () => {
+            derivationEntry.remove();
+            updateAllVolumeChecks();
+        });
+
+        derivedTypeSelect.addEventListener('change', function() {
+            const selectedTypeName = $(this).find('option:selected').text();
+            const volumeField = derivationEntry.querySelector('.volume-field');
+            const stainingField = derivationEntry.querySelector('.staining-field');
+            
+            volumeField.style.display = (parentSampleType === 'BLOOD' || parentSampleType === 'URINE') ? 'block' : 'none';
+            stainingField.style.display = (parentSampleType === 'BIOLOGICAL_TISSUE') ? 'block' : 'none';
+        });
+
+        derivationEntry.querySelector('.volume-input').addEventListener('input', updateAllVolumeChecks);
+        derivationEntry.querySelector('input[name="quantity"]').addEventListener('input', updateAllVolumeChecks);
+
+        planContainer.appendChild(derivationEntry);
+        initializeSelect2(derivationEntry.querySelector('.derived-type-select'), '{{ _("Select Derived Type") }}');
+        initializeSelect2(derivationEntry.querySelector('.storage-select'), '{{ _("Select Storage") }}');
+        initializeSelect2(derivationEntry.querySelector('.staining-select'), '{{ _("Select Staining") }}');
+    }
+
+    function updateAllVolumeChecks() {
+        let totalRequiredVolume = 0;
+        document.querySelectorAll('.derivation-plan-entry').forEach(entry => {
+            const volume = parseFloat(entry.querySelector('.volume-input').value || 0);
+            const quantity = parseInt(entry.querySelector('input[name="quantity"]').value || 1);
+            totalRequiredVolume += volume * quantity;
+        });
+
+        document.querySelectorAll('tr[data-parent-id]').forEach(parentRow => {
+            const availableVolumeSpan = parentRow.querySelector('.available-volume');
+            const parentVolume = parseFloat(parentRow.dataset.parentVolume);
+            if (isNaN(parentVolume)) return;
+
+            if (totalRequiredVolume > parentVolume) {
+                availableVolumeSpan.classList.add('text-danger', 'fw-bold');
+            } else {
+                availableVolumeSpan.classList.remove('text-danger', 'fw-bold');
+            }
+        });
+    }
+
+    document.getElementById('addDerivationToPlanBtn').addEventListener('click', addDerivationToPlan);
+
+    document.getElementById('submitDerivedSamplesBtn').addEventListener('click', function() {
+        const payload = {
+            common_details: {
+                collection_date: document.querySelector('[name="common-collection_date"]').value,
+                is_terminal_event: document.querySelector('[name="common-is_terminal_event"]').checked,
+                default_storage_id: document.querySelector('[name="common-default_storage_id"]').value || null,
+                event_notes: document.querySelector('[name="common-event_notes"]').value
+            },
+            derivation_plan: [],
+            parent_sample_ids: {{ parent_samples | map(attribute='id') | list | tojson | safe }},
+            update_parent_status: document.getElementById('updateParentStatus').checked
+        };
+
+        let isValid = true;
+        document.querySelectorAll('.derivation-plan-entry').forEach(entry => {
+            const derivedTypeId = entry.querySelector('.derived-type-select').value;
+            if (!derivedTypeId) {
+                alert("{{ _('Please select a derived type for all entries in the plan.') }}");
+                isValid = false;
+                return;
+            }
+            payload.derivation_plan.push({
+                derived_type_id: derivedTypeId,
+                storage_id: entry.querySelector('.storage-select').value || null,
+                volume: entry.querySelector('.volume-input').value || null,
+                staining_id: entry.querySelector('.staining-select').value || null,
+                notes: entry.querySelector('textarea[name="notes"]').value,
+                quantity: parseInt(entry.querySelector('input[name="quantity"]').value || 1)
+            });
+        });
+
+        if (!isValid) return;
+
+        if (payload.derivation_plan.length === 0) {
+            alert("{{ _('Please add at least one item to the derivation plan.') }}");
+            return;
+        }
+
+        fetch("{{ url_for('sampling.log_derived_samples', group_id=group.id) }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ form.csrf_token._value() }}'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = "{{ url_for('sampling.list_group_samples', group_id=group.id) }}";
+            } else {
+                let errorMessage = data.message || "{{ _('An unknown error occurred.') }}";
+                if (data.errors) {
+                    errorMessage += "\n\n" + data.errors.join("\n");
+                }
+                alert(errorMessage);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert("{{ _('A network error occurred. Please try again.') }}");
+        });
+    });
+
+    // Initialize Select2 for the common storage dropdown
+    initializeSelect2('#default_storage_id', '{{ _("Select Default Storage") }}');
+});
+</script>
+{% endblock %}

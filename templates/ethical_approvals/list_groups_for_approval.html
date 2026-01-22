@@ -1,0 +1,156 @@
+{# templates/ethical_approvals/list_groups_for_approval.html #}
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<p>
+    <strong>{{ _('Approval Title:') }}</strong> {{ approval.title }}<br>
+    <strong>{{ _('Reference:') }}</strong> {{ approval.reference_number }}<br>
+    <strong>{{ _('Period:') }}</strong> {{ approval.start_date.strftime('%Y-%m-%d') }} - {{
+    approval.end_date.strftime('%Y-%m-%d') }}<br>
+    <strong>{{ _('Severity:') }}</strong> {{ approval.overall_severity.value }}
+</p>
+
+<a href="{{ url_for('ethical_approvals.list_ethical_approvals') }}" class="btn btn-secondary mb-3">
+    <i class="fas fa-arrow-left"></i> {{ _('Back to All Ethical Approvals') }}
+</a>
+<a href="{{ url_for('ethical_approvals.export_animals_for_ethical_approval', ethical_approval_id=approval.id) }}" class="btn btn-success mb-3">
+    <i class="fas fa-download"></i> {{ _('Export Animals List') }}
+</a>
+
+<!-- Statistics Panel -->
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">{{ _('Animal Usage Statistics') }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>{{ _('Overall Usage') }}</h6>
+                {% set usage_percentage = (stats.total_used / stats.total_allowed * 100) if stats.total_allowed > 0 else
+                0 %}
+                <div class="progress mb-2" style="height: 25px;">
+                    <div class="progress-bar {{ 'bg-danger' if usage_percentage > 100 else 'bg-success' }}"
+                        role="progressbar" style="width: {{ [usage_percentage, 100]|min }}%;"
+                        aria-valuenow="{{ usage_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                        {{ "%.1f"|format(usage_percentage) }}%
+                    </div>
+                </div>
+                <p class="mb-0">
+                    <strong>{{ stats.total_used }}</strong> {{ _('animals used out of') }}
+                    <strong>{{ stats.total_allowed }}</strong> {{ _('allowed.') }}
+                </p>
+                {% if stats.total_used > stats.total_allowed %}
+                <div class="alert alert-danger mt-2 py-1 px-2 d-inline-block">
+                    <i class="fas fa-exclamation-triangle"></i> {{ _('Quota Exceeded!') }}
+                </div>
+                {% endif %}
+            </div>
+            <div class="col-md-6 border-start">
+                <h6>{{ _('Annual Breakdown') }}</h6>
+                <small class="text-muted d-block mb-2">{{ _('(Animals counted in the year of their first procedure)')
+                    }}</small>
+                <table class="table table-sm table-bordered w-auto mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{ _('Year') }}</th>
+                            <th class="text-center">{{ _('Count') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for year, count in stats.yearly_breakdown.items()|sort(reverse=True) %}
+                        <tr>
+                            <td>{{ year }}</td>
+                            <td class="text-center fw-bold">{{ count }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted">{{ _('No usage recorded yet.') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3 class="mt-4">{{ _('Experimental Groups Linked to this Approval') }}</h3>
+
+{% if groups %}
+<div class="table-responsive">
+    <table id="linkedGroupsTable" class="table table-striped table-hover table-bordered" style="width:100%;">
+        <thead>
+            <tr>
+                <th>{{ _('Group Name') }}</th>
+                <th>{{ _('Project') }}</th>
+                <th>{{ _('Animal Model') }}</th>
+                <th>{{ _('Animals in Group') }}</th>
+                <th>{{ _('Status') }}</th>
+                <th>{{ _('Actions') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for group in groups %}
+            <tr class="{{ 'table-secondary text-muted' if group.is_archived else '' }}">
+                <td>
+                    {{ group.name }}
+                    {% if group.is_archived %}<span class="badge bg-secondary ms-1">{{ _('Archived') }}</span>{% endif
+                    %}
+                </td>
+                <td>{{ group.project.name if group.project else _('N/A') }}</td>
+                <td>{{ group.model.name if group.model else _('N/A') }}</td>
+                <td class="text-center">{{ group.animal_data|length if group.animal_data else 0 }}</td>
+                <td>
+                    {% if group.is_archived %}
+                    <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>
+                    {% else %}
+                    <span class="badge bg-success">{{ _('Active') }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="btn btn-sm btn-outline-primary"
+                        title="{{ _('View/Edit Group') }}"><i class="fas fa-edit"></i></a>
+                    <a href="{{ url_for('datatables.list_group_datatables', group_id=group.id) }}"
+                        class="btn btn-sm btn-outline-info" title="{{ _('View DataTables for this Group') }}"><i
+                            class="fas fa-table"></i></a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="alert alert-info">{{ _('No experimental groups are currently linked to this ethical approval, or you do not
+    have permission to view them.') }}</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+    $(document).ready(function () {
+        $('#linkedGroupsTable').DataTable({
+            "language": {
+                "search": "{{ _('Search:') }}",
+                "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+                "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+                "infoEmpty": "{{ _('Showing 0 to 0 of 0 entries') }}",
+                "infoFiltered": "{{ _('(filtered from _MAX_ total entries)') }}",
+                "paginate": {
+                    "first": "{{ _('First') }}",
+                    "last": "{{ _('Last') }}",
+                    "next": "{{ _('Next') }}",
+                    "previous": "{{ _('Previous') }}"
+                }
+            },
+            "columnDefs": [
+                { "orderable": false, "targets": 5 } // Actions column
+            ],
+            "order": [[0, "asc"]] // Default sort by Group Name
+        });
+    });
+</script>
+{% endblock %}

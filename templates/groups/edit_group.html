@@ -1,0 +1,839 @@
+{# templates/groups/edit_group.html #}
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Edit') if group else _('Create') }} {{ _('Experimental Group') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <!-- ACTION BAR -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>
+            {% if is_read_only %}
+            {{ _('View Experimental Group') }}
+            {% else %}
+            {{ _('Edit') if group else _('Create') }} {{ _('Experimental Group') }}
+            {% endif %}
+        </h1>
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('groups.manage_groups') }}" class="btn btn-secondary"><i
+                    class="fas fa-arrow-left me-1"></i> {{ _('Back') }}</a>
+
+            {% if group %}
+            <!-- Data Actions -->
+            <label class="ms-3 me-2 fw-bold">{{ _('Data') }}:</label>
+            <div class="btn-group" role="group">
+                {% if not is_read_only %}
+                <a href="{{ url_for('datatables.create_data_table', group_id_prefill=group.id) }}"
+                    class="btn btn-success" title="{{ _('Create DataTable') }}"><i class="fas fa-plus"></i></a>
+                {% endif %}
+                <a href="{{ url_for('datatables.list_group_datatables', group_id=group.id) }}" class="btn btn-info"
+                    title="{{ _('View Datatables') }}"><i class="fas fa-table"></i></a>
+            </div>
+
+            <!-- Samples Actions -->
+            <label class="ms-3 me-2 fw-bold">{{ _('Samples') }}:</label>
+            <div class="btn-group" role="group">
+                {% if not is_read_only %}
+                <a href="{{ url_for('sampling.log_batch_samples_for_group', group_id=group.id) }}"
+                    class="btn btn-success" title="{{ _('Log Batch Samples') }}"><i class="fas fa-vials"></i></a>
+                {% endif %}
+                <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-info"
+                    title="{{ _('View Samples') }}"><i class="fas fa-vials"></i></a>
+            </div>
+
+
+            {% if group.created_from_workplan_id %}
+            <a href="{{ url_for('workplans.edit_workplan', workplan_id=group.created_from_workplan_id) }}"
+                class="btn btn-info ms-2" title="{{ _('View Source Workplan') }}">
+                <i class="fas fa-tasks"></i> {{ _('View Workplan') }}
+            </a>
+            {% endif %}
+
+            <!-- Management Actions Dropdown -->
+            {% if not is_read_only %}
+            <div class="btn-group ms-3" role="group">
+                <button id="btnGroupDrop1" type="button" class="btn btn-dark dropdown-toggle" data-bs-toggle="dropdown"
+                    aria-expanded="false">
+                    {{ _('Manage') }}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="btnGroupDrop1">
+                    <li>
+                        <form method="POST"
+                            action="{{ url_for('groups.unarchive_group', id=group.id) if group.is_archived else url_for('groups.archive_group', id=group.id) }}"
+                            class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                            <button type="submit" class="dropdown-item">
+                                {% if group.is_archived %}
+                                <i class="fas fa-box-open fa-fw me-2"></i>{{ _('Unarchive') }}
+                                {% else %}
+                                <i class="fas fa-box-archive fa-fw me-2"></i>{{ _('Archive') }}
+                                {% endif %}
+                            </button>
+                        </form>
+                    </li>
+                    <li>
+                        <button type="button" id="delete-group-btn" class="dropdown-item text-danger">
+                            <i class="fas fa-trash-alt fa-fw me-2"></i>{{ _('Delete Group') }}
+                        </button>
+                    </li>
+                    {% if group.randomization_details and group.randomization_details.get('use_blinding') and not
+                    group.randomization_details.get('unblinded_at') and (current_user.is_super_admin or
+                    check_group_permission(group, 'edit_exp_group')) %}
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+                    <li>
+                        <form method="POST" action="{{ url_for('groups.unblind_group', group_id=group.id) }}"
+                            id="unblind-group-form"
+                            data-confirm-message="{{ _('Are you sure you want to permanently unblind this group? This action cannot be undone.') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                            <button type="submit" class="dropdown-item text-warning">
+                                <i class="fas fa-eye fa-fw me-2"></i>{{ _('Unblind Group Data') }}
+                            </button>
+                        </form>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <style>
+        /* Force consistency between standard inputs and Select2 */
+        .form-control, .select2-container--bootstrap-5 .select2-selection {
+            height: 38px !important;
+            min-height: 38px !important;
+        }
+        .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+            line-height: 36px !important; /* Center text vertically */
+        }
+        .input-group > .form-control-sm {
+            height: 31px !important; /* Keep small inputs small if they are in an input-group-sm */
+            min-height: 31px !important;
+        }
+    </style>
+
+    <!-- MAIN FORM -->
+    <form method="POST"
+        action="{{ url_for('groups.edit_group', id=group.id) if group else url_for('groups.edit_group') }}"
+        enctype="multipart/form-data" id="group-form">
+        {{ form.hidden_tag() }}
+        {% if request.args.get('from_workplan') %}
+        <input type="hidden" name="from_workplan_id" value="{{ request.args.get('from_workplan') }}">
+        {% endif %}
+
+        <!-- Group Details Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>{{ _('Group Details') }}</h5>
+                {% if group %}
+                <strong>{{ _('Project') }}:</strong>
+                <a href="{{ url_for('projects.view_edit_project', project_slug=group.project.slug) }}">{{ group.project.name }}</a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% if not group %}
+                    <!-- Project selector only for new groups -->
+                    <div class="col-md-4">
+                        {{ render_field(form.project, id="project_select", placeholder=_('Select Project...'), readonly=is_read_only) }}
+                    </div>
+                    <div class="col-md-4">
+                        {{ render_field(form.name, readonly=is_read_only) }}
+                    </div>
+                    <div class="col-md-2">
+                        {{ render_field(form.model, id="model_select", readonly=is_read_only) }}
+                    </div>
+                    <div class="col-md-2">
+                        {{ render_field(form.ethical_approval, id="ethical_approval_select", readonly=is_read_only) }}
+                    </div>
+                    {% else %}
+                    <div class="col-md-6">
+                        {{ render_field(form.name, readonly=is_read_only) }}
+                    </div>
+                    <div class="col-md-3">
+                        {{ render_field(form.model, id="model_select", readonly=is_read_only) }}
+                    </div>
+                    <div class="col-md-3">
+                        {{ render_field(form.ethical_approval, id="ethical_approval_select", readonly=is_read_only) }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Animal Data Card -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ _('Animal Data') }}</h5>
+                <div class="d-flex flex-wrap gap-2">
+                    {% if group and group.animal_data and not group.randomization_details and not is_read_only %}
+                    <button type="button" class="btn btn-info" id="randomize-btn" data-bs-toggle="modal"
+                        data-bs-target="#randomizationModal">
+                        <i class="fas fa-random me-1"></i> {{ _('Randomize & Assign Groups') }}
+                    </button>
+                    {% elif group and group.randomization_details %}
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                            data-bs-toggle="dropdown" aria-expanded="false" title="{{ _('Randomization Options') }}">
+                            <i class="fas fa-cog"></i> {{ _('Randomized') }}
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <button type="button" class="dropdown-item"
+                                    id="view-randomization-summary-btn-dropdown">
+                                    <i class="fas fa-clipboard-list fa-fw me-2"></i> {{ _('View Summary') }}
+                                </button>
+                            </li>
+                            {% if not is_read_only %}
+                            <li>
+                                <button type="button" class="dropdown-item" id="rerun-randomization-btn-dropdown"
+                                    data-bs-toggle="modal" data-bs-target="#randomizationModal">
+                                    <i class="fas fa-redo fa-fw me-2"></i> {{ _('Re-run Randomization') }}
+                                </button>
+                            </li>
+                            {% if group.randomization_details.get('use_blinding') and not
+                            group.randomization_details.get('unblinded_at') %}
+                            <li>
+                                <button type="button" class="dropdown-item" id="unblind-randomization-btn-dropdown">
+                                    <i class="fas fa-eye fa-fw me-2"></i> {{ _('Unblind Blinding') }}
+                                </button>
+                            </li>
+                            {% endif %}
+                            <li>
+                                <button type="button" class="dropdown-item text-danger"
+                                    id="delete-randomization-btn-dropdown">
+                                    <i class="fas fa-trash-alt fa-fw me-2"></i> {{ _('Delete Randomization') }}
+                                </button>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if group and not is_read_only %}
+
+                    <!-- Concatenate button -->
+                    <button type="button" class="btn btn-secondary" id="show-concatenation-btn">
+                        <i class="fas fa-chart-line me-1"></i> {{ _('Concatenate') }}
+                    </button>
+
+                    <!-- Declare Death button moved here -->
+                    <button type="button" class="btn btn-danger declare-dead-btn" data-group-id="{{ group.id }}"
+                        data-group-name="{{ group.name }}" data-model-fields-id="model-fields-{{ group.id }}"
+                        data-model-fields='{{ (group.model.analytes | map(attribute="to_dict") | list | tojson if group.model and group.model.analytes else "[]") }}'>
+                        <i class="fas fa-skull-crossbones me-1"></i> {{ _('Declare Death') }}
+                    </button>
+
+                    <!-- Usage Summary button moved here -->
+                    <a href="{{ url_for('groups.group_molecule_usage_summary', group_id=group.id) }}"
+                        class="btn btn-warning" title="{{ _('View Molecule Usage Summary per Animal') }}">
+                        <i class="fas fa-flask me-1"></i> {{ _('Usage Summary') }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card-body">
+                {% if not is_read_only %}
+                <div class="mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="xlsx_upload" class="form-label mb-0 text-nowrap">{{ _('Upload XLSX:') }}</label>
+                        <div class="input-group input-group-sm" style="max-width: 350px;">
+                            <input type="file" name="xlsx_upload" id="xlsx_upload" class="form-control form-control-sm"
+                                accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                            <span class="input-group-text bg-white border-start-0">
+                                <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                   title="{{ _('File must contain columns matching the selected Animal Model fields, including an ID column. Uploading will override manual entries.') }}"></i>
+                            </span>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-primary" id="import-xlsx-btn" title="{{ _('Import and Save') }}">
+                                <i class="fas fa-file-import me-1"></i> {{ _('Import') }}
+                            </button>
+                            <a href="{% if group %}{{ url_for('groups.download_group_data', group_id=group.id) }}{% else %}{{ url_for('groups.download_template', model_id=0) }}{% endif %}" 
+                               class="btn btn-secondary" 
+                               id="download-data-btn"
+                               title="{% if group %}{{ _('Download Current Data') }}{% else %}{{ _('Download Template') }}{% endif %}">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="table-responsive mb-3">
+                    <table class="table table-bordered table-sm" id="animal-data-table">
+                        <thead>
+                            <tr>
+                                {% if not is_read_only %}<th>{{ _('Actions') }}</th>{% endif %}
+
+                                <!-- Conditionally add Treatment/Blinded Group Header -->
+                                {% if group and group.randomization_details %}
+                                    {% if group.randomization_details.use_blinding %}
+                                    <th title="{{ _('Unique code assigned during blinding') }}">{{ _('Blinded Group') }}</th>
+                                    {% if can_view_unblinded %}
+                                    <th title="{{ _('Assigned experimental treatment group') }}">{{ _('Treatment Group') }}</th>
+                                    {% endif %}
+                                    {% else %}
+                                    <th title="{{ _('Assigned experimental treatment group') }}">{{ _('Treatment Group') }}</th>
+                                    {% endif %}
+                                {% endif %}
+
+                                <th title="{{ _('Calculated automatically from Date of Birth') }}">{{ _('Age (Days)') }}</th>
+
+                                {% if selected_model_analytes %}
+                                {% for analyte in selected_model_analytes %}
+                                {% set is_sensitive_and_blinded = group and group.randomization_details and
+                                analyte.is_sensitive and not can_view_unblinded %}
+                                {% if not is_sensitive_and_blinded %}
+                                <th>
+                                    {{ analyte.name }}
+                                    {% if analyte.unit %}({{ analyte.unit }}){% endif %}
+                                </th>
+                                {% endif %}
+                                {% endfor %}
+                                {% endif %}
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% if animal_data_for_template and selected_model_analytes %}
+                            {% for animal in animal_data_for_template %}
+                            {% set row_index = loop.index0 %}
+                            <tr {% if animal.get('status')=='dead' %}class="table-danger" {% endif %}>
+                                {% if not is_read_only %}
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
+                                        <button type="button" class="btn btn-outline-primary duplicate-row-btn"
+                                            title="{{ _('Duplicate') }}" {% if animal.get('status')=='dead' %}disabled{%
+                                            endif %}><i class="fa-solid fa-copy"></i></button>
+                                        <button type="button" class="btn btn-outline-danger remove-row-btn"
+                                            title="{{ _('Delete') }}" {% if animal.get('status')=='dead' %}disabled{%
+                                            endif %}><i class="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </td>
+                                {% endif %}
+
+                                <!-- Conditionally add Treatment/Blinded Group Data Cell -->
+                                {% if group and group.randomization_details %}
+                                    {% if group.randomization_details.use_blinding %}
+                                    <td>
+                                        {% set blinded_value = animal.get('Blinded Group', '-') %}
+                                        <span class="badge bg-info">{{ blinded_value }}</span>
+                                    </td>
+                                    {% if can_view_unblinded %}
+                                    <td>
+                                        <span class="text-nowrap">{{ animal.get('Treatment Group', '-') }}</span>
+                                    </td>
+                                    {% endif %}
+                                    {% else %}
+                                    <td>
+                                        <span class="text-nowrap">{{ animal.get('Treatment Group', '-') }}</span>
+                                    </td>
+                                    {% endif %}
+                                {% endif %}
+
+                                <!-- Age (Days) Column -->
+                                <td class="text-center bg-light">
+                                    <span class="age-display" data-birth-date="{{ animal.get('Date of Birth', '') }}">
+                                        {{ animal.get('Age (Days)', '-') }}
+                                    </span>
+                                </td>
+
+                                {% for analyte in selected_model_analytes %}
+                                {% set is_sensitive_and_blinded = group and group.randomization_details and
+                                analyte.is_sensitive and not can_view_unblinded %}
+                                {% if not is_sensitive_and_blinded %}
+                                <td>
+                                    {% set field_name = analyte.name %}
+                                    {% set field_value = animal.get(field_name, '') %}
+                                    {% if analyte.data_type.value == 'date' and field_value %}
+                                    {% set formatted_field_value = field_value.split('T')[0] %}
+                                    {% else %}
+                                    {% set formatted_field_value = field_value %}
+                                    {% endif %}
+                                    <input type="{{ 'date' if analyte.data_type.value == 'date' else 'text' }}"
+                                        name="animal_{{ row_index }}_field_{{ field_name }}"
+                                        class="form-control form-control-sm" value="{{ formatted_field_value }}" {% if
+                                        field_name=='ID' %}required{% endif %} {% if animal.get('status')=='dead' or
+                                        is_read_only %}disabled{% endif %} {% if analyte.data_type.value=='category' and
+                                        analyte.allowed_values %}list="datalist-{{ field_name }}-{{ row_index }}" {%
+                                        endif %}>
+                                    {% if analyte.data_type.value == 'category' and analyte.allowed_values %}
+                                    <datalist id="datalist-{{ field_name }}-{{ row_index }}">
+                                        {% for val in analyte.allowed_values.split(';') %}
+                                        <option value="{{ val.strip() }}">
+                                            {% endfor %}
+                                    </datalist>
+                                    {% endif %}
+                                    {% if field_name == 'Date of Birth' and animal.get('status') == 'dead' and
+                                    animal.get('death_date') %}
+                                    <div class="death-info" data-birth-date="{{ animal.get('Date of Birth') }}"
+                                        data-death-date="{{ animal.get('death_date') }}">
+                                        <small class="text-muted d-block">{{ _('Deceased:') }} {{
+                                            animal.get('death_date').split('T')[0] if animal.get('death_date') else ''
+                                            }}</small>
+                                        <small class="text-muted d-block age-in-days"></small>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if not is_read_only %}
+                <div id="add-animal-button-container" class="mb-3"></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-4">
+            {% if not is_read_only %}
+            <button type="button" id="save-group-btn" class="btn btn-primary btn-lg">{{ _('Save Group') }}</button>
+            {% endif %}
+        </div>
+    </form>
+
+    <!-- Modals and Hidden Forms -->
+    <!-- Save Confirmation Modal -->
+    <div class="modal fade" id="saveConfirmationModal" tabindex="-1" aria-labelledby="saveConfirmationModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="saveConfirmationModalLabel">{{ _('Confirm Save') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>{{ _('Saving these changes will also update all associated DataTables. This might take a moment
+                        and can modify existing data.') }}</p>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="dont-update-datatables">
+                        <label class="form-check-label" for="dont-update-datatables">{{ _('Do NOT update linked
+                            DataTables.') }}</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                    <button type="button" id="confirm-save-group" class="btn btn-primary">{{ _('Confirm Save')
+                        }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="errorModalLabel">{{ _('Error') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-danger">
+                    <p id="errorModalMessage"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'components/_declare_death_modal.html' %}
+
+    <!-- Data script for Declare Dead modal -->
+    {% if group and group.animal_data %}
+    <script id="animal-data-{{ group.id }}" type="application/json">
+        {{ group.animal_data | tojson | safe }}
+    </script>
+    {% endif %}
+    {% if group and group.model %}
+    <script id="model-fields-{{ group.id }}" type="application/json">
+        {{ group.model.analytes | map(attribute='to_dict') | list | tojson | safe }}
+    </script>
+    {% endif %}
+
+
+    <!-- REFACTORED Randomization Modal -->
+    <div class="modal fade" id="randomizationModal" tabindex="-1" aria-labelledby="randomizationModalLabel"
+        aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="randomizationModalLabel">{{ _('Randomize & Assign Groups') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- Step 1: Choose Unit -->
+                    <div id="rand-step-1" class="rand-step">
+                        <h6>{{ _('Step 1: Define Randomization Unit') }}</h6>
+                        <div class="mb-3">
+                            <label for="randomize-by-select" class="form-label">{{ _('Randomize by:') }}</label>
+                            <select id="randomize-by-select" class="form-select">
+                                <option value="__individual__">{{ _('Individual Animal') }}</option>
+                                {# Options for cluster randomization will be populated by JavaScript #}
+                            </select>
+                            <small class="form-text text-muted">{{ _('Choose to assign each animal individually or to
+                                assign whole groups (e.g., cages) at a time.') }}</small>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="allow-splitting-checkbox">
+                            <label class="form-check-label" for="allow-splitting-checkbox">{{ _('Allow splitting
+                                clusters to meet group sizes') }}</label>
+                            <small class="form-text text-muted d-block ms-4">{{ _('Use this if cluster sizes (e.g.
+                                cages) do not fit your target group sizes. The system will treat individuals as the unit
+                                but use the cluster ID for balancing.') }}</small>
+                        </div>
+
+                        <div id="min-subgroup-size-container" class="mb-3" style="display: none;">
+                            <label for="min-subgroup-size" class="form-label">{{ _('Minimum subgroup size after
+                                splitting:') }}</label>
+                            <input type="number" id="min-subgroup-size" class="form-control" value="2" min="1">
+                            <small class="form-text text-muted">{{ _('The algorithm will try to avoid creating split
+                                groups smaller than this size.') }}</small>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <strong>{{ _('Total Units Available for Randomization:') }}</strong>
+                            <span id="total-units-available" class="fs-5 fw-bold">0</span>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-end">
+                            <button type="button" class="btn btn-primary" id="rand-next-to-step-2">{{ _('Next: Define
+                                Groups') }} <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Define Groups -->
+                    <div id="rand-step-2" class="rand-step" style="display: none;">
+                        <h6>{{ _('Step 2: Define Treatment Groups') }}</h6>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="use-blinding-checkbox" checked>
+                            <label class="form-check-label" for="use-blinding-checkbox">{{ _('Use Blinding') }}</label>
+                        </div>
+                        <div id="treatment-groups-container">
+                            <!-- JS will populate this -->
+                        </div>
+                        <button type="button" id="add-treatment-group-btn"
+                            class="btn btn-sm btn-outline-success mt-2"><i class="fas fa-plus"></i> {{ _('Add Group')
+                            }}</button>
+                        <hr>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <button type="button" class="btn btn-secondary" id="rand-back-to-step-1"><i
+                                    class="fas fa-arrow-left"></i> {{ _('Back') }}</button>
+                            <div class="text-center">
+                                <strong>{{ _('Total Units Assigned:') }}</strong>
+                                <span id="total-units-assigned" class="fs-5 fw-bold">0</span> / <span
+                                    id="total-units-available-step2" class="fs-5 fw-bold">0</span>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="rand-next-to-step-3">{{ _('Next: Configure
+                                Method') }} <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Configure Method -->
+                    <div id="rand-step-3" class="rand-step" style="display: none;">
+                        <h6>{{ _('Step 3: Configure Assignment Method') }}</h6>
+
+                        <div class="mb-3 p-3 border rounded bg-light">
+                            <label for="stratification-factor-select" class="form-label fw-bold">{{ _('Primary
+                                Stratification Factor (Optional)') }}</label>
+                            <select id="stratification-factor-select" class="form-select">
+                                <option value="">{{ _('None') }}</option>
+                                {# Options populated by JS #}
+                            </select>
+                            <small class="form-text text-muted">{{ _('Use this to ensure perfect balance for a critical
+                                factor BEFORE other balancing is applied. Example: Select "Gender" to randomize males
+                                and females in separate, balanced pools.') }}</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{{ _('Balancing Method') }}</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="assignmentMethod" id="method-simple"
+                                    value="Simple" checked>
+                                <label class="form-check-label" for="method-simple">{{ _('Simple Assignment') }}</label>
+                                <small class="form-text text-muted d-block ms-4">{{ _('Pure randomization. Use if no
+                                    further balancing is needed.') }}</small>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="radio" name="assignmentMethod"
+                                    id="method-minimization" value="Minimization">
+                                <label class="form-check-label" for="method-minimization">{{ _('Minimization (Balance a
+                                    continuous variable)') }}</label>
+                                <small class="form-text text-muted d-block ms-4">{{ _('Actively balances a numeric
+                                    variable (e.g., Body Weight) across groups. Highly recommended for small studies.')
+                                    }}</small>
+                            </div>
+                        </div>
+
+                        <div id="minimization-options" class="p-3 border rounded bg-light" style="display: none;">
+                            <h6>{{ _('Minimization Options') }}</h6>
+                            <div class="mb-3">
+                                <label for="minimize-source" class="form-label">{{ _('Balance Groups Based on Data
+                                    From:') }}</label>
+                                <select id="minimize-source" class="form-select">
+                                    <option value="animal_model">{{ _('Animal Model Field') }}</option>
+                                    <option value="datatable">{{ _('DataTable Measurement') }}</option>
+                                </select>
+                            </div>
+                            <div id="minimize-animal-model-params" class="mb-3">
+                                <label for="minimize-analyte-am" class="form-label">{{ _('Continuous Baseline
+                                    Parameter:') }}</label>
+                                <select id="minimize-analyte-am" class="form-select">
+                                    {# Options populated by JS #}
+                                </select>
+                            </div>
+                            <div id="minimize-datatable-params" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="minimize-datatable-select" class="form-label">{{ _('Select Baseline
+                                        DataTable:') }}</label>
+                                    <select id="minimize-datatable-select" class="form-select"></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="minimize-analyte-dt" class="form-label">{{ _('Select Continuous Baseline
+                                        Analyte:') }}</label>
+                                    <select id="minimize-analyte-dt" class="form-select"></select>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-secondary" id="rand-back-to-step-2"><i
+                                    class="fas fa-arrow-left"></i> {{ _('Back') }}</button>
+                            <button type="button" class="btn btn-primary" id="rand-next-to-step-4">{{ _('Next: Review')
+                                }} <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Review -->
+                    <div id="rand-step-4" class="rand-step" style="display: none;">
+                        <h6>{{ _('Step 4: Review and Confirm') }}</h6>
+                        <div id="randomization-summary" class="alert alert-info"></div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-secondary" id="rand-back-to-step-3"><i
+                                    class="fas fa-arrow-left"></i> {{ _('Back') }}</button>
+                            <button type="button" class="btn btn-success" id="rand-confirm-btn">{{ _('Confirm &
+                                Randomize') }}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template for treatment group row -->
+    <template id="treatment-group-template">
+        <div class="row g-2 mb-2 align-items-center treatment-group-row">
+            <div class="col actual-name-col">
+                <input type="text" class="form-control form-control-sm actual-name"
+                    placeholder="{{ _('Actual Group Name (e.g., Vehicle)') }}" required>
+            </div>
+            <div class="col blinded-name-col">
+                <input type="text" class="form-control form-control-sm blinded-name"
+                    placeholder="{{ _('Blinded Name (e.g., Group A)') }}" required>
+            </div>
+            <div class="col-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text unit-count-label">{{ _('Units') }}</span>
+                    <input type="number" class="form-control unit-count" value="0" min="0" required>
+                </div>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-sm btn-outline-danger remove-treatment-group-btn"><i
+                        class="fas fa-times"></i></button>
+            </div>
+        </div>
+    </template>
+
+    <!-- Randomization Summary Modal -->
+    <div class="modal fade" id="randomizationSummaryModal" tabindex="-1"
+        aria-labelledby="randomizationSummaryModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="randomizationSummaryModalLabel">{{ _('Randomization Summary') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>{{ _('Randomized At:') }}</strong> <span id="summary-randomized-at"></span> by <span
+                            id="summary-randomized-by"></span></p>
+
+                    <!-- NEW: Settings Section -->
+                    <h6 class="mt-3">{{ _('Settings Used') }}</h6>
+                    <ul id="summary-settings-list">
+                        <!-- JS will populate this -->
+                    </ul>
+
+                    <!-- NEW: Baseline Data Section (for minimization) -->
+                    <div id="summary-baseline-data-container" style="display: none;">
+                        <h6 class="mt-3">{{ _('Baseline Data Used for Minimization') }}</h6>
+                        <p id="summary-baseline-data-details"></p>
+                    </div>
+
+                    <h6 class="mt-3">{{ _('Requested Group Sizes:') }}</h6>
+                    <ul id="summary-requested-group-sizes"></ul>
+
+                    <h6 class="mt-3">{{ _('Actual Group Sizes:') }}</h6>
+                    <ul id="summary-actual-group-sizes"></ul>
+
+                    <div id="summary-minimization-results" style="display: none;">
+                        <h6 class="mt-3">{{ _('Minimization Results (Mean ± SEM)') }}</h6>
+                        <ul id="summary-minimization-list"></ul>
+                    </div>
+
+                    <div id="summary-blinding-key" style="display: none;">
+                        <h6 class="mt-3">{{ _('Blinding Key:') }}</h6>
+                        <ul id="summary-blinding-list"></ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal"
+                        id="summary-modal-close-btn">{{ _('Close') }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script id="animal-models-data" type="application/json">
+        {{ animal_models_data | tojson | safe }}
+    </script>
+
+    <script id="page-context-data" type="application/json">
+        {
+            "is_editing": {{ (group is not none) | tojson }},
+            "group_has_randomization": {{ (group and group.randomization_details is not none) | tojson }},
+            "group_randomization_blinding": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
+            "can_view_unblinded": {{ can_view_unblinded | tojson }},
+            "existing_animal_data": {{ (animal_data_for_template if animal_data_for_template else []) | tojson }},
+            "group_randomization_blinding_key": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
+            "js_strings": {{ js_strings | tojson }}
+        }
+    </script>
+
+    {% if group and not is_read_only %}
+    <form method="POST" action="{{ url_for('groups.delete_group', id=group.id) }}" id="deleteGroupForm"
+        data-confirm-message="{{ _('Are you sure you want to delete this group? This will NOT delete associated data tables.') }}"
+        class="d-none">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="cascade" value="false" />
+    </form>
+    {% endif %}
+
+</div>
+
+<style nonce="{{ csp_nonce }}">
+    /* Standardize button heights to match DataTable pages */
+    .btn-sm {
+        height: 31px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+    
+    /* Ensure input-group-sm elements match */
+    .input-group-sm > .form-control,
+    .input-group-sm > .input-group-text {
+        height: 31px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+    
+    /* Compact file input styling */
+    .form-control-sm[type="file"] {
+        height: 31px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" nonce="{{ csp_nonce }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/groups_common.js') }}" nonce="{{ csp_nonce }}"></script>
+    <!-- New Category Discovery Modal -->
+    <div class="modal fade" id="newCategoryModal" tabindex="-1" aria-labelledby="newCategoryModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content border-warning shadow">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="newCategoryModalLabel"><i class="fas fa-exclamation-triangle me-2"></i>{{ _('New Category Values Found') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>{{ _('The following new values were found for categorical fields. Would you like to add them to the system and proceed?') }}</p>
+                    <div id="new-categories-list" class="mt-3">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                    <button type="button" class="btn btn-warning" id="confirm-add-categories">
+                        <i class="fas fa-plus me-1"></i> {{ _('Add and Continue') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Configuration Object for JS -->
+<script type="application/json" id="group-editor-config">
+{
+    "isEditing": {{ (group is not none) | tojson }},
+    "groupId": {{ (group.id if group else None) | tojson }},
+    "prefilledProjectId": {{ (prefilled_project_id if prefilled_project_id else None) | tojson }},
+    "hasRandomization": {{ (group and group.randomization_details is not none) | tojson }},
+    "isBlinded": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
+    "canViewUnblinded": {{ can_view_unblinded | tojson }},
+    "canEditAnalytes": {{ user_has_permission(current_user, 'Analyte', 'edit') | tojson }},
+    "blindingKey": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
+    "existingAnimalData": {{ (animal_data_for_template if animal_data_for_template else []) | tojson }},
+    "ethicalApprovalId": {{ (group.ethical_approval_id if group else None) | tojson }},
+    "urls": {
+        "downloadTemplate": "{{ url_for('groups.download_template', model_id=0) }}",
+        "downloadGroupData": "{{ url_for('groups.download_group_data', group_id='GROUP_ID_PLACEHOLDER') }}",
+        "getModelFields": "{{ url_for('groups.get_animal_model_fields', model_id=0) }}",
+        "getEthicalApprovalsForProject": "{{ url_for('groups.get_ethical_approvals_for_project', project_id=0) }}",
+        "searchProjects": "{{ url_for('projects.search_projects_ajax') }}",
+        "randomizeGroup": "{{ url_for('groups.randomize_group', group_id=group.id) if group else '#' }}",
+        "getRandomizationSummary": "{{ url_for('groups.get_randomization_summary', group_id=group.id) if group else '#' }}",
+        "getGroupDatatablesForRandomization": "{{ url_for('groups.get_group_datatables_for_randomization', group_id=group.id) if group else '#' }}",
+        "unblindGroup": "{{ url_for('groups.unblind_group', group_id=group.id) if group else '#' }}",
+        "deleteRandomization": "{{ url_for('groups.delete_randomization', group_id=group.id) if group else '#' }}"
+    },
+    "i18n": {
+        "loading": "{{ _('Loading...') }}",
+        "actions": "{{ _('Actions') }}",
+        "addAnimal": "{{ _('Add Animal') }}",
+        "downloadTemplate": "{{ _('Download Template (XLSX)') }}",
+        "downloadCurrent": "{{ _('Download Current Data (XLSX)') }}",
+        "confirmDelete": "{{ _('Are you sure you want to remove this animal?') }}",
+        "deceased": "{{ _('Deceased') }}",
+        "selectProject": "{{ _('Search for a project...') }}"
+    }
+}
+</script>
+
+<!-- Load the external JS file -->
+<script src="{{ url_for('static', filename='js/groups_edit.js') }}" nonce="{{ csp_nonce }}"></script>
+
+<!-- DEBUG: Pass read-only status for testing -->
+<script id="page-status-data" type="application/json">
+    { "is_read_only": {{ is_read_only | tojson }}}
+</script>
+{% endblock %}

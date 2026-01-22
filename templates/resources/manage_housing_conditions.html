@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block title %}{{ _('Manage Housing Conditions') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">{{ _('Manage Housing Conditions') }}</h1>
+    <a href="{{ url_for('resources.manage_static_lists') }}" class="btn btn-secondary mb-3">← {{ _('Back to Lists') }}</a>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">{{ _('Create / Upload') }}</div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="myTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="create-set-tab" data-bs-toggle="tab" data-bs-target="#create-set" type="button" role="tab" aria-controls="create-set" aria-selected="true">{{ _('New Set') }}</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="create-item-tab" data-bs-toggle="tab" data-bs-target="#create-item" type="button" role="tab" aria-controls="create-item" aria-selected="false">{{ _('New Item') }}</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="bulk-tab" data-bs-toggle="tab" data-bs-target="#bulk" type="button" role="tab" aria-controls="bulk" aria-selected="false">{{ _('Bulk Operations') }}</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content mt-3" id="myTabContent">
+                        <div class="tab-pane fade show active" id="create-set" role="tabpanel" aria-labelledby="create-set-tab">
+                            <h5>{{ _('Create New Housing Condition Set') }}</h5>
+                            <form method="POST" action="{{ url_for('resources.manage_housing_conditions') }}" id="createSetForm">
+                                {{ set_form.hidden_tag() }}
+                                {{ render_field(set_form.name, class="form-control") }}
+                                {{ render_field(set_form.description, class="form-control", rows=3) }}
+                                {{ set_form.submit_set(class="btn btn-primary mt-3") }}
+                            </form>
+                        </div>
+                        <div class="tab-pane fade" id="create-item" role="tabpanel" aria-labelledby="create-item-tab">
+                            <h5>{{ _('Add New Housing Condition Item') }}</h5>
+                            <form method="POST" action="{{ url_for('resources.manage_housing_conditions') }}" id="createItemForm">
+                                {{ item_form.hidden_tag() }}
+                                {{ render_field(item_form.name, class="form-control") }}
+                                {{ render_field(item_form.description, class="form-control", rows=2) }}
+                                {{ render_field(item_form.data_type, class="form-select") }}
+                                <div class="mb-3" id="allowed_values_container_item_form">
+                                    {{ render_field(item_form.allowed_values, class="form-control") }}
+                                </div>
+                                {{ render_field(item_form.default_value, class="form-control") }}
+                                {{ render_field(item_form.unit, class="form-control") }}
+                                {{ item_form.submit_item(class="btn btn-primary mt-3") }}
+                            </form>
+                        </div>
+                        <div class="tab-pane fade" id="bulk" role="tabpanel" aria-labelledby="bulk-tab">
+                            <h5>{{ _('Bulk Operations') }}</h5>
+                            <p>{{ _('Download existing sets and items, or upload new ones using an XLSX file.') }}</p>
+                            <div class="d-grid gap-2">
+                                <a href="{{ url_for('resources.download_housing_data') }}" class="btn btn-info">{{ _('Download All Housing Data (XLSX)') }}</a>
+                                <hr>
+                                <form method="POST" action="{{ url_for('resources.upload_housing_data') }}" enctype="multipart/form-data">
+                                    {{ upload_form.hidden_tag() }}
+                                    <div class="mb-3">
+                                        <label for="file" class="form-label">{{ _('Upload Housing Data (XLSX)') }}</label>
+                                        {{ upload_form.file(class="form-control", accept=".xlsx") }}
+                                    </div>
+                                    {{ upload_form.submit_upload(class="btn btn-success") }}
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">{{ _('Existing Housing Condition Sets') }}</div>
+                <div class="card-body">
+                    {% if sets %}
+                    <ul class="list-group">
+                        {% for s in sets %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ s.name }}</strong>
+                                <p class="mb-0 text-muted">{{ s.description }}</p>
+                                <small class="text-muted">
+                                    {{ _('Items: ') }}
+                                    {% for item in s.items %}<span class="badge bg-secondary">{{ item.name }}</span> {% endfor %}
+                                </small>
+                            </div>
+                            <div>
+                                <a href="{{ url_for('resources.edit_housing_condition_set', id=s.id) }}" class="btn btn-sm btn-secondary">{{ _('Edit Set') }}</a>
+                                <a href="{{ url_for('resources.list_projects_for_housing_set', set_id=s.id) }}" class="btn btn-sm btn-info">{{ _('View Projects') }}</a>
+                                <form method="POST" action="{{ url_for('resources.delete_housing_condition_set', id=s.id) }}" style="display:inline;" onsubmit="return confirm('{{ _('Are you sure you want to delete this set?') }}');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-sm btn-danger">{{ _('Delete Set') }}</button>
+                                </form>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p>{{ _('No housing condition sets found.') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">{{ _('All Housing Condition Items') }}</div>
+                <div class="card-body">
+                    {% if all_items %}
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>{{ _('Name') }}</th>
+                                <th>{{ _('Sets') }}</th>
+                                <th>{{ _('Type') }}</th>
+                                <th>{{ _('Unit') }}</th>
+                                <th>{{ _('Default') }}</th>
+                                <th>{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in all_items %}
+                            <tr>
+                                <td>
+                                    <strong>{{ item.name }}</strong>
+                                    {% if item.description %}<p class="mb-0 text-muted"><small>{{ item.description }}</small></p>{% endif %}
+                                    {% if item.data_type.name == 'CATEGORY' and item.allowed_values %}<p class="mb-0 text-info"><small>Options: {{ item.allowed_values }}</small></p>{% endif %}
+                                </td>
+                                <td>
+                                    {% if item.sets %}
+                                        {% for s in item.sets %}
+                                            <span class="badge bg-info me-1">{{ s.name }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        {{ _('No Set') }}
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-secondary">{{ item.data_type.value }}</span></td>
+                                <td>{{ item.unit or '' }}</td>
+                                <td>{{ item.default_value or '' }}</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editItemModal-{{ item.id }}">{{ _('Edit Item') }}</button>
+                                    <form method="POST" action="{{ url_for('resources.delete_housing_condition_item', item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('{{ _('Are you sure you want to delete this item?') }}');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-danger">{{ _('Delete Item') }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p>{{ _('No housing condition items found.') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% for item in all_items %}
+<!-- Edit Item Modal (reused from manage_housing_condition_items.html) -->
+<div class="modal fade" id="editItemModal-{{ item.id }}" tabindex="-1" aria-labelledby="editItemModalLabel-{{ item.id }}" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editItemModalLabel-{{ item.id }}">{{ _('Edit Item') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('resources.edit_housing_condition_item', item_id=item.id) }}">
+        <div class="modal-body">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-3">
+                <label for="edit_item_name-{{ item.id }}" class="form-label">{{ _('Item Name') }}</label>
+                <input type="text" class="form-control" id="edit_item_name-{{ item.id }}" name="name" value="{{ item.name }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_description-{{ item.id }}" class="form-label">{{ _('Description') }}</label>
+                <textarea class="form-control" id="edit_item_description-{{ item.id }}" name="description" rows="2">{{ item.description or '' }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_data_type-{{ item.id }}" class="form-label">{{ _('Data Type') }}</label>
+                <select class="form-select" id="edit_item_data_type-{{ item.id }}" name="data_type">
+                    {% for dt in item_form.data_type.choices %}
+                    <option value="{{ dt[0] }}" {% if dt[0] == item.data_type.name %}selected{% endif %}>{{ dt[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3" id="allowed_values_container_edit_item_form-{{ item.id }}">
+                <label for="edit_item_allowed_values-{{ item.id }}" class="form-label">{{ _('Allowed Values') }}</label>
+                <input type="text" class="form-control" id="edit_item_allowed_values-{{ item.id }}" name="allowed_values" value="{{ item.allowed_values or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_default_value-{{ item.id }}" class="form-label">{{ _('Default Value') }}</label>
+                <input type="text" class="form-control" id="edit_item_default_value-{{ item.id }}" name="default_value" value="{{ item.default_value or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_unit-{{ item.id }}" class="form-label">{{ _('Unit') }}</label>
+                <input type="text" class="form-control" id="edit_item_unit-{{ item.id }}" name="unit" value="{{ item.unit or '' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+          <button type="submit" class="btn btn-primary">{{ _('Save changes') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% for item in all_items %}
+<!-- Edit Item Modal (reused from manage_housing_condition_items.html) -->
+<div class="modal fade" id="editItemModal-{{ item.id }}" tabindex="-1" aria-labelledby="editItemModalLabel-{{ item.id }}" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editItemModalLabel-{{ item.id }}">{{ _('Edit Item') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('resources.edit_housing_condition_item', item_id=item.id) }}">
+        <div class="modal-body">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-3">
+                <label for="edit_item_name-{{ item.id }}" class="form-label">{{ _('Item Name') }}</label>
+                <input type="text" class="form-control" id="edit_item_name-{{ item.id }}" name="name" value="{{ item.name }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_description-{{ item.id }}" class="form-label">{{ _('Description') }}</label>
+                <textarea class="form-control" id="edit_item_description-{{ item.id }}" name="description" rows="2">{{ item.description or '' }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_data_type-{{ item.id }}" class="form-label">{{ _('Data Type') }}</label>
+                <select class="form-select" id="edit_item_data_type-{{ item.id }}" name="data_type">
+                    {% for dt in item_form.data_type.choices %}
+                    <option value="{{ dt[0] }}" {% if dt[0] == item.data_type.name %}selected{% endif %}>{{ dt[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3" id="allowed_values_container_edit_item_form-{{ item.id }}">
+                <label for="edit_item_allowed_values-{{ item.id }}" class="form-label">{{ _('Allowed Values') }}</label>
+                <input type="text" class="form-control" id="edit_item_allowed_values-{{ item.id }}" name="allowed_values" value="{{ item.allowed_values or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_default_value-{{ item.id }}" class="form-label">{{ _('Default Value') }}</label>
+                <input type="text" class="form-control" id="edit_item_default_value-{{ item.id }}" name="default_value" value="{{ item.default_value or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="edit_item_unit-{{ item.id }}" class="form-label">{{ _('Unit') }}</label>
+                <input type="text" class="form-control" id="edit_item_unit-{{ item.id }}" name="unit" value="{{ item.unit or '' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
+          <button type="submit" class="btn btn-primary">{{ _('Save changes') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to toggle allowed_values visibility based on data_type
+    function setupItemFormLogic(formElement, dataTypeSelectId, allowedValuesContainerId) {
+        const dataTypeSelect = formElement.querySelector(`#${dataTypeSelectId}`);
+        const allowedValuesContainer = formElement.querySelector(`#${allowedValuesContainerId}`);
+
+        if (!dataTypeSelect || !allowedValuesContainer) return;
+
+        function toggleAllowedValues() {
+            if (dataTypeSelect.value === 'CATEGORY') {
+                allowedValuesContainer.style.display = '';
+            } else {
+                allowedValuesContainer.style.display = 'none';
+            }
+        }
+
+        dataTypeSelect.addEventListener('change', toggleAllowedValues);
+        toggleAllowedValues(); // Initial check
+    }
+
+    // Setup for the main "Create Item" form
+    const createItemForm = document.getElementById('createItemForm');
+    if (createItemForm) {
+        setupItemFormLogic(createItemForm, 'data_type', 'allowed_values_container_item_form');
+    }
+
+    // Setup for all "Edit Item" modals
+    document.querySelectorAll('.modal[id^="editItemModal-"]').forEach(modal => {
+        const itemId = modal.id.split('-')[1];
+        setupItemFormLogic(modal, `edit_item_data_type-${itemId}`, `allowed_values_container_edit_item_form-${itemId}`);
+        modal.addEventListener('shown.bs.modal', function () {
+            setupItemFormLogic(modal, `edit_item_data_type-${itemId}`, `allowed_values_container_edit_item_form-${itemId}`);
+        });
+    });
+
+});
+</script>
+{% endblock %}

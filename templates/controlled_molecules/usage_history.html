@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-dark">{{ _('Usage History') }}: {{ molecule.name }}</h1>
+        <div class="d-flex">
+            <a href="{{ url_for('controlled_molecules.export_usage_history', id=molecule.id, start_date=start_date, end_date=end_date) }}"
+                class="btn btn-success shadow-sm me-2">
+                <i class="fas fa-file-excel fa-sm"></i> {{ _('Export to Excel') }}
+            </a>
+            <a href="{{ url_for('controlled_molecules.list_molecules') }}" class="btn btn-secondary shadow-sm">
+                <i class="fas fa-arrow-left fa-sm"></i> {{ _('Back to List') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Summary Cards -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                {{ _('Total Volume Used') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_volume | round(4) }} {{
+                                molecule.unit }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-flask fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                {{ _('Animals Treated') }}</div>
+                            <div class="h5 mb-0 fw-bold text-dark">{{ total_animals }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-paw fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ _('Filters') }}</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('Start Date') }}</span>
+                        <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+                    </div>
+                </div>
+
+                <div class="col-auto">
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('End Date') }}</span>
+                        <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+                    </div>
+                </div>
+
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">{{ _('Filter') }}</button>
+                    <a href="{{ url_for('controlled_molecules.usage_history', id=molecule.id) }}"
+                        class="btn btn-secondary ms-1">{{ _('Reset') }}</a>
+
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Usage Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ _('Detailed History') }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="usageTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Date') }}</th>
+                            <th>{{ _('Protocol') }}</th>
+                            <th>{{ _('Group') }}</th>
+                            <th>{{ _('Volume') }} ({{ molecule.unit }})</th>
+                            <th>{{ _('Animals') }}</th>
+                            <th>{{ _('Recorded By') }}</th>
+                            <th>{{ _('Notes') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record, datatable, group in usages %}
+                        <tr>
+                            <td>{{ datatable.date }}</td>
+                            <td>{{ datatable.protocol.name }}</td>
+                            <td>
+                                <a href="{{ url_for('groups.edit_group', id=group.id) }}">{{ group.name }}</a>
+                            </td>
+                            <td>{{ record.volume_used }}</td>
+                            <td>
+                                <span class="badge bg-info text-dark">{{ record.number_of_animals }}</span>
+                                {% if record.animal_ids %}
+                                <small class="d-block text-muted text-truncate" style="max-width: 150px;"
+                                    title="{{ record.animal_ids | join(', ') }}">
+                                    {{ record.animal_ids | join(', ') }}
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td>{{ record.recorded_by.username }}</td>
+                            <td>{{ record.notes or '' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+    $(document).ready(function () {
+        $('#usageTable').DataTable({
+            "order": [[0, "desc"]],
+            "pageLength": 25,
+            "language": {
+                "processing": "{{ _('Processing...') }}",
+                "search": "{{ _('Search...') }}",
+                "lengthMenu": "{{ _('Show _MENU_ entries') }}",
+                "info": "{{ _('Showing _START_ to _END_ of _TOTAL_ entries') }}",
+                "infoEmpty": "{{ _('Showing 0 to 0 of 0 entries') }}",
+                "infoFiltered": "{{ _('(filtered from _MAX_ total entries)') }}",
+                "loadingRecords": "{{ _('Loading...') }}",
+                "zeroRecords": "{{ _('No matching records found') }}",
+                "emptyTable": "{{ _('No data available in table') }}",
+                "paginate": {
+                    "first": "{{ _('First') }}",
+                    "previous": "{{ _('Previous') }}",
+                    "next": "{{ _('Next') }}",
+                    "last": "{{ _('Last') }}"
+                },
+                "aria": {
+                    "sortAscending": "{{ _(': activate to sort column ascending') }}",
+                    "sortDescending": "{{ _(': activate to sort column descending') }}"
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+{# Removed import for render_flashes as base.html handles it #}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head_extra %}
+{% endblock %}
+
+
+{% block content %}
+<div class="container mt-4">
+    {# Flash messages are rendered in base.html #}
+
+    <h1>{{ title }}</h1>
+
+    {% from "components/forms.html" import render_form %}
+
+    {% if not is_new %}
+    {% set cancel_url = url_for('projects.view_edit_project', project_slug=project.slug) %}
+    {% else %}
+    {% set cancel_url = url_for('projects.list_projects') %}
+    {% endif %}
+
+    {{ render_form(form, btn_text=form.submit.label.text, show_cancel=true, cancel_url=cancel_url) }}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% endblock %}

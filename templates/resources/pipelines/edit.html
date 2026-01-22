@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Sidebar/Info -->
+        <div class="col-md-3">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> {{ _('Pipeline Guide') }}</h5>
+                </div>
+                <div class="card-body">
+                    <h6>{{ _('Script Requirements') }}</h6>
+                    <p class="small text-muted">
+                        {{ _('The script must define a function:') }} <br>
+                        <code>def parse(file_path):</code>
+                    </p>
+                    <p class="small text-muted">
+                        {{ _('It should return a list of dictionaries, where each dictionary represents a row of data.') }}
+                    </p>
+                    <h6>{{ _('Available Libraries') }}</h6>
+                    <ul class="small text-muted">
+                        <li><code>pd</code> (pandas)</li>
+                        <li><code>np</code> (numpy)</li>
+                        <li><code>re</code> (regex)</li>
+                        <li><code>datetime</code>, <code>json</code>, <code>math</code></li>
+                    </ul>
+                    <div class="alert alert-warning small">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        {{ _('Forbidden: imports of os, sys, subprocess or use of open(), eval(), exec().') }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Bench -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-vial"></i> {{ _('Test Bench') }}</h5>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">{{ _('Upload a sample file to test your script current content.') }}</p>
+                    <div class="mb-3">
+                        <input type="file" id="testFile" class="form-control form-control-sm">
+                    </div>
+                    <button type="button" id="runTestBtn" class="btn btn-sm btn-info w-100">
+                        <i class="fas fa-play"></i> {{ _('Run Test') }}
+                    </button>
+                    
+                    <div id="testOutputContainer" class="mt-3 d-none">
+                        <h6>{{ _('Output Result:') }}</h6>
+                        <pre id="testOutput" class="bg-light p-2 border small" style="max-height: 300px; overflow-y: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Editor -->
+        <div class="col-md-9">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">{{ title }}</h4>
+                    <a href="{{ url_for('resources.list_pipelines') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> {{ _('Back to List') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+                        <div class="row">
+                            <div class="col-md-6">
+                                {{ render_field(form.name, class="form-control") }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ render_field(form.description, class="form-control") }}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ render_field(form.script_content, class="form-control font-monospace", rows="25") }}
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i> {{ _('Save Pipeline') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    const runTestBtn = document.getElementById('runTestBtn');
+    const testFileInput = document.getElementById('testFile');
+    const scriptTextarea = document.getElementById('script_content');
+    const outputContainer = document.getElementById('testOutputContainer');
+    const outputArea = document.getElementById('testOutput');
+
+    runTestBtn.addEventListener('click', function() {
+        const file = testFileInput.files[0];
+        const script = scriptTextarea.value;
+
+        if (!file) {
+            alert({{ _('Please select a file to test.')|tojson }});
+            return;
+        }
+
+        if (!script) {
+            alert({{ _('Script content cannot be empty.')|tojson }});
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('script_content', script);
+        formData.append('test_file', file);
+        formData.append('csrf_token', '{{ csrf_token() }}');
+
+        runTestBtn.disabled = true;
+        runTestBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + {{ _('Running...')|tojson }};
+        outputContainer.classList.add('d-none');
+
+        fetch('{{ url_for('resources.test_pipeline') }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            outputContainer.classList.remove('d-none');
+            if (data.success) {
+                outputArea.innerHTML = JSON.stringify(data.result, null, 2);
+                outputArea.classList.remove('text-danger');
+                outputArea.classList.add('text-success');
+            } else {
+                outputArea.innerHTML = 'Error: ' + data.error;
+                outputArea.classList.remove('text-success');
+                outputArea.classList.add('text-danger');
+            }
+        })
+        .catch(error => {
+            outputContainer.classList.remove('d-none');
+            outputArea.innerHTML = 'System Error: ' + error;
+            outputArea.classList.add('text-danger');
+        })
+        .finally(() => {
+            runTestBtn.disabled = false;
+            runTestBtn.innerHTML = '<i class="fas fa-play"></i> ' + {{ _('Run Test')|tojson }};
+        });
+    });
+});
+</script>
+{% endblock %}

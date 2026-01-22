@@ -1,0 +1,92 @@
+{# templates/datatables/analysis.html #}
+{% extends "base.html" %}
+{% import "datatables/analysis/_macros.html" as macros %}
+
+{% block title %}{{ _('Analysis') }}{% if data_table %} - {{ data_table.group.name }} - {{ data_table.protocol.name }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    {# Page Header #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            {% if data_table %}
+            <h1 class="h3 mb-0">{{ _('Analysis: %(group)s', group=data_table.group.name) }}</h1>
+            {% if analysis_stage != 'show_results' %}
+            <p class="text-muted small mb-0">
+                <i class="fas fa-table me-1"></i>
+                {{ _('DataTable: %(protocol)s (%(date)s)', protocol=data_table.protocol.name, date=data_table.date) }}
+            </p>
+            {% endif %}
+            {% elif source_identifiers %}
+            <h1 class="h3 mb-0">{{ analysis_page_title or _('Merged Analysis') }}</h1>
+            {% if analysis_stage != 'show_results' %}
+            <div class="mt-2 text-muted small">
+                <span class="me-2">{{ _('Source Data:') }}</span>
+                {% for identifier in source_identifiers %}
+                <span class="badge bg-light text-dark border fw-normal">{{ identifier }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <h1 class="h3 mb-0">{{ _('Analysis') }}</h1>
+            {% endif %}
+        </div>
+        <div>
+            {# <span class="badge bg-primary">{{ data_table.status.value }}</span> #}
+        </div>
+    </div>
+
+    {# Main Form #}
+    <form id="analysis-form" method="POST"
+        action="{{ url_for('datatables.analyze_datatable', datatable_id=data_table.id) if data_table else url_for('datatables.analyze_selected_datatables') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if not data_table and form_data.get('selected_datatable_ids') %}
+        {% for dt_id in form_data.get('selected_datatable_ids') %}
+        <input type="hidden" name="selected_datatable_ids[]" value="{{ dt_id }}">
+        {% endfor %}
+        {% endif %}
+
+        {# Partials #}
+        {% include "datatables/analysis/_form_stage1.html" %}
+
+        <div id="propose-workflow-stage" {% if analysis_stage !='propose_workflow' %}style="display: none;" {% endif %}>
+            {% include "datatables/analysis/_form_stage2.html" %}
+        </div>
+
+        {% include "datatables/analysis/_results_stage3.html" %}
+    </form>
+</div>
+
+{# Hidden configurations passed to JS #}
+<script nonce="{{ csp_nonce }}">
+    const CONFIG = {
+        datatableId: {{ data_table.id if data_table else 'null' }},
+        analysisStage: '{{ analysis_stage }}',
+        categoricalColumns: {{ categorical_columns | tojson }},
+        numericalColumns: {{ numerical_columns | tojson }},
+        formData: {{ form_data | tojson }},
+        urls: {
+            performAnalysisTask: "{{ url_for('datatables.analyze_datatable', datatable_id=data_table.id) if data_table else url_for('datatables.analyze_selected_datatables') }}",
+            analysisStatus: "{{ url_for('datatables.analysis_status', task_id='TASK_ID') }}",
+            availableRanges: "{{ url_for('reference_ranges.available_reference_ranges', datatable_id=data_table.id) if data_table else '' }}"
+        },
+        i18n: {
+            selectGrouping: "{{ _('Select grouping parameter...') }}",
+            noSplit: "{{ _('Do not split analysis') }}",
+            analyzingString: "{{ _('Analyzing...') }}",
+            exporting: "{{ _('Exporting...') }}",
+            errorString: "{{ _('Error') }}",
+            confirmReset: "{{ _('Reset analysis selection?') }}"
+        }
+    };
+</script>
+{% endblock %}
+
+{% block scripts %}
+{# New Modular Scripts #}
+<script src="{{ url_for('static', filename='js/analysis/ui_interactions.js') }}?v=42" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/analysis/plots.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/analysis/api.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/analysis/export.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/analysis/main.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

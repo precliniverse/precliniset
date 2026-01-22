@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import render_field %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-10 offset-lg-1">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0"><i class="fas fa-user-cog me-2"></i>{{ title }}</h2>
+                        {% if using_template %}
+                            <div class="alert alert-info alert-dismissible fade show position-absolute top-0 end-0 m-2" style="width: auto;" role="alert">
+                                <i class="fas fa-copy me-1"></i>{{ _('Based on template: %s', template_name=template_name) }}
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST" action="" novalidate>
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.name.id }}" class="form-label fw-bold">{{ _('Role Name') }} <span class="text-danger">*</span></label>
+                                {{ form.name(class="form-control", placeholder=_('Enter role name (e.g., Project Manager)'), **{'aria-describedby': 'nameHelp'}) }}
+                                <div id="nameHelp" class="form-text">{{ _('Role names must be unique within their scope and 3-80 characters long.') }}</div>
+                                {% if form.name.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.name.errors[0] }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.scope.id }}" class="form-label fw-bold">{{ _('Scope') }} <span class="text-danger">*</span></label>
+                                {{ form.scope(class="form-select", **{'aria-describedby': 'scopeHelp'}) }}
+                                <div id="scopeHelp" class="form-text">{{ _('Global roles apply application-wide, team-specific roles are limited to one team.') }}</div>
+                                {% if form.scope.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.scope.errors[0] }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.description.id }}" class="form-label fw-bold">{{ _('Description') }}</label>
+                            {{ form.description(class="form-control", rows=3, placeholder=_('Describe the purpose and responsibilities of this role...')) }}
+                            <div class="form-text">{{ _('Optional: Explain what this role can do and its intended use (max 255 characters).') }}</div>
+                            {% if form.description.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.description.errors[0] }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3" id="team-select-container" style="display: none;">
+                            <label for="{{ form.team_id.id }}" class="form-label fw-bold">{{ _('Team') }} <span class="text-danger" id="team-required">*</span></label>
+                            {{ form.team_id(class="form-select", **{'aria-describedby': 'teamHelp'}) }}
+                            <div id="teamHelp" class="form-text">{{ _('Select the team this role will be available to.') }}</div>
+                            {% if form.team_id.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.team_id.errors[0] }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label h5 fw-bold">{{ _('Permissions') }}</label>
+                            <p class="text-muted small mb-3">{{ _('Select the permissions this role should have. Permissions are grouped by resource type.') }}</p>
+                            <hr>
+                            {% for resource, permissions in grouped_permissions.items()|sort %}
+                                {% set group_id = resource|replace(' ', '_')|lower %}
+                                <div class="card mb-4 shadow-sm border-0">
+                                    <div class="card-header bg-light border-primary">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="card-title mb-0 text-primary fw-bold">
+                                                    <i class="fas fa-cube me-2"></i>{{ resource }}
+                                                </h6>
+                                                <small class="text-muted">{{ _('Available actions') }}</small>
+                                            </div>
+                                            <div class="form-check form-switch">
+                                                <input type="checkbox" class="form-check-input select-all-group" id="select-all-{{ group_id }}" data-group="{{ group_id }}"
+                                                       aria-label="Toggle all permissions">
+                                                <label class="form-check-label fw-medium text-muted" for="select-all-{{ group_id }}">
+                                                    {{ _('Select All') }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-3">
+                                        <div class="row g-2">
+                                            {% for p in permissions %}
+                                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" name="{{ form.permissions.name }}" value="{{ p.id }}" class="form-check-input group-checkbox"
+                                                               data-group="{{ group_id }}" id="perm-{{ p.id }}"
+                                                               {% if p.id in (form.permissions.data or []) %}checked{% endif %}
+                                                               aria-label="Permission for action">
+                                                        <label class="form-check-label" for="perm-{{ p.id }}">
+                                                            <i class="fas fa-check-circle text-success me-1" style="font-size: 0.75em; opacity: 0.5;"></i>
+                                                            {{ p.action|title }}
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                            {% if form.permissions.errors %}
+                                <div class="alert alert-danger">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    {{ form.permissions.errors[0] }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                            <a href="{{ url_for('admin.manage_roles') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>{{ _('Cancel') }}
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-lg px-4" id="submit-btn">
+                                <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                                <i class="fas fa-save me-2"></i>{{ form.submit.label.text }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    // Scope toggle functionality
+    const scopeSelect = document.getElementById('{{ form.scope.id }}');
+    const teamSelectContainer = document.getElementById('team-select-container');
+    const teamRequired = document.getElementById('team-required');
+    
+    function toggleTeamSelect() {
+        const isTeamSpecific = scopeSelect.value === 'team_specific';
+        teamSelectContainer.style.display = isTeamSpecific ? 'block' : 'none';
+        teamRequired.textContent = isTeamSpecific ? '*' : '';
+        if (!isTeamSpecific) {
+            document.getElementById('{{ form.team_id.id }}').value = '';
+        }
+    }
+    
+    if (scopeSelect) {
+        scopeSelect.addEventListener('change', toggleTeamSelect);
+        toggleTeamSelect(); // Set initial state
+    }
+
+    // Enhanced Select All functionality for permission groups
+    const selectAllCheckboxes = document.querySelectorAll('.select-all-group');
+    selectAllCheckboxes.forEach(function(selectAll) {
+        const groupId = selectAll.dataset.group;
+        const groupCheckboxes = document.querySelectorAll(`.group-checkbox[data-group="${groupId}"]`);
+
+        function updateIndividualCheckboxes() {
+            groupCheckboxes.forEach(function(checkbox) {
+                checkbox.checked = selectAll.checked;
+                checkbox.setAttribute('aria-checked', selectAll.checked);
+            });
+        }
+
+        function updateSelectAllState() {
+            const checkedCount = Array.from(groupCheckboxes).filter(cb => cb.checked).length;
+            const totalCount = groupCheckboxes.length;
+            const allChecked = checkedCount === totalCount;
+            const someChecked = checkedCount > 0;
+            
+            selectAll.checked = allChecked;
+            selectAll.indeterminate = someChecked && !allChecked;
+            selectAll.setAttribute('aria-checked', allChecked ? 'true' : 'false');
+        }
+
+        selectAll.addEventListener('change', updateIndividualCheckboxes);
+        
+        groupCheckboxes.forEach(function(checkbox) {
+            checkbox.addEventListener('change', function() {
+                updateSelectAllState();
+            });
+        });
+
+        // Initialize state
+        updateSelectAllState();
+    });
+
+    // Form submission with loading state
+    const form = document.querySelector('form');
+    const submitBtn = document.getElementById('submit-btn');
+    const spinner = submitBtn.querySelector('.spinner-border');
+    const originalText = submitBtn.innerHTML;
+
+    form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        spinner.classList.remove('d-none');
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span class="visually-hidden">Saving...</span>';
+    });
+
+    // Form validation styling
+    const formFields = form.querySelectorAll('.form-control, .form-select');
+    formFields.forEach(function(field) {
+        field.addEventListener('blur', function() {
+            if (field.classList.contains('is-invalid')) {
+                field.classList.remove('is-invalid');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,88 @@
+services:
+  db:
+    image: yobasystems/alpine-mariadb
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app_network
+    profiles:
+      - mysql
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    profiles:
+      - redis
+
+  web:
+    build: .
+    restart: always
+    depends_on: []
+    expose:
+      - "5000"
+    env_file:
+      - .env
+    environment:
+      - RUN_MIGRATIONS=true
+    volumes:
+      - uploads_data:/app/uploads
+      - instance_data:/app/instance
+    networks:
+      - app_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/app/static:ro
+      - uploads_data:/app/uploads:ro
+    depends_on:
+      - web
+    networks:
+      - app_network
+
+  celery_worker:
+    build: .
+    restart: always
+    depends_on:
+      - web
+    command: celery -A celery_worker.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - RUN_MIGRATIONS=false
+    volumes:
+      - uploads_data:/app/uploads
+      - instance_data:/app/instance
+    networks:
+      - app_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  db_data:
+  redis_data:
+  uploads_data:
+  instance_data:
+
+
+networks:
+  app_network:
+    driver: bridge

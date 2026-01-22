@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{{ _('New Controlled Molecule') }}</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ _('Molecule Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('controlled_molecules.create_molecule') }}">
+                        {{ form.hidden_tag() }}
+
+                        <div class="form-group">
+                            {{ form.name.label(class="form-label") }}
+                            {{ form.name(class="form-control") }}
+                            {% for error in form.name.errors %}
+                            <span class="text-danger">{{ error }}</span>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                {{ form.regulation_category.label(class="form-label") }}
+                                {{ form.regulation_category(class="form-control") }}
+                                {% for error in form.regulation_category.errors %}
+                                <span class="text-danger">{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                            <div class="form-group col-md-6">
+                                {{ form.unit.label(class="form-label") }}
+                                {{ form.unit(class="form-control") }}
+                                <small class="form-text text-muted">{{ form.unit.description }}</small>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.responsible_id.label(class="form-label") }}
+                            {{ form.responsible_id(class="form-control") }}
+                            <small class="form-text text-muted">{{ form.responsible_id.description }}</small>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.storage_location.label(class="form-label") }}
+                            {{ form.storage_location(class="form-control") }}
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                {{ form.cas_number.label(class="form-label") }}
+                                {{ form.cas_number(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-6">
+                                {{ form.internal_reference.label(class="form-label") }}
+                                {{ form.internal_reference(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                {{ form.requires_secure_prescription(class="custom-control-input") }}
+                                {{ form.requires_secure_prescription.label(class="custom-control-label") }}
+                            </div>
+                            <small class="form-text text-muted pl-4">{{ form.requires_secure_prescription.description
+                                }}</small>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.max_prescription_days.label(class="form-label") }}
+                            {{ form.max_prescription_days(class="form-control", type="number") }}
+                            <small class="form-text text-muted">{{ form.max_prescription_days.description }}</small>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.notes.label(class="form-label") }}
+                            {{ form.notes(class="form-control", rows=3) }}
+                        </div>
+
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                {{ form.is_active(class="custom-control-input") }}
+                                {{ form.is_active.label(class="custom-control-label") }}
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('controlled_molecules.list_molecules') }}" class="btn btn-secondary">{{
+                                _('Cancel') }}</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

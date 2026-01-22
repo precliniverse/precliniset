@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Datatables Related to {{ model_type|capitalize }} Model: {{ model_name }}</h1>
+
+<a href="{{ url_for('create_model') }}" class="btn btn-secondary mb-3 me-2">Back to Models</a>
+{% if datatables %}
+<a href="{{ url_for('download_model_datatables', model_type=model_type, model_id=request.view_args.model_id) }}" class="btn btn-success mb-3">Download All as XLSX</a>
+{% endif %}
+
+
+{% if datatables %}
+    <h2 class="mt-4">Related Datatables</h2>
+    <table id="datatables-model-table" class="table table-striped table-bordered" style="width:100%">
+        <thead>
+            <tr>
+                <th>Group</th>
+                <th>Protocol</th>
+                <th>Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for dt in datatables %}
+            <tr>
+                <td>{{ dt.group.name }}</td>
+                <td>{{ dt.protocol.name }}</td>
+                <td>{{ dt.date }}</td>
+                <td>
+                    <a href="{{ url_for('datatables.edit_data_table', id=dt.id) }}" class="btn btn-sm btn-outline-primary me-1 mb-1">View/Edit</a>
+                    <a href="{{ url_for('datatables.analyze_datatable', datatable_id=dt.id) }}" class="btn btn-sm btn-outline-info me-1 mb-1">Analyze</a>
+                    <a href="{{ url_for('datatables.download_data_table', id=dt.id, file_format='csv') }}" class="btn btn-sm btn-outline-success me-1 mb-1">CSV</a>
+                    <a href="{{ url_for('datatables.download_data_table', id=dt.id, file_format='xlsx') }}" class="btn btn-sm btn-outline-success me-1 mb-1">XLSX</a>
+                    <form method="POST" action="{{ url_for('datatables.delete_data_table', id=dt.id) }}" style="display:inline;" class="confirm-delete-datatable-form" data-confirm-message="Are you sure you want to delete this data table?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="btn btn-sm btn-outline-danger mb-1">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div class="alert alert-info mt-4" role="alert">
+        No datatables found related to this model.
+    </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base template if any #}
+<script nonce="{{ csp_nonce }}">
+$(document).ready(function() {
+    $('#datatables-model-table').DataTable({
+        "dom": '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>><"row dt-row"<"col-sm-12"tr>><"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        "columnDefs": [
+          { "orderable": false, "targets": 3 } 
+        ]
+    });
+
+    // Confirmation for delete forms
+    document.querySelectorAll('.confirm-delete-datatable-form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            const message = this.dataset.confirmMessage || 'Are you sure?';
+            if (!confirm(message)) {
+                event.preventDefault();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

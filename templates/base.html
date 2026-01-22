@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <title>{{ _('Experiment App') }}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        crossorigin="anonymous">
+    <!-- DataTables Bootstrap 5 CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.bootstrap5.css">
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <!-- Select2 Bootstrap 5 Theme CSS -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    {% block head_extra %}
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+    {% endblock %} {# Added block for extra head content like Quill CSS #}
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">{{ _('Precliniverse') }}</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="{{ _('Toggle navigation') }}">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}"
+                            href="{{ url_for('main.index') }}"><i class="fas fa-home me-1"></i>{{ _('Home') }}</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.documentation' %}active{% endif %}"
+                            href="{{ url_for('main.documentation') }}"><i class="fas fa-book me-1"></i>{{ _('Docs')
+                            }}</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.blueprint == 'projects' %}active{% endif %}"
+                            href="{{ url_for('projects.list_projects') }}"><i class="fas fa-folder-open me-1"></i>{{
+                            _('Projects') }}</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.blueprint == 'calendar' %}active{% endif %}"
+                            href="{{ url_for('calendar.view_calendar') }}"><i class="fas fa-calendar-alt me-1"></i>{{
+                            _('Calendar') }}</a>
+                    </li>
+                    <!-- Data Dropdown -->
+                    <li><a class="nav-link" href="{{ url_for('groups.manage_groups') }}"><i
+                                class="fas fa-layer-group me-1"></i>{{ _('Experimental Groups') }}</a></li>
+                    <li><a class="nav-link" href="{{ url_for('datatables.create_data_table') }}"><i
+                                class="fas fa-table me-1"></i>{{ _('DataTables') }}</a></li>
+                    <li><a class="nav-link" href="{{ url_for('sampling.all_samples_list') }}"><i
+                                class="fas fa-vials me-1"></i>{{ _('Samples') }}</a></li>
+
+                    <!-- Resources Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.blueprint in ['core_models', 'ethical_approvals', 'storage'] or request.endpoint == 'projects.partners' %}active{% endif %}"
+                            href="#" id="resourcesDropdown" role="button" data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                            <i class="fas fa-cogs me-1"></i>{{ _('Resources') }}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="resourcesDropdown">
+                            <li><a class="dropdown-item {% if request.blueprint == 'core_models' %}active{% endif %}"
+                                    href="{{ url_for('core_models.manage_models') }}"><i class="fas fa-dna me-1"></i>{{
+                                    _('Core Models') }}</a></li>
+                            <li><a class="dropdown-item {% if request.blueprint == 'ethical_approvals' %}active{% endif %}"
+                                    href="{{ url_for('ethical_approvals.list_ethical_approvals') }}"><i
+                                        class="fas fa-balance-scale me-1"></i>{{ _('Ethical Approvals') }}</a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'projects.partners' %}active{% endif %}"
+                                    href="{{ url_for('projects.partners') }}"><i class="fas fa-handshake me-1"></i>{{
+                                    _('Partners') }}</a></li>
+                            <li><a class="dropdown-item {% if request.blueprint == 'storage' %}active{% endif %}"
+                                    href="{{ url_for('storage.manage_storages') }}"><i
+                                        class="fas fa-boxes-stacked me-1"></i>{{ _('Storages') }}</a></li>
+                            <li><a class="dropdown-item {% if request.blueprint == 'reference_ranges' %}active{% endif %}"
+                                    href="{{ url_for('reference_ranges.list_reference_ranges') }}"><i
+                                        class="fas fa-ruler-combined me-1"></i>{{ _('Reference Ranges') }}</a></li>
+                            <li><a class="dropdown-item {% if request.blueprint == 'resources' %}active{% endif %}"
+                                    href="{{ url_for('resources.manage_static_lists') }}"><i
+                                        class="fas fa-list me-1"></i>{{ _('Static Lists') }}</a></li>
+                            <li><a class="dropdown-item {% if request.blueprint == 'controlled_molecules' %}active{% endif %}"
+                                    href="{{ url_for('controlled_molecules.list_molecules') }}"><i
+                                        class="fas fa-prescription-bottle-alt me-1"></i>{{ _('Controlled Molecules')
+                                    }}</a></li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <!-- Ecosystem Navigation -->
+                {% if current_user.is_authenticated and config.get('TM_ENABLED', 'False')|string|lower == 'true' %}
+                <div class="d-flex me-3">
+                    <a href="{{ url_for('auth.sso_training_manager') }}" class="btn btn-warning btn-sm"
+                        title="{{ _('Jump to Training Manager') }}">
+                        <i class="fas fa-graduation-cap me-1"></i>{{ _('Training Manager') }}
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Global Search  -->
+                <form class="d-flex ms-auto me-3" method="GET" action="{{ url_for('main.search_results') }}"
+                    id="globalSearchForm">
+                    <input name="q" class="form-control form-control-sm me-2" type="search"
+                        placeholder="{{ _('Global Search...') }}" aria-label="Search"
+                        value="{{ request.args.get('q', '') }}">
+                    <button class="btn btn-sm btn-outline-success" type="submit"><i class="fas fa-search"></i></button>
+                </form>
+
+                <!-- User Menu -->
+                <ul class="navbar-nav">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['main.my_page', 'main.settings', 'admin.manage_teams'] %}active{% endif %}"
+                            href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+                            title="{{ current_user.email }}">
+                            <i class="fas fa-user-circle"></i>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="userDropdown">
+                            <li class="dropdown-header border-bottom pb-2 mb-1">
+                                <small class="text-muted d-block">{{ _('Signed in as') }}</small>
+                                <strong>{{ current_user.email.split('@')[0] }}</strong>
+                            </li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.my_page' %}active{% endif %}"
+                                    href="{{ url_for('main.my_page') }}"><i class="fas fa-id-card me-2"></i>{{ _('My
+                                    Page') }}</a></li>
+                            {% if current_user.is_super_admin %}
+                            <li><a class="dropdown-item {% if request.endpoint == 'admin.audit_logs' %}active{% endif %}"
+                                    href="{{ url_for('admin.audit_logs') }}"><i class="fas fa-history me-2"></i>{{
+                                    _('Audit Trail') }}</a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'admin.manage_roles' %}active{% endif %}"
+                                    href="{{ url_for('admin.manage_roles') }}"><i class="fas fa-user-shield me-2"></i>{{
+                                    _('Roles') }}</a></li>
+                            {% endif %}
+                            {% if current_user.is_super_admin or current_user.get_teams() %}
+                            <li><a class="dropdown-item {% if request.endpoint == 'admin.manage_teams' %}active{% endif %}"
+                                    href="{{ url_for('admin.manage_teams') }}"><i class="fas fa-users me-2"></i>{{
+                                    _('Teams') }}</a></li>
+                            {% endif %}
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.settings' %}active{% endif %}"
+                                    href="{{ url_for('main.settings') }}"><i class="fas fa-cog me-2"></i>{{
+                                    _('Settings') }}</a></li>
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i
+                                        class="fas fa-sign-out-alt me-2"></i>{{ _('Logout') }}</a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint in ['auth.login', 'auth.register'] %}active{% endif %}"
+                            href="{{ url_for('auth.login') }}" title="{{ _('Login / Register') }}">
+                            <i class="fas fa-sign-in-alt"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+        integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"
+        nonce="{{ csp_nonce }}"></script>
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        crossorigin="anonymous"
+        nonce="{{ csp_nonce }}"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/2.1.8/js/dataTables.js" nonce="{{ csp_nonce }}"></script>
+    <!-- DataTables Bootstrap 5 JS -->
+    <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.js" nonce="{{ csp_nonce }}"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"
+        nonce="{{ csp_nonce }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js" nonce="{{ csp_nonce }}"></script>
+    <script src="https://cdn.plot.ly/plotly-3.1.0.min.js" charset="utf-8" nonce="{{ csp_nonce }}"></script>
+    <!-- FullCalendar JS -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js' nonce="{{ csp_nonce }}"></script>
+
+    <footer class="footer mt-auto py-3 bg-light border-top">
+        <div class="container text-center">
+            <span class="text-muted small">Precliniverse v{{ app_version }} | &copy; 2026</span>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

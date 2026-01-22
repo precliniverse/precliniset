@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Upload to CKAN') }}: {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Upload to CKAN') }}</h1>
+    <p><strong>{{ _('Project:') }}</strong> <a href="{{ url_for('projects.view_edit_project', project_slug=project.slug) }}">{{ project.name }}</a></p>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">{{ _('Upload Options') }}</div>
+            {% if current_user.ckan_url and current_user.ckan_api_key %}
+            <div class="card-body">
+                <form id="ckanUploadForm">
+                    <div class="mb-3">
+                        <label for="ckan_dataset_name" class="form-label">{{ _('CKAN Dataset Name') }}</label>
+                        <input type="text" id="ckan_dataset_name" name="name" class="form-control" value="{{ sanitize_ckan_name(project.name) }}" required>
+                        <small class="form-text text-muted">{{ _('A unique, URL-friendly name (e.g., my-awesome-project).') }}</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ckan_organization" class="form-label">{{ _('CKAN Organization') }}</label>
+                        <select id="ckan_organization" name="organization_id" class="form-select" required>
+                            {% for org in organizations %}
+                                <option value="{{ org.id }}">{{ org.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="ckan_private" name="private">
+                        <label class="form-check-label" for="ckan_private">{{ _('Make Dataset Private') }}</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">{{ _('Start Upload') }}</button>
+                </form>
+            </div>
+            {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">{{ _('Resources to Upload') }}</div>
+                <div class="card-body">
+                    <h6>{{ _('DataTables') }}</h6>
+                    <ul class="list-group mb-3">
+                        {% for dt in datatables %}
+                            <li class="list-group-item">{{ dt.name }}</li>
+                        {% endfor %}
+                        {% if not datatables %}
+                            <li class="list-group-item text-muted">{{ _('No DataTables in this project.') }}</li>
+                        {% endif %}
+                    </ul>
+
+                    <h6>{{ _('Project Attachments') }}</h6>
+                    <ul class="list-group mb-3">
+                        {% for att in project_attachments %}
+                            <li class="list-group-item">{{ att.filename }}</li>
+                        {% endfor %}
+                        {% if not project_attachments %}
+                            <li class="list-group-item text-muted">{{ _('No project attachments.') }}</li>
+                        {% endif %}
+                    </ul>
+
+                    <h6>{{ _('Protocol Attachments') }}</h6>
+                    <ul class="list-group">
+                        {% for att in protocol_attachments %}
+                            <li class="list-group-item">{{ att.filename }} <small class="text-muted">({{ _('from protocol') }} '{{ att.protocol_name }}')</small></li>
+                        {% endfor %}
+                        {% if not protocol_attachments %}
+                            <li class="list-group-item text-muted">{{ _('No protocol attachments found in this project\'s datatables.') }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">{{ _('Upload Progress') }}</div>
+                <div class="card-body">
+                    <ul id="taskList" class="list-group">
+                        <li class="list-group-item text-muted">{{ _('Waiting to start...') }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Overwrite/Rename Modals -->
+<div class="modal fade" id="datasetExistsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ _('Dataset Exists') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>{{ _('A dataset with this name already exists. What would you like to do?') }}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel Upload') }}</button>
+        <button type="button" class="btn btn-primary" id="addResourcesBtn">{{ _('Add/Update Resources in Existing Dataset') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script nonce="{{ csp_nonce }}">
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('ckanUploadForm');
+    const taskList = document.getElementById('taskList');
+    const datasetExistsModal = new bootstrap.Modal(document.getElementById('datasetExistsModal'));
+    let uploadState = {};
+
+    function addTask(text, status = 'pending') {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        li.textContent = text;
+        
+        const spinner = `<div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading...</span></div>`;
+        const success = `<i class="fas fa-check-circle text-success"></i>`;
+        const error = `<i class="fas fa-times-circle text-danger"></i>`;
+
+        const statusSpan = document.createElement('span');
+        if (status === 'pending') statusSpan.innerHTML = spinner;
+        if (status === 'success') statusSpan.innerHTML = success;
+        if (status === 'error') statusSpan.innerHTML = error;
+        
+        li.appendChild(statusSpan);
+        taskList.appendChild(li);
+        return li;
+    }
+
+    function updateTask(li, status, message = null) {
+        const statusSpan = li.querySelector('span');
+        const success = `<i class="fas fa-check-circle text-success"></i>`;
+        const error = `<i class="fas fa-times-circle text-danger"></i>`;
+        if (status === 'success') statusSpan.innerHTML = success;
+        if (status === 'error') {
+            statusSpan.innerHTML = error;
+            if (message) {
+                const errorMsg = document.createElement('small');
+                errorMsg.className = 'd-block text-danger';
+                errorMsg.textContent = message;
+                li.appendChild(errorMsg);
+            }
+        }
+    }
+
+    async function startUploadProcess() {
+        taskList.innerHTML = '';
+        const task1 = addTask('Checking for existing dataset...');
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        data.private = document.getElementById('ckan_private').checked;
+        uploadState.options = data;
+
+        try {
+            const response = await fetch("{{ url_for('ckan.start_upload', project_slug=project.slug) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || 'Server error');
+
+            updateTask(task1, 'success');
+
+            if (result.status === 'exists') {
+                uploadState.datasetId = result.dataset_id;
+                uploadState.existingResources = result.resources;
+                datasetExistsModal.show();
+            } else if (result.status === 'new') {
+                await createDataset();
+            }
+
+        } catch (err) {
+            updateTask(task1, 'error', err.message);
+        }
+    }
+
+    async function createDataset() {
+        const task2 = addTask('Creating new dataset...');
+        try {
+            const response = await fetch("{{ url_for('ckan.create_dataset', project_slug=project.slug) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+                body: JSON.stringify(uploadState.options)
+            });
+            const result = await response.json();
+            if (!response.ok || result.status !== 'success') throw new Error(result.message || 'Failed to create dataset');
+            
+            updateTask(task2, 'success');
+            uploadState.datasetId = result.dataset_id;
+            uploadState.existingResources = []; // It's a new dataset
+            await uploadAllResources();
+
+        } catch (err) {
+            updateTask(task2, 'error', err.message);
+        }
+    }
+
+    async function uploadAllResources() {
+        const datatables = {{ datatables|tojson|safe }};
+        const projectAttachments = {{ project_attachments|tojson|safe }};
+        // Protocol attachments are handled within the datatable upload loop to ensure they are linked correctly
+
+        // --- Upload DataTables (which now includes protocol attachment logic) ---
+        for (const dt of datatables) {
+            const task = addTask(`Uploading DataTable: ${dt.name}...`);
+            
+            try {
+                const response = await fetch(`/ckan/{{ project.slug }}/upload_resource/${dt.id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+                    body: JSON.stringify({ dataset_id: uploadState.datasetId })
+                });
+                const result = await response.json();
+                if (!response.ok || result.status !== 'success') throw new Error(result.message || 'Upload failed');
+                updateTask(task, 'success');
+            } catch (err) {
+                updateTask(task, 'error', err.message);
+            }
+        }
+
+        // --- Upload Project-level Attachments ---
+        for (const attachment of projectAttachments) {
+            const resourceName = attachment.filename;
+            const task = addTask(`Uploading project attachment: ${resourceName}...`);
+
+            let resourceIdToUpdate = null;
+            const existingResource = uploadState.existingResources.find(r => r.name === resourceName);
+            if (existingResource) {
+                if (confirm(`Resource for attachment '${resourceName}' already exists. Overwrite?`)) {
+                    resourceIdToUpdate = existingResource.id;
+                } else {
+                    updateTask(task, 'success', 'Skipped by user.');
+                    continue;
+                }
+            }
+
+            try {
+                const response = await fetch(`/ckan/{{ project.slug }}/upload_attachment/${attachment.id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
+                    body: JSON.stringify({ dataset_id: uploadState.datasetId, resource_id: resourceIdToUpdate })
+                });
+                const result = await response.json();
+                if (!response.ok || result.status !== 'success') throw new Error(result.message || 'Upload failed');
+                updateTask(task, 'success');
+            } catch (err) {
+                updateTask(task, 'error', err.message);
+            }
+        }
+
+        await finalizeUpload();
+    }
+
+    async function finalizeUpload() {
+        const finalTask = addTask('Finalizing upload...');
+        try {
+            await fetch("{{ url_for('ckan.finalize_upload', project_slug=project.slug) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'}
+            });
+            updateTask(finalTask, 'success');
+            addTask('{{ _("Upload Complete!") }}', 'success');
+        } catch (err) {
+            updateTask(finalTask, 'error', err.message);
+        }
+    }
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            startUploadProcess();
+        });
+    }
+
+    if (document.getElementById('addResourcesBtn')) {
+        document.getElementById('addResourcesBtn').addEventListener('click', function() {
+            datasetExistsModal.hide();
+            uploadAllResources();
+        });
+    }
+});
+</script>
+{% endblock %}

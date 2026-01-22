@@ -1,0 +1,107 @@
+{# templates/reference_ranges/list_reference_ranges.html #}
+{% extends "base.html" %}
+
+{% block title %}{{ _('Reference Ranges') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>{{ _('Reference Ranges') }}</h1>
+        <a href="{{ url_for('reference_ranges.create_edit_reference_range') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> {{ _('Create New Reference Range') }}
+        </a>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body bg-light rounded">
+            <form method="GET" action="{{ url_for('reference_ranges.list_reference_ranges') }}" class="row g-3 align-items-end" id="filterForm">
+                <div class="col-md-5">
+                    <label for="analyte_id" class="form-label small text-muted text-uppercase fw-bold">{{ _('Filter by Analyte') }}</label>
+                    <select name="analyte_id" id="analyte_id" class="form-select filter-select">
+                        <option value="">{{ _('All Analytes') }}</option>
+                        {% for a in analytes %}
+                        <option value="{{ a.id }}" {{ 'selected' if current_analyte_id == a.id }}>{{ a.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label for="protocol_id" class="form-label small text-muted text-uppercase fw-bold">{{ _('Filter by Protocol') }}</label>
+                    <select name="protocol_id" id="protocol_id" class="form-select filter-select">
+                        <option value="">{{ _('All Protocols') }}</option>
+                        {% for p in protocols %}
+                        <option value="{{ p.id }}" {{ 'selected' if current_protocol_id == p.id }}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">{{ _('Filter') }}</button>
+                    <a href="{{ url_for('reference_ranges.list_reference_ranges') }}" class="btn btn-link text-decoration-none p-0 align-self-center small">{{ _('Reset') }}</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if ranges_with_summary %}
+    <div class="list-group">
+        {% for item in ranges_with_summary %}
+        {% set range = item.range %}
+        {% set summary = item.summary %}
+        <div class="list-group-item list-group-item-action flex-column align-items-start"
+            data-href="{{ url_for('reference_ranges.create_edit_reference_range', range_id=range.id) }}">
+            <div class="d-flex w-100 justify-content-between">
+                <h5 class="mb-1">{{ range.name }}</h5>
+                <div>
+                    <small class="text-muted">{{ _('Team:') }} {{ range.owner_team.name }}</small>
+                    <a href="{{ url_for('reference_ranges.download_reference_range_data', range_id=range.id) }}"
+                        class="btn btn-sm btn-success ms-2">
+                        <i class="fas fa-download"></i> {{ _('Download') }}
+                    </a>
+                    <form action="{{ url_for('reference_ranges.delete_reference_range', range_id=range.id) }}"
+                        method="POST" style="display: inline;" class="delete-confirm-form"
+                        data-confirm-message="{{ _('Are you sure you want to delete this reference range?') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <button type="submit" class="btn btn-sm btn-danger ms-1">
+                            <i class="fas fa-trash-alt"></i> {{ _('Delete') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <p class="mb-1">
+                <strong>{{ _('Protocol:') }}</strong> {{ range.protocol.name if range.protocol else 'N/A' }}
+            </p>
+            <p class="card-text mb-1">
+                <strong>{{ _('Animals:') }}</strong> <span class="badge bg-primary">{{ summary.total_animals }}</span>
+                <strong class="ms-3">{{ _('Animal Model:') }}</strong> {{ range.animal_model.name if range.animal_model else 'N/A' }}
+            </p>
+            <p class="card-text mb-1"><strong>{{ _('Projects:') }}</strong> <small>{{ summary.projects|join(', ')
+                    }}</small></p>
+            <p class="card-text mb-1"><strong>{{ _('Groups:') }}</strong> <small>{{ summary.groups|join(', ') }}</small>
+            </p>
+            <div class="mt-2">
+                <strong>{{ _('Sharing:') }}</strong>
+                {% if range.is_globally_shared %}
+                <span class="badge bg-success">{{ _('Global') }}</span>
+                {% elif range.shared_with_teams.count() > 0 %}
+                <span class="badge bg-info">{{ _('Shared with:') }}</span>
+                {% for team in range.shared_with_teams %}
+                <span class="badge bg-secondary">{{ team.name }}</span>
+                {% endfor %}
+                {% else %}
+                <span class="badge bg-light text-dark">{{ _('Private') }}</span>
+                {% endif %}
+            </div>
+            <small class="text-muted">{{ range.description or _('No description.') }}</small>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">{{ _('No Reference Ranges have been created yet.') }}</div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/reference_ranges_list.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

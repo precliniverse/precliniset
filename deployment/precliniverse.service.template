@@ -1,0 +1,15 @@
+[Unit]
+Description=Precliniset Web Application
+After=network.target mysql.service redis-server.service
+
+[Service]
+User={{ user }}
+Group={{ group }}
+WorkingDirectory={{ app_dir }}
+Environment="PATH={{ venv_dir }}/bin"
+EnvironmentFile={{ app_dir }}/.env
+ExecStart={{ venv_dir }}/bin/gunicorn --workers 3 --bind 0.0.0.0:{{ port }} run:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

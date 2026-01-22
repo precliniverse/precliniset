@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Manage Static Lists') }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>{{ _('Manage Static Lists') }}</h1>
+    <p class="lead">{{ _('From this page, you can manage the predefined lists used throughout the application.') }}</p>
+
+    <div class="list-group">
+        <a href="{{ url_for('resources.manage_analytes') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-vial me-2"></i> {{ _('Manage Analytes') }}
+        </a>
+        <a href="{{ url_for('resources.manage_organs') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-heartbeat me-2"></i> {{ _('Manage Organs') }}
+        </a>
+        <a href="{{ url_for('resources.manage_conditions') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-snowflake me-2"></i> {{ _('Manage Tissue Collection Conditions') }}
+        </a>
+        <a href="{{ url_for('resources.manage_derived_types') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-project-diagram me-2"></i> {{ _('Manage Derived Sample Types') }}
+        </a>
+        <a href="{{ url_for('resources.manage_stainings') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-palette me-2"></i> {{ _('Manage Stainings/Treatments') }}
+        </a>
+        <a href="{{ url_for('resources.manage_anticoagulants') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-tint me-2"></i> {{ _('Manage Anticoagulants') }}
+        </a>
+        <a href="{{ url_for('resources.manage_housing_conditions') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-home me-2"></i> {{ _('Manage Housing Conditions (Sets & Items)') }}
+        </a>
+        <a href="{{ url_for('resources.list_pipelines') }}" class="list-group-item list-group-item-action">
+            <i class="fas fa-code-branch me-2"></i> {{ _('Manage Import Pipelines') }}
+        </a>
+    <a href="{{ url_for('resources.bulk_download') }}" class="list-group-item list-group-item-action">
+        <i class="fas fa-download me-2"></i> {{ _('Bulk Download All Lists') }}
+    </a>
+    
+    <form action="{{ url_for('resources.bulk_upload') }}" method="post" enctype="multipart/form-data" class="list-group-item list-group-item-action">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="file" name="file" accept=".xlsx" required class="form-control mb-2">
+        <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fas fa-upload me-2"></i> {{ _('Bulk Upload All Lists') }}
+        </button>
+    </form>
+    
+    </div>
+</div>
+{% endblock %}

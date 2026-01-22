@@ -1,0 +1,586 @@
+/* static/styles.css */
+
+/* 1. Global Styles & Typography Base
+-------------------------------------------------- */
+body {
+    /* Bootstrap 5 utilise une pile de polices système modernes par défaut, ce qui est généralement préférable.
+       Si vous tenez absolument à Arial, vous pouvez décommenter la ligne ci-dessous,
+       mais cela pourrait surcharger la pile de polices plus optimisée de Bootstrap. */
+    /* font-family: Arial, sans-serif; */
+
+    /* Taille de police de base pour toute l'application.
+       1rem équivaut généralement à 16px. Ajustez selon vos besoins pour une mise à l'échelle globale. */
+    font-size: 0.95rem;
+    /* Réduit la taille de police de base */
+    line-height: 1.6;
+    /* Améliore la lisibilité des blocs de texte */
+    color: #343a40;
+    /* Couleur de texte par défaut de Bootstrap, un peu plus douce que le noir pur */
+    background-color: #f8f9fa;
+    /* Un fond très légèrement grisé peut être agréable */
+}
+
+/* Titres - Les valeurs par défaut de Bootstrap sont bonnes, mais vous pouvez les affiner */
+h1 {
+    font-size: 1.4rem;
+    /* Réduit la taille du titre H1 */
+    margin-bottom: 1rem;
+    /* Espacement standard */
+}
+
+h2 {
+    font-size: 1.3rem;
+    /* Réduit la taille du titre H2 */
+    margin-bottom: 0.8rem;
+}
+
+h3 {
+    font-size: 1rem;
+    /* Réduit la taille du titre H3 */
+    margin-bottom: 0.7rem;
+}
+
+h4 {
+    font-size: 1rem;
+    /* Réduit la taille du titre H3 */
+    margin-bottom: 0.5rem;
+}
+
+/* Ajoutez h3, h4, etc., si vous avez besoin d'ajustements spécifiques */
+
+/* Liens - Bootstrap gère bien cela, mais vous pouvez personnaliser si nécessaire */
+/* a {
+    color: #0d6efd; /* Couleur de lien par default de Bootstrap */
+/* } */
+/* a:hover {
+    color: #0a58ca;
+/* } */
+
+
+/* 2. Navigation (Bootstrap gère la plupart des styles de la navbar)
+-------------------------------------------------- */
+/* Vos styles `nav ul` et `nav ul li` sont gérés par les classes Bootstrap
+   `.navbar`, `.navbar-nav`, `.nav-item`, `.nav-link`.
+   Il n'est généralement pas nécessaire de les redéfinir ici si vous utilisez la structure Bootstrap. */
+
+
+/* 3. Conteneur principal
+-------------------------------------------------- */
+/* Votre classe `.container` personnalisée :
+   Bootstrap fournit déjà une classe `.container` (ou `.container-fluid`)
+   qui gère la largeur maximale responsive et les marges automatiques.
+   Votre `base.html` utilise `<div class="container mt-4">`.
+   Le `max-width: 1200px;` est proche de ce que fait `.container-lg` ou `.container-xl`.
+   Le `padding: 20px;` peut être ajouté si le padding par défaut de Bootstrap (via les gouttières)
+   ne vous convient pas, ou utilisez les classes d'espacement de Bootstrap (ex: `p-3`, `py-4`).
+*/
+/* Si vous voulez forcer un padding spécifique pour VOTRE classe .container (pas celle de Bootstrap) :
+.container {
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+*/
+/* Cependant, il est généralement préférable de s'appuyer sur le .container de Bootstrap
+   et d'utiliser des classes utilitaires pour le padding si besoin. */
+
+
+/* 4. Formulaires (y compris Select2)
+-------------------------------------------------- */
+.form-label {
+    font-size: 0.85rem;
+    /* Un peu plus petit que le corps du texte, mais clair */
+    font-weight: 500;
+    /* Un peu plus d'emphase */
+    margin-bottom: 0.4rem;
+    /* Cohérent avec les espacements Bootstrap */
+}
+
+.form-control,
+.form-select,
+/* Pour les selects HTML natifs */
+.select2-container .select2-selection--single {
+    font-size: 0.9rem;
+    /* Taille de police cohérente pour les champs de saisie */
+    /* Bootstrap et select2-bootstrap-5-theme gèrent bien la hauteur.
+       Si vous avez besoin d'ajuster, le padding est une bonne option : */
+    /* padding: 0.5rem 0.75rem; */
+}
+
+/* Placeholder dans les champs de saisie */
+input::placeholder,
+textarea::placeholder {
+    font-size: 0.85rem;
+    /* Assurez-vous que c'est lisible */
+    color: #6c757d;
+    /* Couleur de placeholder par défaut de Bootstrap */
+}
+
+/* Texte sélectionné dans Select2 */
+.select2-container .select2-selection--single .select2-selection__rendered {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    /* Assure un bon centrage vertical */
+}
+
+/* Options dans la liste déroulante de Select2 */
+.select2-results__option {
+    font-size: 0.85rem;
+}
+
+/* Custom validation styling for Select2 */
+.is-invalid+.select2-container .select2-selection {
+    border-color: #dc3545;
+    /* Bootstrap's danger color */
+}
+
+/* Votre `form div.field { margin-bottom: 10px; }` :
+   Votre HTML utilise `<div class="mb-3">` qui est la manière Bootstrap d'ajouter `margin-bottom: 1rem;`.
+   `1rem` (environ 16px) est généralement préféré pour la cohérence. 10px est `0.625rem`.
+   Si vous préférez un espacement plus petit, vous pouvez utiliser `.mb-2` (0.5rem) dans votre HTML
+   ou définir une classe personnalisée. Cette règle est probablement redondante.
+*/
+
+
+/* 5. Boutons
+-------------------------------------------------- */
+.btn {
+    font-size: 0.85rem;
+    /* Taille de base pour les boutons */
+    /* Un padding un peu plus généreux peut améliorer l'apparence et l'ergonomie : */
+    /* padding: 0.4rem 0.8rem; */
+}
+
+.btn-sm {
+    /* Pour les icônes d'action dans le tableau */
+    font-size: 0.8rem;
+    /* Les rendre un peu plus lisibles */
+    padding: 0.25rem 0.5rem;
+    /* S'assurer que les icônes ne sont pas à l'étroit */
+}
+
+
+/* 6. Tableaux (DataTables)
+-------------------------------------------------- */
+#existing-datatables-table th,
+#existing-datatables-table td {
+    font-size: 0.85rem;
+    /* Texte dans les cellules et en-têtes */
+    vertical-align: middle;
+    /* Très important pour aligner icônes et texte */
+}
+
+#existing-datatables-table thead th {
+    font-weight: 500;
+    /* Rendre les en-têtes de tableau un peu plus gras */
+    /* background-color: #e9ecef; /* Un fond léger pour les en-têtes peut aider */
+    /* border-bottom-width: 2px; */
+}
+
+/* Contrôles de DataTables (pagination, nombre d'entrées, recherche) */
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_filter label,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .pagination .page-link {
+    font-size: 0.8rem;
+    /* Un peu plus petit, mais lisible */
+}
+
+.dataTables_wrapper .dataTables_filter input[type="search"] {
+    font-size: 0.8rem;
+    /* padding: 0.3rem 0.5rem; /* Ajustez si cela semble trop petit/grand */
+}
+
+
+/* 7. Listes (si vous n'utilisez pas les list-group de Bootstrap)
+-------------------------------------------------- */
+/* Vos styles `.list-group-item` :
+   Bootstrap a ses propres styles pour `.list-group-item` (utilisés avec `<ul class="list-group">`).
+   Si vous utilisez les composants list-group de Bootstrap, vos styles personnalisés ici
+   vont les surcharger ou créer des conflits.
+   Si ces classes sont pour des éléments personnalisés qui n'utilisent PAS les list-group de Bootstrap,
+   alors vous pouvez les conserver. Je les commente pour l'instant, en supposant
+   que vous privilégiez les composants Bootstrap lorsque c'est possible.
+*/
+/*
+.list-group-item {
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    background-color: #fff; /* Ajout pour se démarquer du fond body si différent */
+/* } */
+
+/* .list-group-item h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.25rem; /* Ajustement pour contexte de liste */
+/* } */
+
+/* .list-group-item h3 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 1.1rem; /* Ajustement pour contexte de liste */
+/* } */
+
+
+/* 8. Utilitaires (optionnel)
+-------------------------------------------------- */
+.text-small {
+    font-size: 0.85rem;
+}
+
+/* Pour forcer un curseur pointeur sur des éléments cliquables qui ne sont pas des <a> ou <button> */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.negative-age {
+    font-weight: bolder;
+}
+
+.unlink-btn {
+    font-size: 0.8em;
+    /* Smaller font for the 'x' */
+    padding: 0.1rem 0.4rem;
+    /* Adjust padding to make it small and roundish */
+    line-height: 1;
+    border-radius: 50%;
+    /* Make it round */
+}
+
+.group-actions-cell {
+    /* New class for the specific cell */
+    text-align: center;
+    white-space: nowrap;
+    /* Prevent button from wrapping */
+    min-width: 60px;
+    /* Adjust if your button is wider */
+}
+
+/* Styles pour les lignes de projet cliquables */
+.project-row {
+    cursor: pointer;
+}
+
+.project-row a {
+    text-decoration: none;
+    /* Supprime le soulignement des liens à l'intérieur des lignes de projet */
+}
+
+/* 9. Ethical Approval Severity Badges
+-------------------------------------------------- */
+.severity-none {
+    background-color: #6c757d;
+    /* Bootstrap secondary grey */
+    color: #fff;
+}
+
+.severity-light {
+    background-color: #198754;
+    /* Bootstrap success green */
+    color: #fff;
+}
+
+.severity-moderate {
+    background-color: #fd7e14;
+    /* Bootstrap orange */
+    color: #fff;
+}
+
+.severity-severe {
+    background-color: #dc3545;
+    /* Bootstrap danger red */
+    color: #fff;
+}
+
+/* 10. Navbar Customizations
+-------------------------------------------------- */
+#userDropdown::after {
+    display: none;
+    /* Hide the caret for the profile icon dropdown */
+}
+
+.nav-link i.fas {
+    vertical-align: middle;
+}
+
+/* 11. PDF Export & Print Styles
+-------------------------------------------------- */
+@media print {
+
+    /* Hide everything except the results */
+    nav,
+    .navbar,
+    footer,
+    .btn-group,
+    .mt-4.d-flex,
+    .alert-info,
+    #analysis-form>hr,
+    #analysis-form>.alert,
+    #analysis-form>#form-stage-1,
+    #propose-workflow-stage,
+    .btn-edit-parameters-results,
+    #btn-reanalyze-this-table {
+        display: none !important;
+    }
+
+    body {
+        background-color: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .container,
+    .container-fluid {
+        max-width: none !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    #show-results-stage {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* Force Accordion Expansion Visibility */
+    .accordion-collapse {
+        display: block !important;
+        height: auto !important;
+        visibility: visible !important;
+    }
+
+    .accordion-button::after {
+        display: none !important;
+    }
+
+    .accordion-button {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+        font-weight: bold !important;
+        border-bottom: 1px solid #dee2e6 !important;
+    }
+
+    /* Page Break Management */
+    .card {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        margin-bottom: 20px !important;
+    }
+
+    .row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+    }
+
+    .col-lg-8 {
+        width: 66% !important;
+    }
+
+    .col-lg-4 {
+        width: 33% !important;
+    }
+
+    /* Plotly print stability */
+    .plotly-graph-div {
+        width: 100% !important;
+        height: 400px !important;
+    }
+
+    /* Force colors */
+    .bg-primary {
+        background-color: #007bff !important;
+        color: white !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .bg-secondary {
+        background-color: #6c757d !important;
+        color: white !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .bg-light {
+        background-color: #f8f9fa !important;
+        color: black !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+    }
+
+    .table th,
+    .table td {
+        border: 1px solid #dee2e6 !important;
+    }
+}
+
+
+
+/* Controlled molecules tables readability */
+#moleculesTable,
+#usageTable {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    border-collapse: collapse !important;
+}
+
+#moleculesTable td,
+#moleculesTable th,
+#usageTable td,
+#usageTable th {
+    color: #212529 !important;
+    background-color: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 0.75rem !important;
+    vertical-align: middle !important;
+}
+
+#moleculesTable thead th,
+#usageTable thead th {
+    background-color: #f8f9fa !important;
+    color: #212529 !important;
+    font-weight: 600 !important;
+}
+
+/* Ensure badges are readable inside these tables */
+#moleculesTable .badge,
+#usageTable .badge {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Animal count tooltip styling */
+.animal-count {
+    cursor: help;
+    white-space: normal !important;
+    font-weight: 500;
+}
+
+/* Custom styling for Bootstrap tooltips to make them wider */
+.tooltip-inner {
+    max-width: 400px !important;
+    white-space: normal !important;
+    text-align: left !important;
+    padding: 10px 15px !important;
+    font-size: 0.9rem !important;
+    line-height: 1.5 !important;
+}
+
+/* Fix for ethical approval dropdown overflow */
+.select2-container--default .select2-selection--single .select2-selection__rendered,
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block !important;
+    width: 100%;
+    margin-top: 0;
+    line-height: inherit !important; /* Inherit from the flex container which is centered */
+}
+
+/* Ensure dropdown options are readable */
+.select2-results__option {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+}
+
+/* Fix for ethical approval dropdown overflow in table cells */
+.select2-container--default,
+.select2-container--bootstrap-5 {
+    /* REMOVED: z-index: 1050 !important;  <-- This was causing the navbar overlap */
+    width: 100% !important; /* Keep this to ensure width consistency */
+}
+
+/* Ensure the DROPDOWN MENU itself is high enough (above modals and navbars) */
+.select2-dropdown {
+    z-index: 1060 !important; /* Bootstrap Modal is 1055, Navbar is 1000 */
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Fix for dropdown overflowing into other cells */
+.select2-container--open {
+    position: relative;
+    z-index: 1051 !important;
+}
+
+/* Ensure dropdown content doesn't overflow */
+.select2-results {
+    overflow: hidden;
+}
+
+/* Fix for ethical approval name display bug */
+.select2-container--default .select2-selection--single,
+.select2-container--bootstrap-5 .select2-selection--single {
+    min-height: 38px !important; /* Standard Bootstrap input height */
+    height: auto !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Ensure proper spacing for select2 containers */
+.select2-container--default,
+.select2-container--bootstrap-5 {
+    width: 100% !important;
+}
+
+/* Fix for select2 in grid layout */
+.row .select2-container--default,
+.row .select2-container--bootstrap-5 {
+    margin-bottom: 1rem;
+}
+
+/* Ensure ethical approval dropdown doesn't overflow */
+#ethical_approval_select + .select2-container {
+    width: 100% !important;
+}
+
+/* Group details card layout improvements */
+.card-header {
+    padding: 1rem 1.5rem;
+}
+
+.card-header h5 {
+    margin-bottom: 0.5rem;
+}
+
+/* Custom tooltip class for animal counts */
+.animal-tooltip .tooltip-inner {
+    min-width: 250px;
+    max-width: 500px;
+}
+
+/* Style for the bullet points in tooltips */
+.animal-tooltip .tooltip-inner ul,
+.animal-tooltip .tooltip-inner li {
+    margin: 5px 0;
+    padding-left: 5px;
+}
+
+/* Ensure tooltips display HTML content properly */
+[title] {
+    /* This helps with HTML content in titles */
+    white-space: normal !important;
+}
+
+/* Fix for DataTables labels and info text in these views */
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .pagination .page-link {
+    color: #212529 !important;
+    margin-bottom: 0.5rem;
+}
+
+.dataTables_wrapper .pagination .page-item.active .page-link {
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
+    color: white !important;
+}

@@ -1,0 +1,33 @@
+{# Macro to render a form field with Bootstrap styling and error display #}
+{% macro render_field(field) %}
+    {#
+      Jinja macros have access to a special 'kwargs' variable that contains
+      all the keyword arguments passed to the macro call. We don't need to
+      explicitly define it in the signature.
+    #}
+    {% set field_id = kwargs.get('id', field.id) %}
+    
+    {# Determine field class, allowing override from kwargs #}
+    {% set field_class = kwargs.get('class', 'form-control') %}
+    {% if field.type == 'SelectField' or field.type == 'SelectMultipleField' %}
+        {% set field_class = field_class | replace('form-control', 'form-select') %}
+    {% endif %}
+    
+    {% if field.label is defined and field.label is not none %}
+        {# Render the label, explicitly setting the 'for' attribute to match the field's id #}
+        {{ field.label(for=field_id, class="form-label") }}
+    {% endif %}
+    
+    {% if field is defined and field is not none %}
+        {# Render the field, passing all the original kwargs from the call site #}
+        {{ field(class=field_class, **kwargs) }}
+    {% endif %}
+    
+    {% if field.errors %}
+        <div class="invalid-feedback d-block"> {# Use Bootstrap's invalid-feedback #}
+            {% for error in field.errors %}
+                {{ error }}<br> {# Display errors directly #}
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endmacro %}

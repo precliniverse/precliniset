@@ -1,0 +1,45 @@
+{# app/templates/_macros.html #}
+
+{# Macro to render a statistics results table from a dictionary #}
+{% macro render_stats_table(table_data) %}
+    {% if table_data and table_data.rows %}
+        <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover border">
+                <thead class="table-light">
+                    <tr>
+                        {% for col in table_data.columns %}
+                            <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table_data.rows %}
+                        <tr>
+                            {% for col in table_data.columns %}
+                                <td>
+                                    {% set val = row[col] %}
+                                    {% if val is number %}
+                                        {% if col in ['p-unc', 'p-GG', 'p-HF', 'PR(>F)', 'p_value', 'P-val'] %}
+                                            {% if val < 0.001 %}
+                                                <strong>&lt; 0.001 ***</strong>
+                                            {% else %}
+                                                {{ "%.4f"|format(val) }}
+                                                {% if val <= 0.05 %}*{% endif %}
+                                            {% endif %}
+                                        {% else %}
+                                            {{ "%.4f"|format(val) }}
+                                        {% endif %}
+                                    {% else %}
+                                        {{ val }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted small">No detailed results table available.</p>
+    {% endif %}
+{% endmacro %}

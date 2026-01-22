@@ -1,0 +1,178 @@
+{# templates/datatables/analysis/_results_accordion.html #}
+{# Expects `split_results` to be defined in context #}
+
+{% if split_results.overall_error %}
+<div class="alert alert-danger">{{ split_results.overall_error }}</div>
+{% elif split_results.results_by_parameter %}
+<div class="accordion" id="resultsAccordion-{{ split_results.id_suffix|default('main') }}">
+    {% for result_key, results_data in split_results.results_by_parameter.items() %}
+    {% set cleaned_result_key = clean_param_name_for_id(result_key) %}
+    {% set suffix = split_results.id_suffix|default('main') ~ '-' ~ loop.index %}
+
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-{{ suffix }}">
+            <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#collapse-{{ suffix }}"
+                aria-expanded="{% if loop.first %}true{% else %}false{% endif %}" aria-controls="collapse-{{ suffix }}">
+
+                {# Status Badge #}
+                {% set stats = results_data.statistical_results %}
+                {% set badge_cls = 'bg-secondary' %}
+                {% set badge_txt = 'Pending' %}
+                {% if results_data.error_message %}{% set badge_cls='bg-danger' %}{% set badge_txt='Error' %}
+                {% elif stats and stats.error %}{% set badge_cls='bg-warning text-dark' %}{% set badge_txt='Stats Error'
+                %}
+                {% elif stats and stats.test not in ['N/A', 'None Selected', 'Error', 'Summary Only'] %}{% set
+                badge_cls='bg-success' %}{% set badge_txt=stats.test %}
+                {% elif stats and stats.test == 'Summary Only' %}{% set badge_cls='bg-info text-dark' %}{% set
+                badge_txt=stats.test %}
+                {% endif %}
+
+                <strong>{{ result_key }}</strong>
+                <span class="badge {{ badge_cls }} ms-2">{{ badge_txt }}</span>
+            </button>
+        </h2>
+        <div id="collapse-{{ suffix }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+            aria-labelledby="heading-{{ suffix }}"
+            data-bs-parent="#resultsAccordion-{{ split_results.id_suffix|default('main') }}">
+            <div class="accordion-body">
+                {% if results_data.error_message %}
+                <div class="alert alert-danger">{{ results_data.error_message }}</div>
+                {% endif %}
+
+                {% if results_data.is_split_analysis %}
+                {# --- SPLIT ANALYSIS RENDERING --- #}
+                {% for sub_res in results_data.splits %}
+                <div class="card mb-4 border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">{{ sub_res.split_label }}</h5>
+                    </div>
+                    <div class="card-body">
+
+                        {# Graph (Split) #}
+                        {% if sub_res.graph_data %}
+                        <div class="card mb-3">
+                            <div class="card-body p-1">
+                                <div id="plotlyChart-{{ cleaned_result_key }}-{{ suffix }}-split-{{ loop.index }}"
+                                    class="plotly-graph-div" style="height:450px;"></div>
+                                <script nonce="{{ csp_nonce }}">
+                                    document.addEventListener('DOMContentLoaded', function () {
+                                        Plots.render('plotlyChart-{{ cleaned_result_key }}-{{ suffix }}-split-{{ loop.index }}', {{ sub_res.graph_data | tojson | safe }});
+                                        });
+                                </script>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# Summary Stats (Split) #}
+                        {% if sub_res.summary_table_html %}
+                        <div class="card mb-3">
+                            <div class="card-header bg-light py-1 fw-bold small">{{ _('Summary Statistics') }}</div>
+                            <div class="card-body p-0 small" style="overflow-x: auto;">
+                                {{ sub_res.summary_table_html|safe }}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {# Stats (Split) #}
+                        {% if sub_res.statistical_results and sub_res.statistical_results.test != 'Summary Only' %}
+                        {% set s = sub_res.statistical_results %}
+                        <div class="card mb-3 border-info">
+                            <div class="card-header bg-info text-dark py-1 fw-bold small">
+                                {{ s.test }}
+                                {% if s.p_value is not none %}
+                                - p = {{ "%.4f"|format(s.p_value) }}
+                                {% if s.p_value <= 0.05 %}<i class="fas fa-check-circle text-success ms-1"></i>{% endif
+                                    %}
+                                    {% endif %}
+                            </div>
+                            <div class="card-body small">
+                                {% if s.error %}
+                                <div class="text-danger">{{ s.error }}</div>
+                                {% else %}
+                                {% if s.results_data %}
+                                {{ macros.render_stats_table(s.results_data) }}
+                                {% endif %}
+
+                                {% if s.posthoc_data %}
+                                <h6 class="mt-2 fw-bold">{{ s.posthoc_data.title }}</h6>
+                                {{ macros.render_stats_table(s.posthoc_data) }}
+                                {% endif %}
+
+                                {% if s.notes %}
+                                <div class="mt-2 text-muted fst-italic">Note: {{ s.notes|join(' ') }}</div>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% else %}
+                {# --- STANDARD SINGLE RENDERING --- #}
+                {# Summary Stats Table #}
+                {% if results_data.summary_table_html %}
+                <div class="card mb-3">
+                    <div class="card-header bg-light py-1 fw-bold small">{{ _('Summary Statistics') }}</div>
+                    <div class="card-body p-0 small" style="overflow-x: auto;">
+                        {{ results_data.summary_table_html|safe }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Statistical Test Results #}
+                {% if results_data.statistical_results and results_data.statistical_results.test != 'Summary Only' %}
+                {% set s = results_data.statistical_results %}
+                <div class="card mb-3 border-info">
+                    <div class="card-header bg-info text-dark py-1 fw-bold small">
+                        {{ s.test }}
+                        {% if s.p_value is not none %}
+                        - p = {{ "%.4f"|format(s.p_value) }}
+                        {% if s.p_value <= 0.05 %}<i class="fas fa-check-circle text-success ms-1"></i>{% endif %}
+                            {% endif %}
+                    </div>
+                    <div class="card-body small">
+                        {% if s.error %}
+                        <div class="text-danger">{{ s.error }}</div>
+                        {% else %}
+                        {% if s.results_data %}
+                        {{ macros.render_stats_table(s.results_data) }}
+                        {% endif %}
+
+                        {% if s.posthoc_data %}
+                        <h6 class="mt-2 fw-bold">{{ s.posthoc_data.title }}</h6>
+                        {{ macros.render_stats_table(s.posthoc_data) }}
+                        {% endif %}
+
+                        {% if s.notes %}
+                        <div class="mt-2 text-muted fst-italic">Note: {{ s.notes|join(' ') }}</div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Graph #}
+                {% if results_data.graph_data %}
+                <div class="card">
+                    <div class="card-body p-1">
+                        <div id="plotlyChart-{{ cleaned_result_key }}-{{ suffix }}" class="plotly-graph-div"
+                            style="height:450px;"></div>
+                        <script nonce="{{ csp_nonce }}">
+                            document.addEventListener('DOMContentLoaded', function () {
+                                Plots.render('plotlyChart-{{ cleaned_result_key }}-{{ suffix }}', {{ results_data.graph_data | tojson | safe }});
+                                });
+                        </script>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

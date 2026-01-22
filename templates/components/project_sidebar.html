@@ -1,0 +1,128 @@
+{# templates/components/project_sidebar.html #}
+{% macro project_sidebar(teams_data, active_context='all') %}
+<div class="card shadow-sm h-100 project-sidebar-wrapper border-0 bg-light">
+    <div class="card-body p-2 d-flex flex-column h-100">
+        
+        <!-- Archive Toggle (Search Removed) -->
+        <div class="mb-2 px-2 d-flex justify-content-end">
+            <div class="form-check form-switch small">
+                <input class="form-check-input" type="checkbox" id="showArchivedSidebar">
+                <label class="form-check-label text-muted" for="showArchivedSidebar">{{ _('Archived') }}</label>
+            </div>
+        </div>
+
+        <!-- Navigation Tree -->
+        <div class="nav flex-column nav-pills flex-grow-1 sidebar-scroll-container" id="projectTree">
+            
+            {# "View All" Button Removed #}
+
+            {% for team in teams_data %}
+            <div class="team-section mb-3">
+                <!-- Team Header -->
+                <div class="team-header text-uppercase text-muted small fw-bold px-2 mb-1 border-bottom">
+                    {{ team.name }}
+                </div>
+                
+                {% for project in team.projects %}
+                <div class="project-item {% if project.is_archived %}archived-node{% endif %}"
+                    style="{% if project.is_archived %}display:none;{% endif %}"
+                    data-project-name="{{ project.name|lower }}" data-team-name="{{ team.name|lower }}">
+                    <a href="#" class="nav-link project-link py-1 ps-2 sidebar-nav-item text-start"
+                        data-project-id="{{ project.id }}" data-project-slug="{{ project.slug }}"
+                        title="{{ project.name }}">
+                        <i class="fas fa-folder {{ 'text-warning' if not project.is_archived else 'text-secondary' }} me-2"></i>
+                        <span class="project-name-text">{{ project.name }}</span>
+                        {% if project.is_archived %}
+                        <span class="badge bg-secondary ms-1 badge-sm">{{ _('A') }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+                {% endfor %}
+                
+                {% if team.has_more is defined and team.has_more %}
+                <div class="text-muted small ps-3 fst-italic">
+                    {{ _('+ %(count)s more...', count=(team.total_count - team.projects|length)) }}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="text-muted small p-2">{{ _('No accessible projects found.') }}</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Sidebar Container */
+    .project-sidebar-wrapper {
+        max-height: calc(100vh - 120px);
+        overflow: hidden;
+        width: 100%;
+    }
+
+    .project-sidebar-wrapper .card-body {
+        overflow: hidden;
+        width: 100%;
+    }
+
+    /* Scrollable area */
+    .sidebar-scroll-container {
+        max-height: 80vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: thin;
+        width: 100%;
+    }
+
+    /* Project Items */
+    .sidebar-nav-item {
+        border-radius: 0.25rem;
+        color: #333;
+        /* Allow text to wrap if needed, or stay full width */
+        white-space: normal; 
+        line-height: 1.2;
+    }
+
+    .nav-pills .sidebar-nav-item:hover {
+        background-color: #e9ecef;
+    }
+
+    .nav-pills .sidebar-nav-item.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+
+    /* Project Name Text - Removed max-width/truncation */
+    .project-name-text {
+        display: inline;
+        vertical-align: middle;
+    }
+
+    /* Archived nodes styling */
+    .archived-node a {
+        color: #6c757d;
+        font-style: italic;
+    }
+
+    /* Badge for archived */
+    .badge-sm {
+        font-size: 0.65em;
+        padding: 0.15em 0.35em;
+    }
+</style>
+
+<script nonce="{{ csp_nonce }}">
+    document.addEventListener('DOMContentLoaded', function () {
+        // Only Archive Toggle Logic remains
+        const showArchivedCheckbox = document.getElementById('showArchivedSidebar');
+        if (showArchivedCheckbox) {
+            showArchivedCheckbox.addEventListener('change', function() {
+                const show = this.checked;
+                document.querySelectorAll('.archived-node').forEach(el => {
+                    el.style.display = show ? '' : 'none';
+                });
+            });
+        }
+    });
+</script>
+{% endmacro %}

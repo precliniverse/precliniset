@@ -4,7 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='img/site.webmanifest') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
     <title>{{ _('Experiment App') }}</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
@@ -26,22 +30,16 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('main.index') }}">{{ _('Precliniset') }}</a>
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="{{ _('Home') }}" width="60" height="60" class="d-inline-block align-top me-2">
+                {{ _('Precliniset') }}
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                 aria-controls="navbarNav" aria-expanded="false" aria-label="{{ _('Toggle navigation') }}">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}"
-                            href="{{ url_for('main.index') }}"><i class="fas fa-home me-1"></i>{{ _('Home') }}</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.documentation' %}active{% endif %}"
-                            href="{{ url_for('main.documentation') }}"><i class="fas fa-book me-1"></i>{{ _('Docs')
-                            }}</a>
-                    </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.blueprint == 'projects' %}active{% endif %}"
                             href="{{ url_for('projects.list_projects') }}"><i class="fas fa-folder-open me-1"></i>{{
@@ -54,7 +52,7 @@
                     </li>
                     <!-- Data Dropdown -->
                     <li><a class="nav-link" href="{{ url_for('groups.manage_groups') }}"><i
-                                class="fas fa-layer-group me-1"></i>{{ _('Experimental Groups') }}</a></li>
+                                class="fas fa-layer-group me-1"></i>{{ _('Groups') }}</a></li>
                     <li><a class="nav-link" href="{{ url_for('datatables.create_data_table') }}"><i
                                 class="fas fa-table me-1"></i>{{ _('DataTables') }}</a></li>
                     <li><a class="nav-link" href="{{ url_for('sampling.all_samples_list') }}"><i
@@ -105,12 +103,15 @@
                 {% endif %}
 
                 <!-- Global Search  -->
-                <form class="d-flex ms-auto me-3" method="GET" action="{{ url_for('main.search_results') }}"
+                <form class="d-flex ms-auto me-3 align-items-center" method="GET" action="{{ url_for('main.search_results') }}"
                     id="globalSearchForm">
                     <input name="q" class="form-control form-control-sm me-2" type="search"
                         placeholder="{{ _('Global Search...') }}" aria-label="Search"
                         value="{{ request.args.get('q', '') }}">
-                    <button class="btn btn-sm btn-outline-success" type="submit"><i class="fas fa-search"></i></button>
+                    <button class="btn btn-sm btn-outline-success me-2" type="submit"><i class="fas fa-search"></i></button>
+                    <a href="{{ url_for('main.documentation') }}" class="text-secondary" title="{{ _('Documentation') }}">
+                        <i class="fas fa-question-circle fa-lg"></i>
+                    </a>
                 </form>
 
                 <!-- User Menu -->

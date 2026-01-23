@@ -27,17 +27,13 @@ from . import main_bp  # Import the blueprint instance
 def index():
     """
     Renders the main index page.
-    Redirects authenticated users to their 'My Page'.
+    Redirects authenticated users to their 'My Page',
+    and unauthenticated users to the login page.
     """
     if current_user.is_authenticated:
         return redirect(url_for('main.my_page'))
     
-    # For unauthenticated users, show the original welcome page
-    try:
-        return render_template('main/index.html') # This is your current welcome page
-    except Exception as e:
-        current_app.logger.error(f"Error rendering index template: {e}", exc_info=True)
-        return "<h1>Internal Server Error</h1>", 500
+    return redirect(url_for('auth.login'))
 
 @main_bp.route('/settings', methods=['GET', 'POST'])
 @login_required

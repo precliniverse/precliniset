@@ -16,6 +16,8 @@ We provide a unified management tool, `manage.py`, to handle all complex tasks.
 -   **Python 3.10+** (with `pip` and `venv` modules).
 -   **Git** (to download the code).
 -   **Docker Desktop** (only if using Docker mode).
+-   **WSL2** (For Windows + Docker mode)
+-   **Redis** (For Native deployment with .venv / Windows users should install Memurai for redis)
 
 > [!TIP]
 > **Blank Linux OS (Ubuntu/Debian)?** Run this once to get the essentials:
@@ -49,35 +51,40 @@ python manage.py deploy
 
 ---
 
+### 4. Troubleshooting install
+- libmagic:
+On windows, in native deployment, libmagic install through pip has some bug. After deployment, you will need to :
+    1. Activate your venv (e.g. : & venv/Scripts/Activate.ps1)
+    2. pip install python-magic
+    3. pip uninstall python-magic-bin
+    4. pip install python-magic-bin
+That should fix the issue. You may need to deploy again.
+
+### 5. Start
+
+```bash
+python manage.py 
+
+Choose Option 3, then Option 5 to see the logs
+```
+
+
 ## 🖥️ Interactive Dashboard Reference
-Run `python manage.py` to launch the dashboard. Here is a breakdown of every function available in the menu.
+Here is a breakdown of every function available in the menu.
+------------------------------
+1. Setup / Configure : Helps to create/edit the .env file that contains all settings of deployment
+2. Deploy / Rebuild : Allows the user to deploy and fix the install
+3. Start/Restart Application  
+4. Stop Application
+5. View Logs (See live log of the server, Use Ctrl+C to exit)
+6. System Health : Check if mandatory components are available (requires rich python library)
+7. Ecosystem Link (For upcoming linking features)
+8. Update Code (gets the latest code update, requires to use option 2 afterward)
+9. Demo Data (Create demo data in your db)
+R. Build Release (Not used at the moment)
+0. Exit
+------------------------------
 
-![Application Dashboard](docs/img/dashboard.png)
-*Fig. The main landing page for Precliniset.*
-
-### 🟢 Status & Services
-Shows the real-time health of your stack.
-*   **Start Services**:
-    *   *Docker*: Runs `docker compose up -d`.
-    *   *Native*: Launches `waitress` (Windows) or `gunicorn` (Linux) as a background process.
-*   **Stop Services**: Gracefully terminates the application.
-*   **View Logs**: Streams live logs.
-    *   *Tip*: Use this if the site returns "500 Internal Error".
-
-### ⚙️ Configuration & Setup
-*   **Run Setup Wizard**: Re-run the initial configuration. It detects existing settings and allows "Edit Mode".
-*   **Check Health**: Runs a comprehensive diagnostic suite (Docker check, Port check, DB connection test, Redis ping).
-*   **Update Code**: Pulls the latest `git` commit and rebuilds/reinstalls dependencies automatically.
-
-### 🗄️ Data Management
-*   **Initialize Database**: Runs `flask setup init-data`. Populates the mandatory static lists (Analytes, Units, etc.).
-*   **Create Superuser**: Interactive prompt to create an admin account.
-*   **Demo Data**:
-    *   > [!CAUTION]
-        > **Destructive Action**: Wipes the database and loads a simulated dataset (3 Projects, 50 Animals, 200 Samples). Use only for testing.
-*   **Build Release (R)**: Creates a publishable Docker package in the `dist/` folder.
-
----
 
 ## 🚀 Development & Release Process
 
@@ -94,6 +101,9 @@ When you modify a model (e.g., adding a column):
 1.  **Modify Python Code**: Update `app/models/resources.py`.
 2.  **Generate Migration**:
     ```bash
+    # Native
+    flask db migrate -m "Added column X"
+    
     # Docker (run inside container to see DB)
     docker compose run --rm web flask db migrate -m "Added column X"
     ```

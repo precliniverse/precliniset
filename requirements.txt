@@ -35,7 +35,7 @@ scipy>=1.11.0
 simpleeval
 SQLAlchemy
 statsmodels
-waitress
+waitress; sys_platform == 'win32'
 Werkzeug
 wtforms_sqlalchemy
 xlsxwriter
@@ -44,6 +44,6 @@ mkdocs
 mkdocs-material
 deepdiff
 rich
-gunicorn
+gunicorn; sys_platform != 'win32'
 asteval
 defusedxml

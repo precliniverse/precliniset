@@ -24,6 +24,8 @@ from .ethical import EthicalApproval, EthicalApprovalProcedure
 # Import experiment models
 from .experiments import (DataTable, DataTableFile, ExperimentalGroup,
                           ExperimentDataRow)
+# Import animal model
+from .animal import Animal
 # Import project models
 from .projects import (Attachment, Partner, Project,
                        ProjectEthicalApprovalAssociation,
@@ -131,6 +133,7 @@ __all__ = [
     'DataTable',
     'DataTableFile',
     'ExperimentDataRow',
+    'Animal',
     
     # CKAN
     'CKANUploadTask',

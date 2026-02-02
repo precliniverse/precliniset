@@ -18,67 +18,76 @@ class AnalysisService:
         self.stats_service = StatisticsService()
 
     def prepare_dataframe(self, data_table):
+        """Convert DataTable to DataFrame using Animal model (V2 refactored).
+        
+        Queries the Animal table directly instead of parsing JSON,
+        providing better performance and type safety.
+        
+        Args:
+            data_table: DataTable instance
+            
+        Returns:
+            Tuple of (DataFrame, numerical_columns, categorical_columns)
         """
-        Converts a single DataTable into a Pandas DataFrame suitable for analysis.
-        Handles merging animal data, protocol data, and calculating Age.
-        """
-        # 1. Determine Columns
-        group_animal_data_keys = set()
-        if data_table.group and data_table.group.animal_data:
-            for animal_row in data_table.group.animal_data:
-                group_animal_data_keys.update(animal_row.keys())
-
-        protocol_field_names = []
-        if data_table.protocol:
-             # Sort analytes by ProtocolAnalyteAssociation.order
-             sorted_analytes = sorted(
-                 data_table.protocol.analyte_associations,
-                 key=lambda assoc: assoc.order
-             )
-             protocol_field_names = [assoc.analyte.name for assoc in sorted_analytes]
-
-        all_possible_cols = get_custom_ordered_columns(group_animal_data_keys, protocol_field_names)
-        if not all_possible_cols:
+        from app.models import Animal
+        
+        # 1. Query animals for this group
+        animals = Animal.query.filter_by(group_id=data_table.group_id).order_by(Animal.id).all()
+        
+        if not animals:
             return None, [], []
-
-        # 2. Fetch Data
+        
+        # 2. Build base DataFrame from Animal records
+        animal_data = []
+        for animal in animals:
+            row = {
+                'ID': animal.uid,
+                'Date of Birth': animal.date_of_birth.isoformat() if animal.date_of_birth else None,
+                'sex': animal.sex,
+                'status': animal.status
+            }
+            
+            # Add measurements from JSON column using pd.json_normalize approach
+            if animal.measurements:
+                row.update(animal.measurements)
+            
+            animal_data.append(row)
+        
+        # 3. Merge with protocol data from ExperimentDataRow
         rows_query = data_table.experiment_rows.order_by(ExperimentDataRow.row_index)
         existing_data_rows_dict = {row.row_index: row.row_data for row in rows_query.all()}
-        group_animal_data = data_table.group.animal_data or []
-
-        data_for_df = []
-        for i in range(len(group_animal_data)):
-             merged = group_animal_data[i].copy() if i < len(group_animal_data) else {}
-             merged.update(existing_data_rows_dict.get(i, {}))
-
-             # Calculate Age
-             age_in_days = None
-             date_of_birth_str = merged.get('Date of Birth') 
-             if date_of_birth_str and data_table.date:
-                 try:
-                     dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
-                     dt_date_obj = datetime.strptime(data_table.date, '%Y-%m-%d').date()
-                     delta = dt_date_obj - dob
-                     age_in_days = delta.days
-                 except (ValueError, TypeError):
-                     age_in_days = None 
-
-             row_dict = {col: merged.get(col) for col in all_possible_cols}
-             row_dict['Age (Days)'] = age_in_days 
-             data_for_df.append(row_dict)
-
-        if not data_for_df:
+        
+        # Match animals by index (assuming same order)
+        for i, row in enumerate(animal_data):
+            if i in existing_data_rows_dict:
+                row.update(existing_data_rows_dict[i])
+        
+        # 4. Calculate Age (Days)
+        for row in animal_data:
+            age_in_days = None
+            date_of_birth_str = row.get('Date of Birth')
+            if date_of_birth_str and data_table.date:
+                try:
+                    dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
+                    dt_date_obj = datetime.strptime(data_table.date, '%Y-%m-%d').date()
+                    delta = dt_date_obj - dob
+                    age_in_days = delta.days
+                except (ValueError, TypeError):
+                    age_in_days = None
+            row['Age (Days)'] = age_in_days
+        
+        # 5. Create DataFrame
+        df = pd.DataFrame(animal_data)
+        
+        if df.empty:
             return None, [], []
-
-        # 3. Create DataFrame
-        final_all_possible_cols = all_possible_cols[:]
-        if 'Age (Days)' not in final_all_possible_cols:
-            final_all_possible_cols.append('Age (Days)')
-
-        df = pd.DataFrame(data_for_df, columns=final_all_possible_cols) 
-
-        # 4. Type Conversion
-        all_field_defs = (data_table.group.model.analytes if data_table.group.model else []) + (data_table.protocol.analytes if data_table.protocol else [])
+        
+        # 6. Type Conversion based on Analyte definitions
+        all_field_defs = (
+            (data_table.group.model.analytes if data_table.group.model else []) +
+            (data_table.protocol.analytes if data_table.protocol else [])
+        )
+        
         for field_def in all_field_defs:
             if field_def:
                 field_name, field_type = field_def.name, field_def.data_type.value
@@ -87,8 +96,8 @@ class AnalysisService:
         
         if 'Age (Days)' in df.columns:
             df['Age (Days)'] = pd.to_numeric(df['Age (Days)'], errors='coerce')
-
-        # 5. Identify Column Types
+        
+        # 7. Identify Column Types
         numerical_columns = []
         categorical_columns = []
         for col in df.columns:
@@ -96,7 +105,7 @@ class AnalysisService:
                 numerical_columns.append(col)
             else:
                 categorical_columns.append(col)
-
+        
         return df, numerical_columns, categorical_columns
 
     def get_datatable_metadata(self, data_table):
@@ -753,3 +762,5 @@ class AnalysisService:
         except Exception as e:
             current_app.logger.warning(f"Could not generate parameter summary table: {e}")
             return None
+    
+

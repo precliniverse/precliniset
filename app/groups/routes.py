@@ -23,6 +23,7 @@ from app.permissions import (can_create_group_for_project,
 from app.services.group_service import GroupService
 from app.services.project_service import ProjectService
 from app.services.datatable_service import DataTableService
+from app.exceptions import ValidationError, BusinessError # New exceptions
 
 from app.services.ethical_approval_service import (
     get_animals_available_for_ea, get_eligible_ethical_approvals) # NEW IMPORT
@@ -430,7 +431,7 @@ def edit_group(id=None):
                     flash('Group details and animal data saved successfully', 'success')
                     return redirect(url_for('groups.edit_group', id=group.id))
 
-            except ValueError as e:
+            except (ValidationError, ValueError) as e:
                 db.session.rollback()
                 error_msg = str(e)
                 # Check if this is a structured error (e.g. for new categories)
@@ -446,7 +447,17 @@ def edit_group(id=None):
                 if is_ajax:
                     return jsonify({'success': False, 'message': error_msg}), 400
                 else:
-                    flash(_l(e), "danger")
+                    flash(f"Validation Error: {error_msg}", "danger")
+            
+            except BusinessError as e:
+                db.session.rollback()
+                current_app.logger.warning(f"Business error saving group {id or 'new'}: {e}")
+                if is_ajax:
+                    # 409 Conflict is appropriate for business rule violations
+                    return jsonify({'success': False, 'message': str(e)}), 409
+                else:
+                    flash(f"Business Error: {str(e)}", "danger")
+
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error saving group {id or 'new'}: {e}", exc_info=True)

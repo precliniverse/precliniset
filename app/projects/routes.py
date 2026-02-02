@@ -16,7 +16,7 @@ from app import db
 from app.forms import (AttachmentForm, LinkEthicalApprovalForm, LinkGroupForm,
                        LinkPartnerForm, PartnerForm, ProjectDescriptionForm,
                        ProjectForm, ShareProjectForm, WorkplanForm)
-from app.models import (AnimalModel, Attachment, DataTable, EthicalApproval,
+from app.models import (Animal, AnimalModel, Attachment, DataTable, EthicalApproval,
                         ExperimentalGroup, ExperimentDataRow, Partner, Project,
                         ProjectEthicalApprovalAssociation,
                         ProjectPartnerAssociation, ProjectTeamShare,
@@ -255,19 +255,14 @@ def list_projects():
              ExperimentalGroup.is_archived == False
          ).group_by(ExperimentalGroup.project_id).all()
         
-        # Animal count with JSON length
-        if 'mysql' in db.engine.name or 'mariadb' in db.engine.name.lower():
-            json_len_func = func.json_length(ExperimentalGroup.animal_data)
-        else:
-            json_len_func = func.json_array_length(ExperimentalGroup.animal_data)
-        
+        # Animal count from Animal table
         animal_counts = db.session.query(
             ExperimentalGroup.project_id,
-            func.sum(json_len_func).label('animal_count')
-        ).filter(
+            func.count(Animal.id).label('animal_count')
+        ).join(Animal, ExperimentalGroup.id == Animal.group_id)\
+         .filter(
             ExperimentalGroup.project_id.in_(page_project_ids),
-            ExperimentalGroup.is_archived == False,
-            ExperimentalGroup.animal_data.isnot(None)
+            ExperimentalGroup.is_archived == False
         ).group_by(ExperimentalGroup.project_id).all()
         
         ea_refs_query = db.session.query(

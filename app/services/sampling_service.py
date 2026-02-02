@@ -5,7 +5,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.helpers import generate_display_id
-from app.models import (Anticoagulant, DerivedSampleType, Sample, SampleStatus,
+from app.models import (Animal, Anticoagulant, DerivedSampleType, Sample, SampleStatus,
                         SampleType, Storage, TissueCondition)
 from app.services.base import BaseService
 
@@ -33,14 +33,20 @@ class SamplingService(BaseService):
 
         # Handle terminal event status update for animals
         if is_terminal:
+            # Reconstruct ordered list of animals to match animal_indices
+            from app.models import Animal
+            animals = Animal.query.filter_by(group_id=group.id).order_by(Animal.id).all()
+            
             for animal_idx in animal_indices:
-                if 0 <= animal_idx < len(group.animal_data):
-                    group.animal_data[animal_idx]['status'] = 'dead'
-                    group.animal_data[animal_idx]['death_date'] = collection_date.isoformat()
-            # We don't commit here, we let the caller or the final commit handle it
-            # But we need to flag modified if we are modifying the JSON
-            from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(group, "animal_data")
+                if 0 <= animal_idx < len(animals):
+                    animal = animals[animal_idx]
+                    animal.status = 'dead'
+                    # Update measurements JSON with death_date if needed
+                    measurements = animal.measurements or {}
+                    measurements['death_date'] = collection_date.isoformat()
+                    animal.measurements = measurements
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(animal, "measurements")
 
         for animal_idx in animal_indices:
             for sample_template in sample_set:

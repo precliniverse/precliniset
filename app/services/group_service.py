@@ -1,8 +1,10 @@
 # app/services/group_service.py
 import json
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 
 from flask import current_app
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
@@ -10,7 +12,10 @@ from app.helpers import update_associated_data_tables
 # Added Team to imports
 from app.models import (AnimalModel, AnimalModelAnalyteAssociation,
                         ExperimentalGroup, Project, EthicalApproval, 
-                        ProjectEthicalApprovalAssociation, Team)
+                        ProjectEthicalApprovalAssociation, Team, Animal, Analyte)
+from app.schemas.animal import AnimalSchema
+from app.schemas.group import GroupCreateSchema
+from app.exceptions import ValidationError, BusinessError
 from app.services.audit_service import suppress_audit
 from app.services.base import BaseService
 from app.services.ethical_approval_service import validate_group_ea_unlinking
@@ -26,15 +31,74 @@ class GroupService(BaseService):
         self.validator = ValidationService()
 
     def create_group(self, name, project_id, team_id, owner_id, model_id=None, animal_data=None):
-        group = self.create(
-            name=name,
-            project_id=project_id,
-            team_id=team_id,
-            owner_id=owner_id,
-            model_id=model_id,
-            animal_data=animal_data or []
-        )
-        return group
+        """Create a group with Animal entities (V2 refactored).
+        
+        Args:
+            name: Group name
+            project_id: Project ID
+            team_id: Team ID
+            owner_id: Owner user ID
+            model_id: Animal model ID
+            animal_data: List of animal dictionaries (will be converted to Animal entities)
+            
+        Returns:
+            Created ExperimentalGroup
+        """
+        try:
+            # Create the group (no animal_data column anymore)
+            group = ExperimentalGroup(
+                name=name,
+                project_id=project_id,
+                team_id=team_id,
+                owner_id=owner_id,
+                model_id=model_id
+            )
+            db.session.add(group)
+            db.session.flush()  # Get group ID
+            
+            # Create Animal entities if data provided
+            if animal_data:
+                # Validate and create animals
+                for i, animal_dict in enumerate(animal_data):
+                    animal_id = animal_dict.get('ID') or f"{group.id}-A{i+1}"
+                    
+                    # Validate using AnimalSchema
+                    try:
+                        schema = AnimalSchema(**animal_dict)
+                    except PydanticValidationError as e:
+                        raise ValidationError(f"Invalid animal data for {animal_id}: {str(e)}")
+                    
+                    # Dynamic validation against Analyte configuration
+                    if schema.sex and model_id:
+                        sex_analyte = Analyte.query.filter_by(name='sex').first()
+                        if sex_analyte and sex_analyte.allowed_values:
+                            allowed_values = [v.strip() for v in sex_analyte.allowed_values.split(';') if v.strip()]
+                            if schema.sex not in allowed_values:
+                                raise ValidationError(
+                                    f"Invalid sex value '{schema.sex}' for animal {animal_id}. "
+                                    f"Allowed values: {', '.join(allowed_values)}"
+                                )
+                    
+                    # Create Animal entity
+                    animal = Animal(
+                        uid=schema.animal_id,
+                        group_id=group.id,
+                        sex=schema.sex,
+                        date_of_birth=schema.date_of_birth,
+                        status='alive',
+                        measurements=schema.measurements
+                    )
+                    db.session.add(animal)
+            
+            db.session.commit()
+            return group
+            
+        except PydanticValidationError as e:
+            db.session.rollback()
+            raise ValidationError(f"Animal data validation failed: {str(e)}")
+        except Exception as e:
+            db.session.rollback()
+            raise
 
     def update_group_details(self, group, name, model_id, ethical_approval_id, default_euthanasia_reason=None, default_severity=None):
         """Updates basic metadata of the group."""
@@ -128,12 +192,19 @@ class GroupService(BaseService):
         return animal_data_list, animal_field_names
 
     def save_group_data(self, group, animal_data_list, update_datatables=True, allow_new_categories=False):
-        """
-        Validates and saves animal data to the group.
+        """Validates and saves animal data to Animal entities (V2 refactored).
+        
+        Args:
+            group: ExperimentalGroup instance
+            animal_data_list: List of animal dictionaries
+            update_datatables: Whether to update associated datatables
+            allow_new_categories: Whether to allow new category values
+            
+        Returns:
+            ExperimentalGroup instance
         """
         # 1. Validate Data Integrity
         if group.model:
-            # Always run in non-strict mode to detect new categories even if not yet allowed
             validation_result = self.validator.validate_animal_data(animal_data_list, group.model, strict=False)
             errors = validation_result.get('errors', [])
             new_categories = validation_result.get('new_categories', {})
@@ -147,68 +218,124 @@ class GroupService(BaseService):
 
             if new_categories:
                 if allow_new_categories:
-                    from app.models import Analyte
                     for analyte_id, new_values in new_categories.items():
                         analyte = db.session.get(Analyte, analyte_id)
                         if analyte:
-                            # Split by semicolon and strip whitespace
                             existing = [v.strip() for v in (analyte.allowed_values or "").split(';') if v.strip()]
                             updated = existing + [v for v in new_values if v not in existing]
                             analyte.allowed_values = "; ".join(updated)
                             db.session.add(analyte)
                     db.session.flush()
                 else:
-                    # Return new categories in a structured way if not allowed yet
-                    # This will be caught by the route and converted to a prompt
                     raise ValueError(json.dumps({'type': 'new_categories', 'data': new_categories}))
 
-        # 2. Filter and Order Keys (Mass Assignment Protection)
-        # We exclude Age (Days), Blinded Group, and Treatment Group from authorized_keys 
-        # so they cannot be overwritten via XLSX upload or manual form injection.
+        # 2. Determine authorized keys for security
         authorized_keys = {'ID', 'Date of Birth', 'status'}
         if group.model:
             for assoc in group.model.analyte_associations:
                 authorized_keys.add(assoc.analyte.name)
 
-        final_ordered_keys = ['ID', 'Date of Birth', 'Age (Days)', 'Blinded Group', 'Treatment Group']
-        final_ordered_keys_set = set(final_ordered_keys)
+        # 3. Update or create Animal entities
+        try:
+            for animal_dict in animal_data_list:
+                animal_id = animal_dict.get('ID')
+                if not animal_id:
+                    continue
+                
+                # Find existing animal or create new
+                animal = Animal.query.filter_by(uid=animal_id, group_id=group.id).first()
+                
+                if animal:
+                    # Update existing animal
+                    if 'Date of Birth' in animal_dict:
+                        dob_str = animal_dict['Date of Birth']
+                        if dob_str:
+                            try:
+                                animal.date_of_birth = datetime.strptime(dob_str, '%Y-%m-%d').date()
+                            except (ValueError, TypeError):
+                                pass
+                    
+                    if 'sex' in animal_dict:
+                        animal.sex = animal_dict.get('sex')
+                    
+                    if 'status' in animal_dict:
+                        animal.status = animal_dict.get('status', 'alive')
+                    
+                    # Update measurements (merge with existing)
+                    measurements = animal.measurements or {}
+                    for key, value in animal_dict.items():
+                        if key not in {'ID', 'Date of Birth', 'sex', 'status', 'Age (Days)', 'Blinded Group', 'Treatment Group'}:
+                            measurements[key] = value
+                    
+                    animal.measurements = measurements
+                    flag_modified(animal, "measurements")
+                else:
+                    # Create new animal
+                    dob = None
+                    if 'Date of Birth' in animal_dict:
+                        try:
+                            dob = datetime.strptime(animal_dict['Date of Birth'], '%Y-%m-%d').date()
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    measurements = {}
+                    for key, value in animal_dict.items():
+                        if key not in {'ID', 'Date of Birth', 'sex', 'status', 'Age (Days)', 'Blinded Group', 'Treatment Group'}:
+                            measurements[key] = value
+                    
+                    animal = Animal(
+                        uid=animal_id,
+                        group_id=group.id,
+                        sex=animal_dict.get('sex'),
+                        status=animal_dict.get('status', 'alive'),
+                        date_of_birth=dob,
+                        measurements=measurements if measurements else None
+                    )
+                    db.session.add(animal)
+            
+            # 4. Update project timestamp
+            if group.project:
+                group.project.updated_at = datetime.now(current_app.config['UTC_TZ'])
 
-        if group.model_id:
-            associations = AnimalModelAnalyteAssociation.query.filter_by(
-                animal_model_id=group.model_id
-            ).order_by(AnimalModelAnalyteAssociation.order).all()
-            for assoc in associations:
-                if assoc.analyte.name not in final_ordered_keys_set:
-                    final_ordered_keys.append(assoc.analyte.name)
-                    final_ordered_keys_set.add(assoc.analyte.name)
+            db.session.flush()
 
-        # Also authorized metadata fields from protocol datatables? 
-        # Usually group animal_data is fixed by the animal model.
-        
-        ordered_data = []
-        for animal in animal_data_list:
-            # SECURITY FIX: Only allow authorized keys
-            ordered_animal = {k: animal.get(k) for k in final_ordered_keys if k in animal and k in authorized_keys}
-            # Special case for 'status' which might not be in final_ordered_keys but is legitimate
-            if 'status' in animal:
-                ordered_animal['status'] = animal['status']
-            ordered_data.append(ordered_animal)
+            # 5. Update associated datatables if requested
+            if update_datatables:
+                # Reconstruct the ordered data for datatable update
+                animals = Animal.query.filter_by(group_id=group.id).order_by(Animal.id).all()
+                ordered_data = []
+                for animal in animals:
+                    animal_dict = {
+                        'ID': animal.uid,
+                        'Date of Birth': animal.date_of_birth.isoformat() if animal.date_of_birth else None,
+                    }
+                    if animal.sex:
+                        animal_dict['sex'] = animal.sex
+                    if animal.status and animal.status != 'alive':
+                        animal_dict['status'] = animal.status
+                    if animal.measurements:
+                        animal_dict.update(animal.measurements)
+                    ordered_data.append(animal_dict)
+                
+                # Determine column order
+                final_ordered_keys = ['ID', 'Date of Birth', 'Age (Days)', 'Blinded Group', 'Treatment Group']
+                if group.model_id:
+                    associations = AnimalModelAnalyteAssociation.query.filter_by(
+                        animal_model_id=group.model_id
+                    ).order_by(AnimalModelAnalyteAssociation.order).all()
+                    for assoc in associations:
+                        if assoc.analyte.name not in final_ordered_keys:
+                            final_ordered_keys.append(assoc.analyte.name)
+                
+                with suppress_audit():
+                    update_associated_data_tables(db, group, ordered_data, final_ordered_keys)
 
-        # 3. Save
-        group.animal_data = ordered_data
-        flag_modified(group, "animal_data")
-        
-        if group.project:
-            group.project.updated_at = datetime.now(current_app.config['UTC_TZ'])
-
-        db.session.flush()
-
-        if update_datatables:
-            with suppress_audit():
-                update_associated_data_tables(db, group, ordered_data, final_ordered_keys)
-
-        db.session.commit()
-        return group
+            db.session.commit()
+            return group
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error saving group data for {group.id}: {e}")
+            raise
 
     def _convert_timestamps(self, data):
         if isinstance(data, dict):

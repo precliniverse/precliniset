@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from app.extensions import db
 from app.models import DataTable, ExperimentalGroup, ProtocolModel, Project
 from app.services.base import BaseService
+from app.services.calculation_service import CalculationService # Added
 from app.permissions import check_datatable_permission
 
 class DataTableService(BaseService):
@@ -280,9 +281,147 @@ class DataTableService(BaseService):
             for analyte_name in concatenated_data[aid]:
                 concatenated_data[aid][analyte_name].sort(key=lambda x: x[0])
 
+
         return {
             'analytes': analyte_info,
             'animal_data': concatenated_data,
             'datatables': [{'id': dt.id, 'protocol_name': dt.protocol.name if dt.protocol else 'Unknown', 'date': dt.date} for dt in datatables],
             'group_name': group.name
         }, [], []
+
+    def save_manual_edits(self, datatable_id, updates, protocol_field_names):
+        """
+        Save manual grid edits to ExperimentDataRow and sync to Animal table.
+        
+        Args:
+            datatable_id: ID of the DataTable
+            updates: Dict of {row_index: {col_name: value}}
+            protocol_field_names: List of protocol field names to save to ExperimentDataRow
+        """
+        data_table = db.session.get(DataTable, datatable_id)
+        if not data_table:
+            raise ValueError(_l("DataTable not found"))
+
+        # Initialize Services
+        calc_service = CalculationService()
+        has_calc = any(a.calculation_formula for a in data_table.protocol.analyte_associations) if data_table.protocol else False
+
+        # 1. Update ExperimentDataRows
+        existing_rows = data_table.experiment_rows.all()
+        rows_by_index = {r.row_index: r for r in existing_rows}
+        
+        # Prepare for Animal Sync
+        group = data_table.group
+        animals_by_uid = {}
+        if group:
+            from app.models import Animal
+            animals_query = Animal.query.filter_by(group_id=group.id).all()
+            animals_by_uid = {a.uid: a for a in animals_query}
+            
+            # Identify fields that belong to the Animal Model (to sync)
+            animal_model_fields = set()
+            if group.model and group.model.analytes:
+                animal_model_fields = {a.name for a in group.model.analytes}
+
+        try:
+            for r_idx, new_vals in updates.items():
+                r_idx = int(r_idx)
+                
+                # A. Update ExperimentDataRow (Protocol Data)
+                # Fetch existing data to merge
+                exp_row = rows_by_index.get(r_idx)
+                current_data = exp_row.row_data.copy() if exp_row and exp_row.row_data else {}
+                
+                # Include Animal Data in context for calculations (like Body Weight)
+                if group and r_idx < len(group.animal_data):
+                    anim_row = group.animal_data[r_idx]
+                    current_data.update(anim_row)
+                
+                # Merge updates (overwrites existing)
+                current_data.update(new_vals)
+                
+                # Apply Calculations
+                if has_calc and data_table.protocol:
+                     current_data = calc_service.calculate_row(current_data, data_table.protocol.analyte_associations)
+
+                # Filter to protocol fields only for ExperimentDataRow storage
+                protocol_data = {k: v for k, v in current_data.items() if k in protocol_field_names}
+                
+                if exp_row:
+                    if exp_row.row_data != protocol_data:
+                        exp_row.row_data = protocol_data
+                else:
+                    exp_row = ExperimentDataRow(data_table_id=data_table.id, row_index=r_idx, row_data=protocol_data)
+                    rows_by_index[r_idx] = exp_row # Cache for next loop
+                    db.session.add(exp_row)
+                
+                # B. Sync to Animal Table (V2 Logic)
+                # We sync updated values (including calculated ones!) if they belong to Animal Model
+                if group and r_idx < len(group.animal_data):
+                    animal_info = group.animal_data[r_idx]
+                    animal_id = animal_info.get('ID')
+                    
+                    if animal_id and animal_id in animals_by_uid:
+                        animal = animals_by_uid[animal_id]
+                        measurements = animal.measurements or {}
+                        modified = False
+                        
+                        # Sync any value in current_data that is an animal model field
+                        for col, val in current_data.items():
+                            if col in animal_model_fields:
+                                # Update if changed or new
+                                if measurements.get(col) != val:
+                                    measurements[col] = val
+                                    modified = True
+                        
+                        if modified:
+                            animal.measurements = measurements
+                            from sqlalchemy.orm.attributes import flag_modified
+                            flag_modified(animal, "measurements")
+            
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            from flask import current_app
+            current_app.logger.error(f"Error saving datatable edits for {datatable_id}: {e}")
+            raise
+
+    def process_upload(self, datatable_id, df, protocol_field_names, id_col_name='ID'):
+        """
+        Process Excel upload, update ExperimentDataRows, and sync to Animal table.
+        """
+        data_table = db.session.get(DataTable, datatable_id)
+        if not data_table:
+            raise ValueError(_l("DataTable not found"))
+
+        group = data_table.group
+        # Map Animal IDs to Row Indices
+        animal_id_to_row_index = {}
+        for i, animal in enumerate(group.animal_data or []):
+            animal_id = animal.get('ID')
+            if animal_id is not None:
+                animal_id_to_row_index[str(animal_id).strip()] = i
+        
+        updates_by_row = {} # row_index -> {col: val}
+        
+        for _, row in df.iterrows():
+            animal_id_raw = row.get(id_col_name)
+            if pd.isna(animal_id_raw): continue
+            
+            animal_id = str(animal_id_raw).strip()
+            row_index = animal_id_to_row_index.get(animal_id)
+            
+            if row_index is not None:
+                if row_index not in updates_by_row: updates_by_row[row_index] = {}
+                
+                for col, val in row.items():
+                    if col == id_col_name: continue
+                    # Basic cleaning (NaN -> None) handled by caller or here
+                    if pd.isna(val): continue
+                    updates_by_row[row_index][col] = val
+
+        # Reuse single-row save logic effectively
+        if updates_by_row:
+            self.save_manual_edits(datatable_id, updates_by_row, protocol_field_names)
+        
+        return len(updates_by_row)

@@ -4,7 +4,7 @@ from datetime import (date,  # Import date and timedelta for setting dates
 import pytest
 
 from app.extensions import db
-from app.models import (AnimalModel, DataTable, EthicalApproval,
+from app.models import (Animal, AnimalModel, DataTable, EthicalApproval,
                         ExperimentalGroup, ExperimentDataRow, Project,
                         ProtocolModel, Severity, Team, User)
 from app.models.teams import \
@@ -22,6 +22,7 @@ def test_setup_data(test_app):
     with test_app.app_context():
         # Clean up database before starting tests to prevent IntegrityErrors
         db.session.query(ExperimentalGroup).delete()
+        db.session.query(Animal).delete()
         db.session.query(DataTable).delete()
         db.session.query(ProtocolModel).delete()
         db.session.query(EthicalApproval).delete()

@@ -596,147 +596,22 @@ def edit_data_table(id):
         elif upload_form.submit_upload.data and upload_form.validate_on_submit():
             file = request.files.get('file')
             if not file:
-                flash(lazy_gettext("No file selected for upload."), "danger")
+                flash(_l("No file selected for upload."), "danger")
                 return redirect(url_for('datatables.edit_data_table', id=id))
 
             try:
                 # Use utility to read Excel
                 data_list, columns = read_excel_to_list(file.stream)
                 df = pd.DataFrame(data_list)
-                current_app.logger.info(f"Uploaded Excel file for DataTable {id} read successfully. Columns: {columns}")
-
-                id_col_name = None
-                for col in columns:
-                    if col.lower() == 'id':
-                        id_col_name = col
-                        break
                 
-                if not id_col_name:
-                    flash(lazy_gettext("Uploaded file must contain an 'ID' column to match animals."), "danger")
-                    return redirect(url_for('datatables.edit_data_table', id=id))
-
-                protocol_analytes_map_for_upload = {a.name: a for a in data_table.protocol.analytes} if data_table.protocol and data_table.protocol.analytes else {}
+                rows_updated_count = datatable_service.process_upload(data_table.id, df, protocol_field_names)
                 
-                animal_id_to_row_index = {}
-                for i, animal in enumerate(data_table.group.animal_data or []):
-                    animal_id = animal.get('ID')
-                    if animal_id is not None:
-                        animal_id_to_row_index[str(animal_id).strip()] = i
+                flash(_l("Successfully uploaded and updated {count} rows from the Excel file.").format(count=rows_updated_count), "success")
                 
-                updates_from_upload = defaultdict(dict)
-                upload_errors = []
-                rows_updated_count = 0
-
-                for row_idx, row in df.iterrows():
-                    animal_id_from_file_raw = row.get(id_col_name)
-                    if pd.isna(animal_id_from_file_raw):
-                        upload_errors.append(lazy_gettext("Skipping row with missing 'ID'."))
-                        continue
-                    
-                    animal_id_from_file = str(animal_id_from_file_raw).strip()
-                    row_index = animal_id_to_row_index.get(animal_id_from_file)
-                    if row_index is None:
-                        upload_errors.append(lazy_gettext("Skipping row for ID '{animal_id}' not found in this group.").format(animal_id=animal_id_from_file))
-                        continue
-                    
-                    data_changed_in_row = False
-                    for col_name, value in row.items():
-                        if col_name == id_col_name:
-                            continue
-
-                        if col_name in protocol_analytes_map_for_upload:
-                            analyte_obj = protocol_analytes_map_for_upload[col_name]
-                            try:
-                                converted_value = validate_and_convert(value, analyte_obj, col_name, row_index)
-                                
-                                current_row_data = existing_data_rows_dict.get(row_index, {})
-                                existing_value = current_row_data.get(col_name)
-
-                                is_different = False
-                                if existing_value is None and converted_value is not None: is_different = True
-                                elif existing_value is not None and converted_value is None: is_different = True
-                                elif isinstance(existing_value, float) and math.isnan(existing_value):
-                                     if not (isinstance(converted_value, float) and math.isnan(converted_value)): is_different = True
-                                elif isinstance(converted_value, float) and math.isnan(converted_value):
-                                     if not (isinstance(existing_value, float) and math.isnan(existing_value)): is_different = True
-                                elif str(existing_value) != str(converted_value): is_different = True
-
-                                if is_different:
-                                    updates_from_upload[row_index][col_name] = converted_value
-                                    data_changed_in_row = True
-
-                            except ValueError as e_val:
-                                upload_errors.append(lazy_gettext("Row for ID '{animal_id}', Column '{col}': {error_msg}").format(animal_id=animal_id_from_file, col=col_name, error_msg=e_val))
-                            except Exception as e_generic:
-                                upload_errors.append(lazy_gettext("Row for ID '{animal_id}', Column '{col}': Unexpected error - {error_msg}").format(animal_id=animal_id_from_file, col=col_name, error_msg=e_generic))
-                    
-                    if data_changed_in_row:
-                        rows_updated_count += 1
-
-                if upload_errors:
-                    for err in upload_errors:
-                        flash(err, "danger")
-                    flash(lazy_gettext("Upload completed with errors. Some data may not have been updated."), "warning")
-                
-                if updates_from_upload or any(a.calculation_formula for a in data_table.protocol.analyte_associations if data_table.protocol):
-                    has_calc = any(a.calculation_formula for a in data_table.protocol.analyte_associations) if data_table.protocol else False
-                    
-                    # Iterate through ALL rows to ensure calculations are consistent
-                    for r_idx in range(num_expected_rows):
-                        vals = updates_from_upload.get(r_idx, {})
-                        exp_row = existing_rows_query.filter(ExperimentDataRow.row_index == r_idx).first()
-                        
-                        # Prepare context: Combine Animal Data + Protocol Data + Manual Edits
-                        current_data = {}
-                        
-                        # 1. Animal Model Data
-                        if data_table.group and data_table.group.animal_data and r_idx < len(data_table.group.animal_data):
-                            anim_row = data_table.group.animal_data[r_idx]
-                            current_data.update(anim_row)
-                            
-                            # 1b. Inject Age (Days) into context if possible
-                            date_of_birth_str = anim_row.get('Date of Birth')
-                            if date_of_birth_str and data_table.date:
-                                try:
-                                    dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
-                                    dt_date = datetime.strptime(data_table.date, '%Y-%m-%d').date()
-                                    current_data['Age (Days)'] = (dt_date - dob).days
-                                except: pass
-
-                        # 2. Existing Protocol Data
-                        if exp_row:
-                            current_data.update(exp_row.row_data or {})
-                        
-                        # 3. New updates from upload
-                        current_data.update(vals)
-                        
-                        # 4. Apply Calculation
-                        if has_calc:
-                             current_data = calculation_service.calculate_row(current_data, data_table.protocol.analyte_associations)
-
-                        # 5. Extract ONLY protocol fields for storage
-                        protocol_only_data = {k: v for k, v in current_data.items() if k in protocol_field_names}
-                        
-                        if exp_row:
-                            if exp_row.row_data != protocol_only_data:
-                                exp_row.row_data = protocol_only_data
-                                flag_modified(exp_row, "row_data")
-                        elif protocol_only_data:
-                            exp_row = ExperimentDataRow(data_table_id=id, row_index=r_idx, row_data=protocol_only_data)
-                            db.session.add(exp_row)
-
-                    db.session.commit()
-                    flash(lazy_gettext("Successfully uploaded and updated {count} rows from the Excel file.").format(count=rows_updated_count), "success")
-                else:
-                    if not upload_errors:
-                        flash(lazy_gettext("No data changes detected from the uploaded file."), "info")
-
-                return redirect(url_for('datatables.edit_data_table', id=id))
-
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error processing uploaded Excel file for DataTable {id}: {e}", exc_info=True)
-                flash(lazy_gettext("Error processing uploaded file: {error_msg}").format(error_msg=str(e)), "danger")
+                flash(_l(f"Error processing uploaded file: {str(e)}"), "danger")
             return redirect(url_for('datatables.edit_data_table', id=id))
 
         elif 'submit_grid' in request.form:
@@ -750,81 +625,50 @@ def edit_data_table(id):
                         r_idx, c_idx = int(parts[1]), int(parts[2])
                         if 0 <= r_idx < num_expected_rows and 0 <= c_idx < len(column_names):
                             col_name_manual = column_names[c_idx]
+                            
+                            # Determine if this column belongs to Protocol; if so, validate against protocol definition
                             if col_name_manual in protocol_field_names:
                                 analyte_obj_manual = protocol_analytes_map.get(col_name_manual)
-                                if not analyte_obj_manual:
-                                    flash(lazy_gettext("Cell edit error ({cell_id}) for column '{col}': Analyte definition not found.").format(cell_id=k, col=col_name_manual), 'danger'); validation_errors = True; continue
-                                try:
-                                    converted_value = validate_and_convert(v_form, analyte_obj_manual, col_name_manual, r_idx)
-                                    current_row_data = existing_data_rows_dict.get(r_idx, {}); existing_value = current_row_data.get(col_name_manual); is_different = False
-                                    if existing_value is None and converted_value is not None: is_different = True
-                                    elif existing_value is not None and converted_value is None: is_different = True
-                                    elif isinstance(existing_value, float) and math.isnan(existing_value):
-                                         if not (isinstance(converted_value, float) and math.isnan(converted_value)): is_different = True
-                                    elif isinstance(converted_value, float) and math.isnan(converted_value):
-                                         if not (isinstance(existing_value, float) and math.isnan(existing_value)): is_different = True
-                                    elif str(existing_value) != str(converted_value): is_different = True
-                                    if is_different:
-                                        if r_idx not in updates: updates[r_idx] = {}
-                                        updates[r_idx][col_name_manual] = converted_value; data_changed = True
-                                except ValueError as e_val_manual: flash(lazy_gettext("Row {row_num} Col '{col}': {error_msg}").format(row_num=r_idx+1, col=col_name_manual, error_msg=e_val_manual), 'danger'); validation_errors = True
-                                except Exception as e_generic_manual: flash(lazy_gettext("Cell edit error ({cell_id}) for column '{col}': {error_msg}").format(cell_id=k, col=col_name_manual, error_msg=e_generic_manual), 'danger'); current_app.logger.error(f"Manual edit error cell {k} DT {id}: {e_generic_manual}"); validation_errors = True
-                    except ValueError: current_app.logger.warning(f"Received malformed input name: {k}")
-                    except Exception as e_outer_manual: current_app.logger.error(f"Unexpected error processing form key {k}: {e_outer_manual}"); validation_errors = True
-            
-            if (data_changed or any(a.calculation_formula for a in data_table.protocol.analyte_associations if data_table.protocol)) and not validation_errors:
+                                if analyte_obj_manual:
+                                    try:
+                                        converted_value = validate_and_convert(v_form, analyte_obj_manual, col_name_manual, r_idx)
+                                        # Only add if truly different
+                                        current_row_data = existing_data_rows_dict.get(r_idx, {})
+                                        existing_value = current_row_data.get(col_name_manual)
+                                        
+                                        is_different = False
+                                        if existing_value is None and converted_value is not None: is_different = True
+                                        elif existing_value is not None and converted_value is None: is_different = True
+                                        elif str(existing_value) != str(converted_value): is_different = True
+                                        
+                                        if is_different:
+                                            if r_idx not in updates: updates[r_idx] = {}
+                                            updates[r_idx][col_name_manual] = converted_value
+                                            data_changed = True
+                                    except ValueError as e:
+                                        flash(f"Row {r_idx+1} Col '{col_name_manual}': {str(e)}", 'danger')
+                                        validation_errors = True
+                            else:
+                                # Might be an animal model field being edited manually (if allowed)
+                                # For now we assume grid only submits what's in the grid.
+                                # If the grid allows editing non-protocol fields, we should handle them here.
+                                # Assuming simplified string handling for now if not in protocol map
+                                pass
+
+                    except Exception as e:
+                         current_app.logger.error(f"Error parsing grid cell {k}: {e}")
+
+            if data_changed and not validation_errors:
                 try:
-                    has_calc = any(a.calculation_formula for a in data_table.protocol.analyte_associations) if data_table.protocol else False
-                    
-                    # Iterate through ALL rows to ensure calculations are consistent
-                    for r_idx in range(num_expected_rows):
-                        vals = updates.get(r_idx, {})
-                        exp_row = existing_rows_query.filter(ExperimentDataRow.row_index == r_idx).first()
-                        
-                        # Prepare context: Combine Animal Data + Protocol Data + Manual Edits
-                        current_data = {}
-                        
-                        # 1. Animal Model Data
-                        if data_table.group and data_table.group.animal_data and r_idx < len(data_table.group.animal_data):
-                            anim_row = data_table.group.animal_data[r_idx]
-                            current_data.update(anim_row)
-                            
-                            # 1b. Inject Age (Days) into context
-                            date_of_birth_str = anim_row.get('Date of Birth')
-                            if date_of_birth_str and data_table.date:
-                                try:
-                                    dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
-                                    dt_date = datetime.strptime(data_table.date, '%Y-%m-%d').date()
-                                    current_data['Age (Days)'] = (dt_date - dob).days
-                                except: pass
-
-                        # 2. Existing Protocol Data
-                        if exp_row:
-                            current_data.update(exp_row.row_data or {})
-                        
-                        # 3. Manual Edits from THIS session
-                        current_data.update(vals)
-                        
-                        # 4. Apply Calculation
-                        if has_calc:
-                             current_data = calculation_service.calculate_row(current_data, data_table.protocol.analyte_associations)
-
-                        # 5. Extract ONLY protocol fields for storage
-                        protocol_only_data = {k: v for k, v in current_data.items() if k in protocol_field_names}
-                        
-                        if exp_row:
-                            if exp_row.row_data != protocol_only_data:
-                                exp_row.row_data = protocol_only_data
-                                flag_modified(exp_row, "row_data")
-                        elif protocol_only_data:
-                            exp_row = ExperimentDataRow(data_table_id=id, row_index=r_idx, row_data=protocol_only_data)
-                            db.session.add(exp_row)
-                    db.session.commit()
-                    flash(lazy_gettext('Modifications saved.'), 'success')
+                    datatable_service.save_manual_edits(data_table.id, updates, protocol_field_names)
+                    flash(_l('Modifications saved.'), 'success')
                     return redirect(url_for('datatables.edit_data_table', id=id))
-                except Exception as e_db_manual: db.session.rollback(); flash(lazy_gettext("Database save error: {error_msg}").format(error_msg=e_db_manual), 'danger'); current_app.logger.error(f"Database error saving manual edits for DataTable {id}: {e_db_manual}"); validation_errors = True
-            elif not data_changed and not validation_errors: flash(lazy_gettext('No changes were made.'), 'info')
-            elif validation_errors: flash(lazy_gettext("Changes not saved due to validation errors."), 'warning')
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Error saving manual edits: {e}", exc_info=True)
+                    flash(_l(f"Database save error: {str(e)}"), 'danger')
+            elif not data_changed and not validation_errors:
+                flash(_l('No changes were made.'), 'info')
 
     updated_rows = data_table.experiment_rows.order_by(ExperimentDataRow.row_index).all()
     updated_dict = {r.row_index: r.row_data for r in updated_rows}

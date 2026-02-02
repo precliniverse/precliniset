@@ -199,6 +199,23 @@
     <!-- FullCalendar JS -->
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js' nonce="{{ csp_nonce }}"></script>
 
+    <script nonce="{{ csp_nonce }}">
+        // Global AJAX setup to include CSRF token for all requests to our own API
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                const csrfToken = "{{ csrf_token() }}";
+                // Always send for our API endpoints if they use session auth
+                if (settings.url.startsWith('/api/') || settings.url.includes(window.location.host + '/api/')) {
+                    xhr.setRequestHeader("X-CSRFToken", csrfToken);
+                }
+                // Also standard protocol: send for non-GET requests to anywhere on our same origin
+                else if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    xhr.setRequestHeader("X-CSRFToken", csrfToken);
+                }
+            }
+        });
+    </script>
+
     <footer class="footer mt-auto py-3 bg-light border-top">
         <div class="container text-center">
             <span class="text-muted small">Precliniset v{{ app_version }} | &copy; 2026</span>

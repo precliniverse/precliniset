@@ -62,8 +62,10 @@ api.add_namespace(admin_ns)
 
 # This namespace is for project-specific group operations (listing/creating groups under a project)
 from .groups_api import ns as projects_ns
-
 api.add_namespace(projects_ns)
+
+from .groups_api import server_side_ns as groups_server_side_ns
+api.add_namespace(groups_server_side_ns)
 
 
 @api.errorhandler(NotFound)

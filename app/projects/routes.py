@@ -10,6 +10,7 @@ from flask_babel import lazy_gettext as _l
 from flask_login import current_user, login_required
 from sqlalchemy import exc as sqlalchemy_exc
 from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
 from app import db
@@ -440,7 +441,9 @@ def create_project():
 @projects_bp.route('/<string:project_slug>', methods=['GET', 'POST'])
 @login_required
 def view_edit_project(project_slug):
-    project = Project.query.filter_by(slug=project_slug).first_or_404()
+    project = Project.query.filter_by(slug=project_slug).options(
+        joinedload(Project.groups).joinedload(ExperimentalGroup.animals)
+    ).first_or_404()
     
     if not check_project_permission(project, 'read', allow_abort=True): 
         abort(403)

@@ -20,6 +20,7 @@ from app.models import (
 from app.permissions import AVAILABLE_PERMISSIONS
 from app.models.import_pipeline import ImportPipeline
 from app.services.admin_service import AdminService
+from app.services.group_service import GroupService
 
 setup_bp = Blueprint('setup', __name__)
 fake = Faker()
@@ -448,6 +449,7 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
          _create_super_admin()
 
     admin_service = AdminService()
+    group_service = GroupService()
 
     # Scientific Models
     a_id = get_or_create_analyte('ID', AnalyteDataType.TEXT, is_meta=True)
@@ -544,12 +546,16 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                 # Include team (i), project (p_idx), and group (g_idx) indices for guaranteed uniqueness
                 group_id = f"{proj.slug}-G{g_idx:03d}"
 
-                group = ExperimentalGroup(
+                group = group_service.create_group(
                     id=group_id,
-                    name=group_name, project_id=proj.id, team_id=t.id, owner_id=u.id, model_id=model.id,
-                    ethical_approval_id=ea.id, animal_data=animal_data
+                    name=group_name,
+                    project_id=proj.id,
+                    team_id=t.id,
+                    owner_id=u.id,
+                    model_id=model.id,
+                    ethical_approval_id=ea.id,
+                    animal_data=animal_data
                 )
-                db.session.add(group); db.session.flush()
 
                 # Datatables
                 base_date = date.today() - timedelta(weeks=12)

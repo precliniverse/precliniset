@@ -35,6 +35,7 @@ class ExperimentalGroup(db.Model):
     data_tables = db.relationship('DataTable', back_populates='group', lazy='dynamic', cascade="all, delete-orphan")
     ethical_approval = db.relationship('EthicalApproval', backref=db.backref('experimental_groups', lazy='dynamic'))
     samples = db.relationship('Sample', back_populates='experimental_group', lazy='dynamic', cascade="all, delete-orphan")
+    animals = db.relationship('Animal', back_populates='group', cascade="all, delete-orphan")
 
     __table_args__ = (db.UniqueConstraint('project_id', 'name', name='_project_group_name_uc'),)
 
@@ -90,15 +91,14 @@ class ExperimentalGroup(db.Model):
         Returns:
             List of animal dictionaries in legacy JSON format
         """
-        from .animal import Animal
-        
-        animals = Animal.query.filter_by(group_id=self.id).order_by(Animal.id).all()
-        
-        if not animals:
+        if not self.animals:
             return []
         
+        # Determine sequence sort order (SQLAlchemy order_by(Animal.id))
+        sorted_animals = sorted(self.animals, key=lambda a: a.id)
+        
         result = []
-        for animal in animals:
+        for animal in sorted_animals:
             # Reconstruct the JSON format
             animal_dict = {
                 'ID': animal.uid,
@@ -129,17 +129,13 @@ class ExperimentalGroup(db.Model):
         Args:
             data_list: List of animal dictionaries
         """
-        from .animal import Animal
-        
-        # Clear existing animals via relationship if possible
-        # Since animals backref is dynamic, we need to handle it carefully
-        existing_animals = Animal.query.filter_by(group_id=self.id).all()
-        for a in existing_animals:
-            db.session.delete(a)
+        # Clear existing animals via relationship
+        self.animals = []
         
         if not data_list:
             return
 
+        from .animal import Animal
         for i, animal_dict in enumerate(data_list):
             animal_id = animal_dict.get('ID') or f"{self.id}-A{i+1}"
             
@@ -174,7 +170,7 @@ class ExperimentalGroup(db.Model):
                 date_of_birth=dob,
                 measurements=measurements if measurements else None
             )
-            db.session.add(animal)
+            self.animals.append(animal)
         
         # We try to flush to catch integrity errors early, but only if we're in a session
         try:

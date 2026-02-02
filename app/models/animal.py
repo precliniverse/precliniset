@@ -41,7 +41,7 @@ class Animal(db.Model):
     )
     sex = db.Column(db.String(50), nullable=True)
     status = db.Column(db.String(20), nullable=False, default='alive', index=True)
-    date_of_birth = db.Column(db.Date, nullable=True)
+    date_of_birth = db.Column(db.Date, nullable=True, index=True)
     measurements = db.Column(db.JSON, nullable=True, default=dict)
     
     created_at = db.Column(
@@ -59,7 +59,7 @@ class Animal(db.Model):
     # Relationships
     group = db.relationship(
         'ExperimentalGroup',
-        backref=db.backref('animals', lazy='dynamic', cascade='all, delete-orphan')
+        back_populates='animals'
     )
     
     def __repr__(self) -> str:

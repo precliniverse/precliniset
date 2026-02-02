@@ -70,7 +70,7 @@ def search_groups_ajax():
     # Permission check: Only groups from projects accessible to the user
     accessible_projects = current_user.get_accessible_projects()
     project_ids = [p.id for p in accessible_projects]
-    query = query.filter(ExperimentalGroup.project_id.in_(project_ids))
+    query = query.filter(ExperimentalGroup.project_id.in_(project_ids)).options(joinedload(ExperimentalGroup.animals))
     
     # Only active groups and projects
     query = query.filter(ExperimentalGroup.is_archived == False)
@@ -332,7 +332,10 @@ def batch_delete_groups():
 @groups_bp.route('/view/<string:id>', methods=['GET'], endpoint='view_group') # View should only be GET
 @login_required
 def edit_group(id=None):
-    group = db.session.get(ExperimentalGroup, id) if id else None
+    if id:
+        group = ExperimentalGroup.query.options(joinedload(ExperimentalGroup.animals)).filter_by(id=id).first_or_404()
+    else:
+        group = None
     
     can_edit = False
 
@@ -469,48 +472,10 @@ def edit_group(id=None):
     # --- GET Request Logic (Prepare Template Data) ---
     selected_model_id = group.model_id if group else form.model.data
     selected_model_analytes = []
-    ordered_analyte_names_from_model = []
     if selected_model_id:
         model = db.session.get(AnimalModel, selected_model_id)
         if model:
             selected_model_analytes = get_ordered_analytes_for_model(model.id)
-            ordered_analyte_names_from_model = [analyte.name for analyte in selected_model_analytes]
-            
-    animal_data_for_template = group.animal_data if group and group.animal_data else []
-
-    # Consolidate and reorder keys for animal_data_for_template
-    final_ordered_keys_set = set()
-    final_ordered_keys = []
-
-    # Add mandatory/common fields first
-    for key in ['ID', 'Date of Birth', 'Age (Days)', 'Blinded Group', 'Treatment Group', 'status']:
-        if key not in final_ordered_keys_set:
-            final_ordered_keys.append(key)
-            final_ordered_keys_set.add(key)
-    
-    # Add ordered analytes from the model
-    for name in ordered_analyte_names_from_model:
-        if name not in final_ordered_keys_set:
-            final_ordered_keys.append(name)
-            final_ordered_keys_set.add(name)
-    
-    # Add any other keys found in the animal_data_for_template
-    for animal_dict in animal_data_for_template:
-        for key in animal_dict.keys():
-            if key not in final_ordered_keys_set:
-                final_ordered_keys.append(key)
-                final_ordered_keys_set.add(key)
-
-    # Reorder each animal dictionary
-    reordered_animal_data_for_template = []
-    for animal_dict in animal_data_for_template:
-        ordered_dict = {key: animal_dict.get(key) for key in final_ordered_keys if key in animal_dict}
-        for key, value in animal_dict.items():
-            if key not in ordered_dict:
-                ordered_dict[key] = value
-        reordered_animal_data_for_template.append(ordered_dict)
-    
-    animal_data_for_template = reordered_animal_data_for_template
 
     is_unblinded = group.randomization_details.get('unblinded_at') if group and group.randomization_details else False
     can_view_unblinded = (can_view_unblinded_data(group) or is_unblinded) if group else False
@@ -524,7 +489,6 @@ def edit_group(id=None):
         is_read_only=is_read_only,
         can_view_unblinded=can_view_unblinded,
         selected_model_analytes=selected_model_analytes,
-        animal_data_for_template=animal_data_for_template,
         animal_models_data=[model.to_dict() for model in AnimalModel.query.order_by(AnimalModel.name).all()],
         js_strings={'deceased_label': str(_l('Deceased:'))}
     )

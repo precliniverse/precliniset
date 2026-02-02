@@ -171,7 +171,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{{ _('Animal Data') }}</h5>
                 <div class="d-flex flex-wrap gap-2">
-                    {% if group and group.animal_data and not group.randomization_details and not is_read_only %}
+                    {% if group and group.animals and not group.randomization_details and not is_read_only %}
                     <button type="button" class="btn btn-info" id="randomize-btn" data-bs-toggle="modal"
                         data-bs-target="#randomizationModal">
                         <i class="fas fa-random me-1"></i> {{ _('Randomize & Assign Groups') }}
@@ -301,18 +301,18 @@
                         </thead>
 
                         <tbody>
-                            {% if animal_data_for_template and selected_model_analytes %}
-                            {% for animal in animal_data_for_template %}
+                            {% if group and group.animals and selected_model_analytes %}
+                            {% for animal in group.animals %}
                             {% set row_index = loop.index0 %}
-                            <tr {% if animal.get('status')=='dead' %}class="table-danger" {% endif %}>
+                            <tr {% if animal.status == 'dead' %}class="table-danger" {% endif %}>
                                 {% if not is_read_only %}
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group" aria-label="Row actions">
                                         <button type="button" class="btn btn-outline-primary duplicate-row-btn"
-                                            title="{{ _('Duplicate') }}" {% if animal.get('status')=='dead' %}disabled{%
+                                            title="{{ _('Duplicate') }}" {% if animal.status == 'dead' %}disabled{%
                                             endif %}><i class="fa-solid fa-copy"></i></button>
                                         <button type="button" class="btn btn-outline-danger remove-row-btn"
-                                            title="{{ _('Delete') }}" {% if animal.get('status')=='dead' %}disabled{%
+                                            title="{{ _('Delete') }}" {% if animal.status == 'dead' %}disabled{%
                                             endif %}><i class="fa-solid fa-trash"></i></button>
                                     </div>
                                 </td>
@@ -322,25 +322,25 @@
                                 {% if group and group.randomization_details %}
                                     {% if group.randomization_details.use_blinding %}
                                     <td>
-                                        {% set blinded_value = animal.get('Blinded Group', '-') %}
+                                        {% set blinded_value = animal.measurements.get('Blinded Group', '-') %}
                                         <span class="badge bg-info">{{ blinded_value }}</span>
                                     </td>
                                     {% if can_view_unblinded %}
                                     <td>
-                                        <span class="text-nowrap">{{ animal.get('Treatment Group', '-') }}</span>
+                                        <span class="text-nowrap">{{ animal.measurements.get('Treatment Group', '-') }}</span>
                                     </td>
                                     {% endif %}
                                     {% else %}
                                     <td>
-                                        <span class="text-nowrap">{{ animal.get('Treatment Group', '-') }}</span>
+                                        <span class="text-nowrap">{{ animal.measurements.get('Treatment Group', '-') }}</span>
                                     </td>
                                     {% endif %}
                                 {% endif %}
 
                                 <!-- Age (Days) Column -->
                                 <td class="text-center bg-light">
-                                    <span class="age-display" data-birth-date="{{ animal.get('Date of Birth', '') }}">
-                                        {{ animal.get('Age (Days)', '-') }}
+                                    <span class="age-display" data-birth-date="{{ animal.date_of_birth.isoformat() if animal.date_of_birth else '' }}">
+                                        {{ animal.measurements.get('Age (Days)', '-') }}
                                     </span>
                                 </td>
 
@@ -350,16 +350,28 @@
                                 {% if not is_sensitive_and_blinded %}
                                 <td>
                                     {% set field_name = analyte.name %}
-                                    {% set field_value = animal.get(field_name, '') %}
-                                    {% if analyte.data_type.value == 'date' and field_value %}
-                                    {% set formatted_field_value = field_value.split('T')[0] %}
+                                    
+                                    {# Determine value based on field type #}
+                                    {% if field_name == 'ID' %}
+                                        {% set field_value = animal.uid %}
+                                    {% elif field_name == 'Date of Birth' %}
+                                        {% set field_value = animal.date_of_birth.isoformat() if animal.date_of_birth else '' %}
+                                    {% elif field_name in ['sex', 'Sex'] %}
+                                        {% set field_value = animal.sex or '' %}
                                     {% else %}
-                                    {% set formatted_field_value = field_value %}
+                                        {% set field_value = animal.measurements.get(field_name, '') %}
                                     {% endif %}
+
+                                    {% if analyte.data_type.value == 'date' and field_value %}
+                                        {% set formatted_field_value = field_value.split('T')[0] %}
+                                    {% else %}
+                                        {% set formatted_field_value = field_value %}
+                                    {% endif %}
+                                    
                                     <input type="{{ 'date' if analyte.data_type.value == 'date' else 'text' }}"
                                         name="animal_{{ row_index }}_field_{{ field_name }}"
                                         class="form-control form-control-sm" value="{{ formatted_field_value }}" {% if
-                                        field_name=='ID' %}required{% endif %} {% if animal.get('status')=='dead' or
+                                        field_name=='ID' %}required{% endif %} {% if animal.status == 'dead' or
                                         is_read_only %}disabled{% endif %} {% if analyte.data_type.value=='category' and
                                         analyte.allowed_values %}list="datalist-{{ field_name }}-{{ row_index }}" {%
                                         endif %}>
@@ -370,12 +382,12 @@
                                             {% endfor %}
                                     </datalist>
                                     {% endif %}
-                                    {% if field_name == 'Date of Birth' and animal.get('status') == 'dead' and
-                                    animal.get('death_date') %}
-                                    <div class="death-info" data-birth-date="{{ animal.get('Date of Birth') }}"
-                                        data-death-date="{{ animal.get('death_date') }}">
+                                    {% if field_name == 'Date of Birth' and animal.status == 'dead' and
+                                    animal.measurements.get('death_date') %}
+                                    <div class="death-info" data-birth-date="{{ animal.date_of_birth.isoformat() if animal.date_of_birth else '' }}"
+                                        data-death-date="{{ animal.measurements.get('death_date') }}">
                                         <small class="text-muted d-block">{{ _('Deceased:') }} {{
-                                            animal.get('death_date').split('T')[0] if animal.get('death_date') else ''
+                                            animal.measurements.get('death_date').split('T')[0] if animal.measurements.get('death_date') else ''
                                             }}</small>
                                         <small class="text-muted d-block age-in-days"></small>
                                     </div>
@@ -717,7 +729,7 @@
             "group_has_randomization": {{ (group and group.randomization_details is not none) | tojson }},
             "group_randomization_blinding": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
             "can_view_unblinded": {{ can_view_unblinded | tojson }},
-            "existing_animal_data": {{ (animal_data_for_template if animal_data_for_template else []) | tojson }},
+            "existing_animal_data": {{ (group.animal_data if group else []) | tojson }},
             "group_randomization_blinding_key": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
             "js_strings": {{ js_strings | tojson }}
         }
@@ -802,7 +814,7 @@
     "canViewUnblinded": {{ can_view_unblinded | tojson }},
     "canEditAnalytes": {{ user_has_permission(current_user, 'Analyte', 'edit') | tojson }},
     "blindingKey": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
-    "existingAnimalData": {{ (animal_data_for_template if animal_data_for_template else []) | tojson }},
+    "existingAnimalData": {{ (group.animal_data if group else []) | tojson }},
     "ethicalApprovalId": {{ (group.ethical_approval_id if group else None) | tojson }},
     "urls": {
         "downloadTemplate": "{{ url_for('groups.download_template', model_id=0) }}",

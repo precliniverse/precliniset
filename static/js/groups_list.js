@@ -117,6 +117,9 @@ document.addEventListener('DOMContentLoaded', function () {
         "serverSide": true,
         "ajax": {
             "url": CONFIG.urls.serverSideData,
+            "headers": {
+                "X-CSRFToken": CONFIG.csrfToken
+            },
             "data": function (d) {
                 d.project_id = currentProjectId;
                 d.team_id = $('#team_filter').val();

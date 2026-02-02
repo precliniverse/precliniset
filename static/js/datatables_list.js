@@ -84,6 +84,9 @@ document.addEventListener('DOMContentLoaded', function () {
         "serverSide": true,
         "ajax": {
             "url": CONFIG.urls.serverSideData,
+            "headers": {
+                "X-CSRFToken": CONFIG.csrfToken
+            },
             "data": function (d) {
                 d.project_id = currentProjectId;
                 // Fix: Send group_id if present in config (for group-specific view)

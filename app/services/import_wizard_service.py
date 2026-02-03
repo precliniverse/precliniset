@@ -156,25 +156,7 @@ class ImportWizardService:
             return {'valid': False, 'error': "Experimental Group not found."}
 
 
-        valid_animal_ids = set()
-        if group.animal_data:
-            if isinstance(group.animal_data, list):
-                for item in group.animal_data:
-                    if isinstance(item, str):
-                        valid_animal_ids.add(item.strip())
-                    elif isinstance(item, dict):
-                        animal_id = item.get('ID') or item.get('id') # Try both 'ID' and 'id'
-                        if animal_id is not None:
-                            valid_animal_ids.add(str(animal_id).strip())
-            elif isinstance(group.animal_data, dict):
-                # If it's a dictionary, assume keys are animal IDs
-                for animal_id in group.animal_data.keys():
-                    if animal_id is not None:
-                        valid_animal_ids.add(str(animal_id).strip())
-            else:
-                current_app.logger.warning(f"Import Wizard Validation: Unexpected type for group.animal_data: {type(group.animal_data)}. Expected list or dict.")
-        else:
-            current_app.logger.info("Import Wizard Validation: group.animal_data is empty or None.")
+        valid_animal_ids = {str(a.uid).strip() for a in group.animals}
 
 
         missing_ids = file_animal_ids - valid_animal_ids
@@ -217,12 +199,24 @@ class ImportWizardService:
         existing_rows_by_animal_id = {}
         max_existing_row_index = -1
         for erow in existing_experiment_rows:
-            if erow.row_data and 'ID' in erow.row_data and erow.row_data['ID'] is not None:
-                existing_rows_by_animal_id[str(erow.row_data['ID'])] = erow
+            if erow.row_data:
+                # Name-resilient ID lookup
+                aid = erow.row_data.get('ID') or erow.row_data.get('id') or erow.row_data.get('uid')
+                if aid is not None:
+                    existing_rows_by_animal_id[str(aid)] = erow
             if erow.row_index > max_existing_row_index:
                 max_existing_row_index = erow.row_index
 
         next_row_index = max_existing_row_index + 1
+
+        # Identify fields that belong to the Animal Model (to sync)
+        animal_model_fields = set()
+        animals_by_uid = {}
+        if data_table.group:
+            if data_table.group.model and data_table.group.model.analytes:
+                animal_model_fields = {a.name for a in data_table.group.model.analytes}
+            from app.models import Animal
+            animals_by_uid = {a.uid: a for a in data_table.group.animals}
 
         # --- LOAD DATA (Pipeline vs File) ---
         if pipeline_id:
@@ -322,6 +316,54 @@ class ImportWizardService:
                 db.session.add(new_row)
                 results.append(new_row.row_data)
                 next_row_index += 1
+
+            # --- SYNC TO ANIMAL TABLE ---
+            if animal_id in animals_by_uid:
+                animal = animals_by_uid[animal_id]
+                measurements = animal.measurements or {}
+                modified = False
+                
+                # Mapping of animal core fields for sync
+                core_fields_map = {
+                    'sex': 'sex',
+                    'status': 'status',
+                    'date_of_birth': 'date_of_birth',
+                    'date of birth': 'date_of_birth'
+                }
+
+                # Sync values if they belong to Animal Model or are core fields
+                for col, val in current_row_data.items():
+                    col_lower = col.lower()
+                    
+                    # 1. Update Core Fields
+                    if col_lower in core_fields_map:
+                        attr_name = core_fields_map[col_lower]
+                        # Special handling for dates
+                        if attr_name == 'date_of_birth' and isinstance(val, str):
+                            try:
+                                val = datetime.strptime(val.split('T')[0], '%Y-%m-%d').date()
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        if getattr(animal, attr_name) != val:
+                            setattr(animal, attr_name, val)
+                            modified = True
+                    
+                    # 2. Update Measurements
+                    elif col in animal_model_fields or col_lower in {a.lower() for a in animal_model_fields}:
+                        # Find the actual case sensitive name in animal_model_fields if it was a case-insensitive match
+                        actual_col = next((a for a in animal_model_fields if a.lower() == col_lower), col)
+                        if measurements.get(actual_col) != val:
+                            measurements[actual_col] = val
+                            modified = True
+                
+                if modified:
+                    animal.measurements = measurements
+                    from datetime import timezone
+                    animal.updated_at = datetime.now(timezone.utc)
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(animal, "measurements")
+                    db.session.add(animal)
 
         # Audit Log
         log_action(

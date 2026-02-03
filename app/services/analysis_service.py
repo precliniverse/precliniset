@@ -65,7 +65,7 @@ class AnalysisService:
         # 4. Calculate Age (Days)
         for row in animal_data:
             age_in_days = None
-            date_of_birth_str = row.get('Date of Birth')
+            date_of_birth_str = row.get('Date of Birth') or row.get('date_of_birth')
             if date_of_birth_str and data_table.date:
                 try:
                     dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
@@ -187,14 +187,15 @@ class AnalysisService:
         animal_model_fields = set()
 
         for dt in datatables_to_process:
-            group_animal_data = dt.group.animal_data or []
+            # Load experiment rows for this datatable
+            from app.models import ExperimentDataRow
             exp_rows_dict = {row.row_index: row.row_data for row in dt.experiment_rows.all()}
             
-            if dt.group.model and dt.group.model.analytes:
-                animal_model_fields.update(a.name for a in dt.group.model.analytes)
-
-            for i, animal_info in enumerate(group_animal_data):
-                animal_id = animal_info.get('ID')
+            # Use animals relationship instead of animal_data
+            animals = sorted(dt.group.animals, key=lambda a: a.id)
+            for i, animal in enumerate(animals):
+                animal_info = animal.to_dict()
+                animal_id = animal_info.get('uid')
                 if not animal_id: continue
 
                 merged_data = {**animal_info, **exp_rows_dict.get(i, {})}
@@ -237,8 +238,9 @@ class AnalysisService:
         all_animal_data_df = []
         seen_animal_ids = set()
         for dt in datatables_to_process:
-            for animal_info in (dt.group.animal_data or []):
-                animal_id = animal_info.get('ID')
+            for animal in dt.group.animals:
+                animal_info = animal.to_dict()
+                animal_id = animal_info.get('uid')
                 if animal_id and animal_id not in seen_animal_ids:
                     all_animal_data_df.append(animal_info)
                     seen_animal_ids.add(animal_id)
@@ -418,7 +420,7 @@ class AnalysisService:
             group = group_map.get(gid)
             if not group: continue
             
-            animal_metadata = group.animal_data or []
+            animals = sorted(group.animals, key=lambda a: a.id)
             relevant_dts = [dt for dt in data_tables if dt.group_id == gid]
             
             for dt in relevant_dts:
@@ -428,8 +430,9 @@ class AnalysisService:
                     if not row_meas: continue
                     
                     # Fetch split value for this animal if requested
-                    meta = animal_metadata[idx] if idx < len(animal_metadata) else {}
-                    split_val = str(meta.get(splitting_param)) if splitting_param and meta.get(splitting_param) is not None else None
+                    animal = animals[idx] if idx < len(animals) else None
+                    animal_info = animal.to_dict() if animal else {}
+                    split_val = str(animal_info.get(splitting_param)) if splitting_param and animal_info.get(splitting_param) is not None else None
                     
                     for param, val in row_meas.items():
                         try:

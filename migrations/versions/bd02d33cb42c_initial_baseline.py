@@ -1,8 +1,8 @@
 """Initial_Baseline
 
-Revision ID: 500214ecd7ea
+Revision ID: bd02d33cb42c
 Revises: 
-Create Date: 2026-01-11 17:53:19.502677
+Create Date: 2026-02-02 17:06:24.590714
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '500214ecd7ea'
+revision = 'bd02d33cb42c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -75,6 +75,7 @@ def upgrade():
     sa.Column('url', sa.String(length=255), nullable=True),
     sa.Column('severity', sa.Enum('NONE', 'LIGHT', 'MODERATE', 'SEVERE', name='severity'), nullable=False),
     sa.Column('external_skill_ids', sa.JSON(), nullable=True),
+    sa.Column('enable_import_wizard', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
@@ -142,15 +143,15 @@ def upgrade():
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('token_hash', sa.String(length=128), nullable=False),
-    sa.Column('prefix', sa.String(length=8), nullable=False),
+    sa.Column('prefix_hash', sa.String(length=128), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('last_used_at', sa.DateTime(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('prefix')
+    sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('api_token', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_api_token_prefix_hash'), ['prefix_hash'], unique=True)
         batch_op.create_index(batch_op.f('ix_api_token_token_hash'), ['token_hash'], unique=True)
 
     op.create_table('audit_log',
@@ -231,6 +232,33 @@ def upgrade():
     sa.ForeignKeyConstraint(['creator_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
+    )
+    op.create_table('import_pipeline',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('script_content', sa.Text(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('created_by_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
+    op.create_table('import_template',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('protocol_model_id', sa.Integer(), nullable=False),
+    sa.Column('mapping_json', sa.JSON(), nullable=False),
+    sa.Column('skip_rows', sa.Integer(), nullable=False),
+    sa.Column('anchor_text', sa.String(length=255), nullable=True),
+    sa.Column('anchor_offset', sa.Integer(), nullable=False),
+    sa.Column('row_interval', sa.Integer(), nullable=False),
+    sa.Column('advanced_logic', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['protocol_model_id'], ['protocol_model.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('project',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -426,6 +454,13 @@ def upgrade():
     sa.ForeignKeyConstraint(['protocol_id'], ['protocol_model.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('protocol_id', 'molecule_id')
     )
+    op.create_table('protocol_pipeline_association',
+    sa.Column('protocol_id', sa.Integer(), nullable=False),
+    sa.Column('pipeline_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['pipeline_id'], ['import_pipeline.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['protocol_id'], ['protocol_model.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('protocol_id', 'pipeline_id')
+    )
     op.create_table('reference_range',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=150), nullable=False),
@@ -508,13 +543,14 @@ def upgrade():
     sa.Column('ethical_approval_id', sa.Integer(), nullable=True),
     sa.Column('model_id', sa.Integer(), nullable=False),
     sa.Column('project_id', sa.Integer(), nullable=False),
-    sa.Column('animal_data', sa.JSON(), nullable=True),
     sa.Column('randomization_details', sa.JSON(), nullable=True),
     sa.Column('owner_id', sa.Integer(), nullable=False),
     sa.Column('team_id', sa.Integer(), nullable=False),
     sa.Column('created_from_workplan_id', sa.Integer(), nullable=True),
     sa.Column('is_archived', sa.Boolean(), nullable=False),
     sa.Column('archived_at', sa.DateTime(), nullable=True),
+    sa.Column('default_euthanasia_reason', sa.String(length=100), nullable=True),
+    sa.Column('default_severity', sa.String(length=50), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['created_from_workplan_id'], ['workplan.id'], ),
@@ -564,6 +600,26 @@ def upgrade():
     sa.ForeignKeyConstraint(['workplan_id'], ['workplan.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('animal',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('uid', sa.String(length=100), nullable=False),
+    sa.Column('group_id', sa.String(length=40), nullable=False),
+    sa.Column('sex', sa.String(length=50), nullable=True),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('date_of_birth', sa.Date(), nullable=True),
+    sa.Column('measurements', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['group_id'], ['experimental_group.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('group_id', 'uid', name='_group_animal_uid_uc')
+    )
+    with op.batch_alter_table('animal', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_animal_date_of_birth'), ['date_of_birth'], unique=False)
+        batch_op.create_index(batch_op.f('ix_animal_group_id'), ['group_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_animal_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_animal_uid'), ['uid'], unique=False)
+
     op.create_table('data_table',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('group_id', sa.String(length=40), nullable=False),
@@ -597,7 +653,7 @@ def upgrade():
     sa.Column('sample_type', sa.Enum('BLOOD', 'URINE', 'BIOLOGICAL_TISSUE', 'OTHER', name='sampletype'), nullable=False),
     sa.Column('collection_date', sa.Date(), nullable=False),
     sa.Column('is_terminal', sa.Boolean(), nullable=False),
-    sa.Column('status', sa.Enum('TO_BE_COLLECTED', 'STORED', 'SHIPPED', 'DESTROYED', 'USED_FOR_DERIVATION', name='samplestatus'), nullable=False),
+    sa.Column('status', sa.Enum('TO_BE_COLLECTED', 'STORED', 'SHIPPED', 'DESTROYED', 'USED_FOR_DERIVATION', 'NOT_COLLECTED', name='samplestatus'), nullable=False),
     sa.Column('shipment_date', sa.Date(), nullable=True),
     sa.Column('destruction_date', sa.Date(), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
@@ -708,6 +764,13 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_data_table_date'))
 
     op.drop_table('data_table')
+    with op.batch_alter_table('animal', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_animal_uid'))
+        batch_op.drop_index(batch_op.f('ix_animal_status'))
+        batch_op.drop_index(batch_op.f('ix_animal_group_id'))
+        batch_op.drop_index(batch_op.f('ix_animal_date_of_birth'))
+
+    op.drop_table('animal')
     op.drop_table('workplan_version')
     op.drop_table('workplan_event')
     op.drop_table('reference_range_team_share')
@@ -724,6 +787,7 @@ def downgrade():
     op.drop_table('storage_location')
     op.drop_table('role_permissions')
     op.drop_table('reference_range')
+    op.drop_table('protocol_pipeline_association')
     op.drop_table('protocol_molecule_association')
     op.drop_table('protocol_analyte_association')
     op.drop_table('project_user_share')
@@ -750,6 +814,8 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_project_is_archived'))
 
     op.drop_table('project')
+    op.drop_table('import_template')
+    op.drop_table('import_pipeline')
     op.drop_table('housing_condition_set')
     op.drop_table('housing_condition_item')
     with op.batch_alter_table('ethical_approval', schema=None) as batch_op:
@@ -766,6 +832,7 @@ def downgrade():
     op.drop_table('audit_log')
     with op.batch_alter_table('api_token', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_api_token_token_hash'))
+        batch_op.drop_index(batch_op.f('ix_api_token_prefix_hash'))
 
     op.drop_table('api_token')
     with op.batch_alter_table('analyte', schema=None) as batch_op:

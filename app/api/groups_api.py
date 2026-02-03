@@ -61,15 +61,22 @@ class GroupList(Resource):
             ns.abort(404, "Project not found or permission denied.")
         return project
 
-    @ns.doc("list_groups")
     @ns.marshal_list_with(group_output_model)
     def get(self, project_slug_or_id):
         """List all experimental groups for a project."""
         project = self.get_project(project_slug_or_id, "read")
-        return project.groups
+        groups = []
+        for group in project.groups:
+            g_dict = {
+                "id": group.id,
+                "name": group.name,
+                "model_id": group.model_id,
+                "ethical_approval_id": group.ethical_approval_id,
+                "animal_data": [a.to_dict() for a in group.animals]
+            }
+            groups.append(g_dict)
+        return groups
 
-    @ns.doc("create_group")
-    @ns.expect(group_model)
     @ns.marshal_with(group_output_model, code=201)
     def post(self, project_slug_or_id):
         """Create a new experimental group in a project."""
@@ -85,7 +92,7 @@ class GroupList(Resource):
             group_count += 1
             new_group_id = f"{project.slug}-G{group_count + 1}"
 
-        new_group = ExperimentalGroup(
+        new_group = group_service.create_group(
             id=new_group_id,
             name=data["name"],
             project_id=project.id,
@@ -95,9 +102,14 @@ class GroupList(Resource):
             owner_id=g.current_user.id,
             team_id=project.team_id
         )
-        db.session.add(new_group)
-        db.session.commit()
-        return new_group, 201
+        
+        return {
+            "id": new_group.id,
+            "name": new_group.name,
+            "model_id": new_group.model_id,
+            "ethical_approval_id": new_group.ethical_approval_id,
+            "animal_data": [a.to_dict() for a in new_group.animals]
+        }, 201
 
 @api.namespace("groups").route("/<string:group_id>")
 class GroupItem(Resource):
@@ -109,28 +121,43 @@ class GroupItem(Resource):
             api.abort(404, "Group not found or permission denied.")
         return group
 
-    @api.doc("get_group")
     @api.marshal_with(group_item_model)
     def get(self, group_id):
         """Fetch a single experimental group."""
-        return self.get_group(group_id, "read")
+        group = self.get_group(group_id, "read")
+        return {
+            "id": group.id,
+            "name": group.name,
+            "model_id": group.model_id,
+            "ethical_approval_id": group.ethical_approval_id,
+            "animal_data": [a.to_dict() for a in group.animals]
+        }
 
-    @api.doc("update_group")
-    @api.expect(group_item_model)
     @api.marshal_with(group_item_model)
     def put(self, group_id):
         """Update an experimental group."""
         group = self.get_group(group_id, "edit_exp_group")
         data = request.get_json()
 
-        group.name = data.get("name", group.name)
-        group.model_id = data.get("model_id", group.model_id)
-        group.ethical_approval_id = data.get("ethical_approval_id", group.ethical_approval_id)
-        if "animal_data" in data:
-            group.animal_data = data["animal_data"]
+        group_service.update_group_details(
+            group,
+            name=data.get("name", group.name),
+            model_id=data.get("model_id", group.model_id),
+            ethical_approval_id=data.get("ethical_approval_id", group.ethical_approval_id)
+        )
         
-        db.session.commit()
-        return group
+        if "animal_data" in data:
+            group_service.save_group_data(group, data["animal_data"], update_datatables=True)
+        else:
+            db.session.commit()
+            
+        return {
+            "id": group.id,
+            "name": group.name,
+            "model_id": group.model_id,
+            "ethical_approval_id": group.ethical_approval_id,
+            "animal_data": [a.to_dict() for a in group.animals]
+        }
 
     @api.doc("delete_group")
     @api.response(204, "Group deleted")
@@ -299,22 +326,22 @@ class ServerSideGroupList(Resource):
                 # Get pre-computed permissions for this group's project
                 perms = project_permissions.get(group.project_id, {})
                 
-                # Calculate animal counts
-                total_animals = len(group.animal_data) if group.animal_data else 0
+                # Calculate animal counts and serialize for tooltip
+                animals_list = [a.to_dict() for a in group.animals]
+                total_animals = len(animals_list)
                 alive_animals = 0
                 dead_animals = 0
                 euthanasia_summary = {}
-                if group.animal_data:
-                    for a in group.animal_data:
-                        if isinstance(a, dict):
-                            if a.get("status") == "dead":
-                                dead_animals += 1
-                                reason = a.get("euthanasia_reason", "Unknown")
-                                sev = a.get("severity", "Unknown")
-                                key = f"{reason} - {sev}"
-                                euthanasia_summary[key] = euthanasia_summary.get(key, 0) + 1
-                            else:
-                                alive_animals += 1
+                
+                for a in animals_list:
+                    if a.get("status") == "dead":
+                        dead_animals += 1
+                        reason = a.get("euthanasia_reason", "Unknown")
+                        sev = a.get("severity", "Unknown")
+                        key = f"{reason} - {sev}"
+                        euthanasia_summary[key] = euthanasia_summary.get(key, 0) + 1
+                    else:
+                        alive_animals += 1
 
                 animal_count_display = f"{alive_animals} / {total_animals}"
 
@@ -322,10 +349,10 @@ class ServerSideGroupList(Resource):
                 tooltip_content = ""
                 if dead_animals > 0:
                     tooltip_parts = [f"Dead animals ({dead_animals}):"]
-                    for animal in group.animal_data:
-                        if isinstance(animal, dict) and animal.get("status") == "dead":
-                            reason = animal.get("euthanasia_reason", "Unknown reason")
-                            animal_id = animal.get("ID", "Unknown ID")
+                    for a in animals_list:
+                        if a.get("status") == "dead":
+                            reason = a.get("euthanasia_reason", "Unknown reason")
+                            animal_id = a.get("uid", "Unknown ID")
                             tooltip_parts.append(f"• {animal_id}: {reason}")
 
                     # Join with actual HTML line breaks

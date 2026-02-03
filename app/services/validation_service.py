@@ -23,8 +23,9 @@ class ValidationService:
         if not animal_data_list:
             return {'errors': errors, 'new_categories': new_categories}
 
-        # Create a map of field_name -> Analyte object for quick lookup
-        analyte_map = {a.name: a for a in animal_model.analytes}
+        # Create a map of field_name -> Analyte object for quick lookup (case-insensitive)
+        analyte_map = {a.name.lower(): a for a in animal_model.analytes}
+        analyte_map.update({a.name: a for a in animal_model.analytes}) # Keep original names too
 
         for index, row in enumerate(animal_data_list):
             row_idx = index + 1  # 1-based index for user-friendly error messages

@@ -1,5 +1,5 @@
 # app/services/datatable_service.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 from flask_babel import lazy_gettext as _l
 
@@ -148,14 +148,15 @@ class DataTableService(BaseService):
         animal_model_fields = set()
 
         for dt in datatables_to_process:
-            group_animal_data = dt.group.animal_data or []
             exp_rows_dict = {row.row_index: row.row_data for row in dt.experiment_rows.all()}
             
             if dt.group.model and dt.group.model.analytes:
                 animal_model_fields.update(a.name for a in dt.group.model.analytes)
 
-            for i, animal_info in enumerate(group_animal_data):
-                animal_id = animal_info.get('ID')
+            # Use animals relationship instead of animal_data
+            for i, animal in enumerate(sorted(dt.group.animals, key=lambda a: a.id)):
+                animal_info = animal.to_dict()
+                animal_id = animal_info.get('uid')
                 if not animal_id:
                     continue
 
@@ -185,19 +186,18 @@ class DataTableService(BaseService):
         long_df['measurement_label'] = long_df['analyte_name'] + '_' + long_df['protocol_name'] + '_' + long_df['datatable_date']
         
         all_animal_data_df = []
-        seen_animal_ids = set()
+        seen_animal_uids = set()
         for dt in datatables_to_process:
-            for animal_info in (dt.group.animal_data or []):
-                animal_id = animal_info.get('ID')
-                if animal_id and animal_id not in seen_animal_ids:
-                    all_animal_data_df.append(animal_info)
-                    seen_animal_ids.add(animal_id)
+            for animal in dt.group.animals:
+                if animal.uid not in seen_animal_uids:
+                    all_animal_data_df.append(animal.to_dict())
+                    seen_animal_uids.add(animal.uid)
         
         animal_df = pd.DataFrame(all_animal_data_df)
-        if 'ID' not in animal_df.columns:
-            return pd.DataFrame(), [_l("Could not find 'ID' column in animal data for merging.")], source_identifiers
+        if 'uid' not in animal_df.columns:
+            return pd.DataFrame(), [_l("Could not find 'uid' column in animal data for merging.")], source_identifiers
         
-        animal_df = animal_df.drop_duplicates(subset=['ID']).set_index('ID')
+        animal_df = animal_df.drop_duplicates(subset=['uid']).set_index('uid')
         
         pivoted_df = long_df.pivot_table(
             index='ID',
@@ -208,11 +208,11 @@ class DataTableService(BaseService):
         
         final_df = animal_df.join(pivoted_df, how='left')
         
-        animal_cols_ordered = sorted([col for col in final_df.columns if col in animal_model_fields and col != 'ID'])
+        animal_cols_ordered = sorted([col for col in final_df.columns if col in animal_model_fields and col != 'uid'])
         measurement_cols_ordered = sorted([col for col in final_df.columns if col not in animal_model_fields])
         final_column_order = animal_cols_ordered + measurement_cols_ordered
         
-        final_df = final_df[final_column_order].reset_index()
+        final_df = final_df[final_column_order].reset_index().rename(columns={'uid': 'ID'}) # Rename back for frontend
 
         return final_df, errors, source_identifiers
 
@@ -251,22 +251,22 @@ class DataTableService(BaseService):
         analyte_info = {a.id: {'id': a.id, 'name': a.name, 'type': a.data_type.value, 'unit': a.unit or ''} for a in analytes}
 
         # Get animal data
-        animal_data = group.animal_data or []
-        animal_ids = [animal.get('ID') for animal in animal_data if animal.get('ID')]
-        if not animal_ids:
+        animals = sorted(group.animals, key=lambda a: a.id)
+        animal_uids = [a.uid for a in animals]
+        if not animal_uids:
             return None, ["No animals found in group."], []
 
         # Structure: {animal_id: {analyte_name: [(date, value), ...]}}
-        concatenated_data = {aid: {} for aid in animal_ids}
+        concatenated_data = {uid: {} for uid in animal_uids}
 
         for dt in datatables:
             dt_date = dt.date
             # Get experiment rows
             exp_rows = {row.row_index: row.row_data for row in dt.experiment_rows.all()}
 
-            for idx, animal in enumerate(animal_data):
-                animal_id = animal.get('ID')
-                if not animal_id or idx not in exp_rows:
+            for idx, animal in enumerate(animals):
+                animal_id = animal.uid
+                if idx not in exp_rows:
                     continue
 
                 row_data = exp_rows[idx]
@@ -333,9 +333,11 @@ class DataTableService(BaseService):
                 current_data = exp_row.row_data.copy() if exp_row and exp_row.row_data else {}
                 
                 # Include Animal Data in context for calculations (like Body Weight)
-                if group and r_idx < len(group.animal_data):
-                    anim_row = group.animal_data[r_idx]
-                    current_data.update(anim_row)
+                # Use name-resilient lookup for ID
+                animal_uid = current_data.get('ID') or current_data.get('id') or current_data.get('uid')
+                animal = next((a for a in group.animals if a.uid == animal_uid), None)
+                if animal:
+                    current_data.update(animal.to_dict())
                 
                 # Merge updates (overwrites existing)
                 current_data.update(new_vals)
@@ -357,27 +359,50 @@ class DataTableService(BaseService):
                 
                 # B. Sync to Animal Table (V2 Logic)
                 # We sync updated values (including calculated ones!) if they belong to Animal Model
-                if group and r_idx < len(group.animal_data):
-                    animal_info = group.animal_data[r_idx]
-                    animal_id = animal_info.get('ID')
+                if animal_uid and animal_uid in animals_by_uid:
+                    animal = animals_by_uid[animal_uid]
+                    measurements = animal.measurements or {}
+                    modified = False
                     
-                    if animal_id and animal_id in animals_by_uid:
-                        animal = animals_by_uid[animal_id]
-                        measurements = animal.measurements or {}
-                        modified = False
+                    # Mapping of animal core fields for sync
+                    core_fields_map = {
+                        'sex': 'sex',
+                        'status': 'status',
+                        'date_of_birth': 'date_of_birth',
+                        'date of birth': 'date_of_birth'
+                    }
+
+                    # Sync values if they belong to Animal Model or are core fields
+                    for col, val in current_data.items():
+                        col_lower = col.lower()
                         
-                        # Sync any value in current_data that is an animal model field
-                        for col, val in current_data.items():
-                            if col in animal_model_fields:
-                                # Update if changed or new
-                                if measurements.get(col) != val:
-                                    measurements[col] = val
-                                    modified = True
+                        # 1. Update Core Fields
+                        if col_lower in core_fields_map:
+                            attr_name = core_fields_map[col_lower]
+                            # Special handling for dates
+                            if attr_name == 'date_of_birth' and isinstance(val, str):
+                                try:
+                                    val = datetime.strptime(val.split('T')[0], '%Y-%m-%d').date()
+                                except (ValueError, TypeError):
+                                    pass
+                            
+                            if getattr(animal, attr_name) != val:
+                                setattr(animal, attr_name, val)
+                                modified = True
                         
-                        if modified:
-                            animal.measurements = measurements
-                            from sqlalchemy.orm.attributes import flag_modified
-                            flag_modified(animal, "measurements")
+                        # 2. Update Measurements
+                        elif col in animal_model_fields or col_lower in {a.lower() for a in animal_model_fields}:
+                            # Find the actual case sensitive name in animal_model_fields if it was a case-insensitive match
+                            actual_col = next((a for a in animal_model_fields if a.lower() == col_lower), col)
+                            if measurements.get(actual_col) != val:
+                                measurements[actual_col] = val
+                                modified = True
+                    
+                    if modified:
+                        animal.measurements = measurements
+                        animal.updated_at = datetime.now(timezone.utc)
+                        from sqlalchemy.orm.attributes import flag_modified
+                        flag_modified(animal, "measurements")
             
             db.session.commit()
         except Exception as e:
@@ -397,8 +422,8 @@ class DataTableService(BaseService):
         group = data_table.group
         # Map Animal IDs to Row Indices
         animal_id_to_row_index = {}
-        for i, animal in enumerate(group.animal_data or []):
-            animal_id = animal.get('ID')
+        for i, animal in enumerate(sorted(group.animals, key=lambda a: a.id)):
+            animal_id = animal.uid
             if animal_id is not None:
                 animal_id_to_row_index[str(animal_id).strip()] = i
         

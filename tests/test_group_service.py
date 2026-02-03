@@ -49,9 +49,8 @@ def test_create_group_refactored(db_session, init_database):
     assert a1.measurements.get('Weight') == 20.5
     assert a1.measurements.get('Comment') == 'Healthy'
     
-    # Assertions: Backward Compatibility (animal_data property)
-    # The property should merge static fields + measurements
-    output_data = group.animal_data
+    # Assertions: Serialization Check
+    output_data = [a.to_dict() for a in sorted(group.animals, key=lambda x: x.id)]
     assert len(output_data) == 2
     assert output_data[0]['ID'] == 'A1'
     assert output_data[0]['Weight'] == 20.5
@@ -79,7 +78,8 @@ def test_save_group_data_updates_animals(db_session, init_database):
     service.save_group_data(group, updated_data)
     
     # Assertions: Verify Update in DB
-    db.session.refresh(animal)
+    # Re-query instead of refresh because bulk update might have invalidated the session object
+    animal = Animal.query.filter_by(group_id=group.id, uid='B1').first()
     assert animal.measurements['Val'] == 99
     assert animal.measurements['NewField'] == 'Added'
 

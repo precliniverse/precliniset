@@ -171,13 +171,10 @@ def edit_workplan(workplan_id):
     alive_animals_in_group = 0
     group_datatable_count = 0
     if workplan.generated_group:
-        if workplan.generated_group.animal_data:
-            total_animals_in_group = len(workplan.generated_group.animal_data)
-            # Count alive animals
-            alive_animals_in_group = sum(
-                1 for animal in workplan.generated_group.animal_data
-                if isinstance(animal, dict) and animal.get('status') != 'dead'
-            )
+        animals = workplan.generated_group.animals
+        total_animals_in_group = len(animals)
+        # Count alive animals
+        alive_animals_in_group = sum(1 for a in animals if a.status != 'dead')
         group_datatable_count = workplan.generated_group.data_tables.count()
 
     return render_template(

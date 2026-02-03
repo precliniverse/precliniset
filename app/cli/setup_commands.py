@@ -188,15 +188,15 @@ def _populate_static_resources():
     print("5. Populating Static Resources (Analytes, Organs)...")
 
     analytes = [
-        {'name': 'ID', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True, 'is_mandatory': True},
-        {'name': 'Date of Birth', 'data_type': AnalyteDataType.DATE, 'is_metadata': True, 'is_mandatory': True},
-        {'name': 'Sex', 'data_type': AnalyteDataType.CATEGORY, 'allowed_values': 'Male;Female', 'is_metadata': True, 'is_mandatory': True},
-        {'name': 'Body Weight', 'data_type': AnalyteDataType.FLOAT, 'unit': 'g'},
-        {'name': 'Tumor Volume', 'data_type': AnalyteDataType.FLOAT, 'unit': 'mm3'},
-        {'name': 'Genotype', 'data_type': AnalyteDataType.CATEGORY, 'allowed_values': 'WT;KO;Het', 'is_metadata': True},
-        {'name': 'Cage', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True},
-        {'name': 'Treatment Group', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True},
-        {'name': 'Blinded Group', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True, 'is_sensitive': True},
+        {'name': 'id', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True, 'is_mandatory': True},
+        {'name': 'date_of_birth', 'data_type': AnalyteDataType.DATE, 'is_metadata': True, 'is_mandatory': True},
+        {'name': 'sex', 'data_type': AnalyteDataType.CATEGORY, 'allowed_values': 'Male;Female', 'is_metadata': True, 'is_mandatory': True},
+        {'name': 'weight', 'data_type': AnalyteDataType.FLOAT, 'unit': 'g'},
+        {'name': 'tumor volume', 'data_type': AnalyteDataType.FLOAT, 'unit': 'mm3'},
+        {'name': 'genotype', 'data_type': AnalyteDataType.CATEGORY, 'allowed_values': 'WT;KO;Het', 'is_metadata': True},
+        {'name': 'cage', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True},
+        {'name': 'treatment group', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True},
+        {'name': 'blinded group', 'data_type': AnalyteDataType.TEXT, 'is_metadata': True, 'is_sensitive': True},
         {'name': 'Rotarod Latency (Trial 1)', 'data_type': AnalyteDataType.FLOAT, 'unit': 's'},
         {'name': 'Rotarod Latency (Trial 2)', 'data_type': AnalyteDataType.FLOAT, 'unit': 's'},
         {'name': 'Rotarod Latency (Trial 3)', 'data_type': AnalyteDataType.FLOAT, 'unit': 's'},
@@ -452,11 +452,11 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
     group_service = GroupService()
 
     # Scientific Models
-    a_id = get_or_create_analyte('ID', AnalyteDataType.TEXT, is_meta=True)
-    a_dob = get_or_create_analyte('Date of Birth', AnalyteDataType.DATE, is_meta=True)
-    a_sex = get_or_create_analyte('Sex', AnalyteDataType.CATEGORY, allowed='Male;Female', is_meta=True)
-    a_geno = get_or_create_analyte('Genotype', AnalyteDataType.CATEGORY, allowed='WT;KO;Tg', is_meta=True)
-    a_treat = get_or_create_analyte('Treatment', AnalyteDataType.CATEGORY, allowed='Vehicle;Drug A;Drug B', is_meta=True)
+    a_id = get_or_create_analyte('id', AnalyteDataType.TEXT, is_meta=True)
+    a_dob = get_or_create_analyte('date_of_birth', AnalyteDataType.DATE, is_meta=True)
+    a_sex = get_or_create_analyte('sex', AnalyteDataType.CATEGORY, allowed='Male;Female', is_meta=True)
+    a_geno = get_or_create_analyte('genotype', AnalyteDataType.CATEGORY, allowed='WT;KO;Tg', is_meta=True)
+    a_treat = get_or_create_analyte('treatment', AnalyteDataType.CATEGORY, allowed='Vehicle;Drug A;Drug B', is_meta=True)
 
     gtt_analytes = [get_or_create_analyte(f'Glucose T{t}', AnalyteDataType.FLOAT, unit='mg/dL') for t in [0, 15, 30, 60, 90, 120]]
     rot_analytes = [get_or_create_analyte(f'Rotarod Trial {t}', AnalyteDataType.FLOAT, unit='s') for t in [1, 2, 3]]
@@ -536,10 +536,10 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                     for geno in ['WT', 'KO']:
                         for _ in range(animals):
                               animal_data.append({
-                                  "ID": f"{proj.slug}-G{g_idx}-{counter}",
-                                  "Date of Birth": (date.today()-timedelta(weeks=12)).isoformat(),
-                                  "Sex": sex, "Genotype": geno, "Treatment": "Vehicle",
-                                  "Cage": f"C{math.ceil(counter/5)}", "status": "alive"
+                                  "id": f"{proj.slug}-G{g_idx}-{counter}",
+                                  "date_of_birth": (date.today()-timedelta(weeks=12)).isoformat(),
+                                  "sex": sex, "genotype": geno, "treatment": "Vehicle",
+                                  "cage": f"C{math.ceil(counter/5)}", "status": "alive"
                               })
                               counter += 1
 
@@ -589,7 +589,7 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                         for r_idx, anim in enumerate(animal_data):
                             # Add some variation for repetitions to simulate learning effects or biological variation
                             age_weeks = 12 + w_offset + (rep * repetition_interval)
-                            vals = generate_realistic_data(p_name, anim['Sex'], anim['Genotype'], "Vehicle", age_weeks)
+                            vals = generate_realistic_data(p_name, anim['sex'], anim['genotype'], "Vehicle", age_weeks)
 
                             # For rotarod, add learning effect across repetitions
                             if p_name == "Accelerating Rotarod" and rep > 0:
@@ -607,7 +607,7 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                                     if 'Glucose' in key and isinstance(vals[key], (int, float)):
                                         vals[key] = max(vals[key] * adaptation_factor, vals[key] - 20)  # Cap the improvement
 
-                            vals['ID'] = anim['ID']
+                            vals['id'] = anim['id']
                             db.session.add(ExperimentDataRow(data_table_id=dt.id, row_index=r_idx, row_data=vals))
 
     db.session.commit()

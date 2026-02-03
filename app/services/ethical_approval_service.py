@@ -118,17 +118,15 @@ def calculate_animals_used_for_ea(ethical_approval_id: int) -> int:
     """
     Calculates the total number of animals used across all experimental groups
     linked to a specific ethical approval.
-    Assumes animal_data in ExperimentalGroup is a JSON list, where each item represents an animal.
+    Uses a direct SQL COUNT on the Animal table for performance.
     """
-    total_animals_used = 0
-    # Use db.session.get for modern SQLAlchemy, and remove joinedload for dynamic relationship
-    ea = db.session.get(EthicalApproval, ethical_approval_id)
-    if ea:
-        # The 'experimental_groups' relationship is dynamic, so it acts like a query
-        for group in ea.experimental_groups:
-            if group.animal_data and isinstance(group.animal_data, list):
-                total_animals_used += len(group.animal_data)
-    return total_animals_used
+    from sqlalchemy import func
+    from app.models.animal import Animal
+    
+    return db.session.query(func.count(Animal.id))\
+        .join(ExperimentalGroup)\
+        .filter(ExperimentalGroup.ethical_approval_id == ethical_approval_id)\
+        .scalar() or 0
 
 
 def get_animals_available_for_ea(ethical_approval: EthicalApproval) -> int:

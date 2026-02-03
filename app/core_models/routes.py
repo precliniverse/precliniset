@@ -693,7 +693,7 @@ def download_protocol_data(id):
             group_name = group.name if group else "N/A"
             dt_date_str = data_table.date.strftime('%Y-%m-%d') if hasattr(data_table.date, 'strftime') else str(data_table.date)
             
-            group_animal_data_list = group.animal_data if group else []
+            group_animal_data_list = [a.to_dict() for a in group.animals] if group else []
             experiment_rows_for_dt = {row.row_index: row.row_data for row in data_table.experiment_rows.all()}
 
             for i in range(len(group_animal_data_list)):

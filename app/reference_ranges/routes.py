@@ -176,16 +176,18 @@ def create_edit_reference_range(range_id=None):
     if ref_range and ref_range.included_animals:
         for group_id, animal_indices in ref_range.included_animals.items():
             group = db.session.get(ExperimentalGroup, group_id)
-            if group and group.animal_data:
+            # Get animals sorted by ID to maintain index compatibility
+            animals = sorted(group.animals, key=lambda a: a.id)
+            if animals:
                 for index in animal_indices:
-                    if 0 <= index < len(group.animal_data):
-                        animal = group.animal_data[index]
+                    if 0 <= index < len(animals):
+                        animal = animals[index].to_dict()
                         animal_info = {
                             'group_id': group.id,
                             'group_name': group.name,
                             'project_name': group.project.name,
                             'animal_index': index,
-                            'animal_id': animal.get('ID', f"Index {index}")
+                            'animal_id': animal.get('uid') or animal.get('ID', f"Index {index}")
                         }
                         # Merge all other animal parameters
                         animal_info.update(animal)
@@ -272,21 +274,19 @@ def download_reference_range_data(range_id):
         experiment_row_map[er.data_table_id][er.row_index] = er
 
     for group_id_str, animal_indices in ref_range.included_animals.items():
-        group = group_map.get(group_id_str)
-        if not group or not group.animal_data:
+        # Get animals sorted by ID to maintain index compatibility
+        animals = sorted(group.animals, key=lambda a: a.id)
+        if not group or not animals:
             continue
 
         for animal_idx in animal_indices:
-            if not (0 <= animal_idx < len(group.animal_data)):
-                continue
-
-            animal_info = group.animal_data[animal_idx]
+            animal_info = animals[animal_idx].to_dict()
             
             # Base row with animal and group/project info
             base_row = {
                 'Reference Range Name': ref_range.name,
                 'Reference Range Description': ref_range.description,
-                'Animal ID': animal_info.get('ID', f'Index {animal_idx}'),
+                'Animal ID': animal_info.get('uid') or animal_info.get('ID', f'Index {animal_idx}'),
                 'Group Name': group.name,
                 'Project Name': group.project.name if group.project else 'N/A',
                 'Animal Model': group.model.name if group.model else 'N/A',
@@ -422,11 +422,12 @@ def get_reference_search_filters():
 
     animal_field_names = [field.name for field in animal_model.analytes]
     for group in groups:
-        if group.animal_data and isinstance(group.animal_data, list):
-            for animal in group.animal_data:
-                for key, value in animal.items():
-                    if key in animal_field_names and value is not None and str(value).strip() != '':
-                        parameters[key].add(str(value))
+        animals = sorted(group.animals, key=lambda a: a.id)
+        for animal_obj in animals:
+            animal = animal_obj.to_dict()
+            for key, value in animal.items():
+                if key in animal_field_names and value is not None and str(value).strip() != '':
+                    parameters[key].add(str(value))
 
     parameters_sorted = {k: sorted(list(v)) for k, v in parameters.items()}
     return jsonify({'parameters': parameters_sorted})
@@ -461,10 +462,9 @@ def search_animals_for_reference():
     dynamic_columns = set()
 
     for group in groups:
-        if not group.animal_data or not isinstance(group.animal_data, list):
-            continue
-            
-        for i, animal in enumerate(group.animal_data):
+        animals = sorted(group.animals, key=lambda a: a.id)
+        for i, animal_obj in enumerate(animals):
+            animal = animal_obj.to_dict()
             match = all(str(animal.get(key)) == value for key, value in filters.items() if value)
             
             if match:
@@ -473,7 +473,7 @@ def search_animals_for_reference():
                     'group_name': group.name,
                     'project_name': group.project.name,
                     'animal_index': i,
-                    'Animal ID': animal.get('ID', f"Index {i}")
+                    'Animal ID': animal.get('uid') or animal.get('ID', f"Index {i}")
                 }
                 
                 # Add dynamic parameters and collect column names
@@ -644,8 +644,9 @@ def reference_range_data(range_id):
                                     
                                     # Get animal ID if available
                                     animal_id = 'Unknown'
-                                    if group.animal_data and er.row_index < len(group.animal_data):
-                                        animal_id = group.animal_data[er.row_index].get('ID', f'Index {er.row_index}')
+                                    animals = sorted(group.animals, key=lambda a: a.id)
+                                    if animals and er.row_index < len(animals):
+                                        animal_id = animals[er.row_index].uid or f"Index {er.row_index}"
                                     
                                     if dt.date:
                                         timeline_data.append({'date': dt.date, 'value': val})

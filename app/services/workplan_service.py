@@ -160,8 +160,7 @@ class WorkplanService(BaseService):
                 ethical_approval_id=ea.id,
                 created_from_workplan_id=workplan.id,
                 owner_id=user.id,
-                team_id=workplan.project.team_id,
-                animal_data=[]
+                team_id=workplan.project.team_id
             )
             db.session.add(target_group)
             

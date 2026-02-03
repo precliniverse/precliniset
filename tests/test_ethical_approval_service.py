@@ -111,11 +111,24 @@ def test_setup_data(test_app):
         db.session.commit()
 
         # Create Groups
-        g1 = ExperimentalGroup(name='Group 1', project_id=project1.id, team_id=team1.id, owner_id=user1.id, model_id=am.id, ethical_approval_id=ea1.id, animal_data=[{'ID': 'A1', 'status': 'alive'}, {'ID': 'A2', 'status': 'alive'}]) # 2 animals
-        g2 = ExperimentalGroup(name='Group 2', project_id=project1.id, team_id=team1.id, owner_id=user1.id, model_id=am.id, ethical_approval_id=ea3.id, animal_data=[{'ID': 'B1', 'status': 'alive'}, {'ID': 'B2', 'status': 'alive'}, {'ID': 'B3', 'status': 'alive'}]) # 3 animals
-        g3 = ExperimentalGroup(name='Group 3', project_id=project2.id, team_id=team2.id, owner_id=user2.id, model_id=am.id, ethical_approval_id=ea2.id, animal_data=[{'ID': 'C1', 'status': 'alive'}]) # 1 animal
-        g4 = ExperimentalGroup(name='Group 4', project_id=project2.id, team_id=team2.id, owner_id=user2.id, model_id=am.id, ethical_approval_id=ea3.id, animal_data=[{'ID': 'D1', 'status': 'alive'}, {'ID': 'D2', 'status': 'alive'}]) # 2 animals (team2 group linked to ea3)
+        g1 = ExperimentalGroup(name='Group 1', project_id=project1.id, team_id=team1.id, owner_id=user1.id, model_id=am.id, ethical_approval_id=ea1.id) # 2 animals
+        g2 = ExperimentalGroup(name='Group 2', project_id=project1.id, team_id=team1.id, owner_id=user1.id, model_id=am.id, ethical_approval_id=ea3.id) # 3 animals
+        g3 = ExperimentalGroup(name='Group 3', project_id=project2.id, team_id=team2.id, owner_id=user2.id, model_id=am.id, ethical_approval_id=ea2.id) # 1 animal
+        g4 = ExperimentalGroup(name='Group 4', project_id=project2.id, team_id=team2.id, owner_id=user2.id, model_id=am.id, ethical_approval_id=ea3.id) # 2 animals (team2 group linked to ea3)
         db.session.add_all([g1, g2, g3, g4])
+        db.session.commit()
+
+        # Add Animals
+        db.session.add_all([
+            Animal(uid='A1', group_id=g1.id, status='alive'),
+            Animal(uid='A2', group_id=g1.id, status='alive'),
+            Animal(uid='B1', group_id=g2.id, status='alive'),
+            Animal(uid='B2', group_id=g2.id, status='alive'),
+            Animal(uid='B3', group_id=g2.id, status='alive'),
+            Animal(uid='C1', group_id=g3.id, status='alive'),
+            Animal(uid='D1', group_id=g4.id, status='alive'),
+            Animal(uid='D2', group_id=g4.id, status='alive')
+        ])
         db.session.commit()
 
         # Create Protocols for severity tests

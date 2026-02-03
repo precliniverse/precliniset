@@ -102,7 +102,7 @@
                 </td>
                 <td>{{ group.project.name if group.project else _('N/A') }}</td>
                 <td>{{ group.model.name if group.model else _('N/A') }}</td>
-                <td class="text-center">{{ group.animal_data|length if group.animal_data else 0 }}</td>
+                <td class="text-center">{{ group.animals|length }}</td>
                 <td>
                     {% if group.is_archived %}
                     <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>

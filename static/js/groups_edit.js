@@ -473,7 +473,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function calculateRowAge(row) {
-        const dobInput = row.querySelector('input[name*="_field_Date of Birth"]');
+        // Find Date of Birth input: match exactly or via Case/Underscore variations
+        const dobInput = row.querySelector('input[name*="_field_Date of Birth"]') || 
+                         row.querySelector('input[name*="_field_date_of_birth"]');
         const ageDisplay = row.querySelector('.age-display');
         if (!dobInput || !ageDisplay) return;
 

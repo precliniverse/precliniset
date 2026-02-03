@@ -121,11 +121,14 @@ def log_batch_samples_for_group(group_id):
 
     storage_locations = Storage.query.filter_by(team_id=group.team_id).order_by(Storage.name).all()
     storage_locations_json = [{'id': s.id, 'text': f"{s.name} ({s.location_details or _l('No details')})"} for s in storage_locations]
-    
+
     organ_choices_json = [(o.id, o.name) for o in Organ.query.order_by(Organ.name).all()]
     tissue_condition_choices_json = [(c.id, c.name) for c in TissueCondition.query.order_by(TissueCondition.name).all()]
     sample_type_enum_json = {k: v.value for k, v in SampleType.__members__.items()}
     anticoagulant_choices_json = [(a.id, a.name) for a in Anticoagulant.query.order_by(Anticoagulant.name).all()]
+
+    # Prepare animals dataset for JSON serialization in template
+    animals_dataset = [a.to_dict() for a in group.animals] if group else []
 
     return render_template(
         'sampling/log_batch_samples.html',
@@ -138,6 +141,7 @@ def log_batch_samples_for_group(group_id):
         tissue_condition_choices_json=json.dumps(tissue_condition_choices_json),
         sample_type_enum_json=json.dumps(sample_type_enum_json),
         anticoagulant_choices_json=json.dumps(anticoagulant_choices_json),
+        animals_dataset=animals_dataset,
         today_date=date.today().isoformat()
     )
 
@@ -161,8 +165,10 @@ def get_available_animals(group_id):
         return jsonify({'success': False, 'message': 'Invalid date format. Use YYYY-MM-DD.'}), 400
 
     available_animals = []
-    if group.animal_data:
-        for idx, animal_info in enumerate(group.animal_data):
+    animals = sorted(group.animals, key=lambda a: a.id)
+    if animals:
+        for idx, animal_obj in enumerate(animals):
+            animal_info = animal_obj.to_dict()
             death_date_str = animal_info.get('death_date')
             if death_date_str:
                 try:
@@ -179,9 +185,8 @@ def get_available_animals(group_id):
 
             for field_name in animal_model_field_names:
                 animal_display_info[field_name] = animal_info.get(field_name, _l('N/A'))
-            if 'ID' not in animal_display_info:
-                 animal_display_info['ID'] = animal_info.get('ID', f"Index {idx}")
-
+            
+            animal_display_info['ID'] = animal_obj.uid or f"Index {idx}"
             available_animals.append(animal_display_info)
 
     return jsonify({'success': True, 'animals': available_animals})
@@ -341,11 +346,10 @@ def samples_server_side():
     data = []
     for s in samples:
         animal_id_display = "N/A"
-        if s.experimental_group and s.experimental_group.animal_data:
-            try:
-                animal_info = s.experimental_group.animal_data[s.animal_index_in_group]
-                animal_id_display = animal_info.get('ID', f"Index {s.animal_index_in_group}")
-            except (IndexError, TypeError): pass
+        if s.experimental_group:
+            animals = sorted(s.experimental_group.animals, key=lambda a: a.id)
+            if 0 <= s.animal_index_in_group < len(animals):
+                animal_id_display = animals[s.animal_index_in_group].uid or f"Index {s.animal_index_in_group}"
 
         edit_url = url_for('sampling.view_edit_sample', sample_id=s.id)
         actions_html = f'<a href="{edit_url}" class="btn btn-sm btn-primary" title="{_("Edit")}"><i class="fas fa-edit"></i></a>'
@@ -549,8 +553,9 @@ def view_edit_sample(sample_id):
             form.other_description.data = sample.notes
 
     animal_id_display = "N/A"
-    if group.animal_data and 0 <= sample.animal_index_in_group < len(group.animal_data):
-        animal_id_display = group.animal_data[sample.animal_index_in_group].get('ID', f"Index {sample.animal_index_in_group}")
+    animals = sorted(group.animals, key=lambda a: a.id)
+    if 0 <= sample.animal_index_in_group < len(animals):
+        animal_id_display = animals[sample.animal_index_in_group].uid or f"Index {sample.animal_index_in_group}"
 
     derived_samples = sample.derived_samples.order_by(Sample.collection_date.desc()).all()
 

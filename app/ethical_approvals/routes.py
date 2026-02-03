@@ -22,7 +22,7 @@ from app.services.ethical_approval_service import (
 from .. import db
 from ..forms import EthicalApprovalForm, XMLImportForm
 from ..models import user_has_permission
-from ..models import (DataTable, EthicalApproval,
+from ..models import (Analyte, Animal, DataTable, EthicalApproval,
                       EthicalApprovalProcedure, ExperimentalGroup,
                       ExperimentDataRow, Project, ProtocolModel, Severity,
                       Team)
@@ -143,17 +143,20 @@ def get_animals_usage_counts():
             return jsonify({})
 
         # 1. Animals Linked (Reserved)
-        # OPTIMIZATION: Fetch ONLY ethical_approval_id and animal_data column. 
-        # Avoids hydrating full ExperimentalGroup objects which is slow.
+        # Use SQL count of Animals instead of parsing JSON animal_data
+        from app.models import Animal
         groups_data = db.session.query(
             ExperimentalGroup.ethical_approval_id, 
-            ExperimentalGroup.animal_data
-        ).filter(ExperimentalGroup.ethical_approval_id.in_(ea_ids)).all()
+            func.count(Animal.id)
+        ).join(Animal, ExperimentalGroup.id == Animal.group_id)\
+         .filter(ExperimentalGroup.ethical_approval_id.in_(ea_ids))\
+         .group_by(ExperimentalGroup.ethical_approval_id).all()
         
-        linked_counts = {ea_id: 0 for ea_id in ea_ids}
-        for ea_id, animal_data in groups_data:
-            if animal_data and isinstance(animal_data, list):
-                linked_counts[ea_id] += len(animal_data)
+        linked_counts = {ea_id: count for ea_id, count in groups_data}
+        # Initialize missing EAs with 0
+        for ea_id in ea_ids:
+            if ea_id not in linked_counts:
+                linked_counts[ea_id] = 0
 
         # 2. Animals Used (Effective)
         # OPTIMIZATION: Filter first, then join. 
@@ -513,8 +516,8 @@ def delete_ethical_approval(ea_id):
                 flash(_l("Target Ethical Approval for reassignment not found."), "danger")
                 return redirect(url_for('ethical_approvals.list_ethical_approvals'))
 
-            animals_to_reassign_count = sum(len(group.animal_data) for group in linked_groups if group.animal_data and isinstance(group.animal_data, list))
-            current_animals_in_target_ea = sum(len(group.animal_data) for group in target_ea.experimental_groups if group.animal_data and isinstance(group.animal_data, list))
+            animals_to_reassign_count = sum(len(group.animals) for group in linked_groups)
+            current_animals_in_target_ea = sum(len(group.animals) for group in target_ea.experimental_groups)
 
             if (current_animals_in_target_ea + animals_to_reassign_count) > target_ea.number_of_animals:
                 flash(_l("Reassignment Failed: The target EA '%(target_ref)s' (Max Animals: %(max_animals)s) does not have enough capacity for the %(reassign_animals)s animals being reassigned (Current Animals: %(current_animals)s).",
@@ -714,7 +717,7 @@ def list_datatables_for_ethical_approval(ethical_approval_id):
     accessible_datatables = [dt for dt in all_related_datatables if check_datatable_permission(dt, 'read')]
     
     for dt in accessible_datatables:
-        dt.animal_count = len(dt.group.animal_data) if dt.group and dt.group.animal_data else 0
+        dt.animal_count = len(dt.group.animals) if dt.group else 0
 
     return render_template('ethical_approvals/list_datatables_for_approval.html',
                            approval=approval,
@@ -813,8 +816,8 @@ def export_statistics():
 
                 if group and ea:
                     valid_animals = set()
-                    if group.animal_data and isinstance(group.animal_data, list):
-                        group_size = len(group.animal_data)
+                    if group.animals:
+                        group_size = len(group.animals)
                         for animal_index in data['animals']:
                             if animal_index < group_size:
                                 valid_animals.add(animal_index)
@@ -888,15 +891,17 @@ def export_animals_for_ethical_approval(ethical_approval_id):
 
     export_data = []
     for group in linked_groups:
-        if not group.animal_data:
+        if not group.animals:
             continue
-        for animal in group.animal_data:
+        # Sort animals by ID to maintain consistency
+        for animal_obj in sorted(group.animals, key=lambda a: a.id):
+            animal = animal_obj.to_dict()
             if not isinstance(animal, dict):
                 continue
 
             # Calculate age at death
             age_at_death = None
-            birth_date_str = animal.get('Date of Birth')
+            birth_date_str = animal.get('Date of Birth') or animal.get('date_of_birth')
             death_date_str = animal.get('death_date')
             if birth_date_str and death_date_str:
                 try:
@@ -908,9 +913,9 @@ def export_animals_for_ethical_approval(ethical_approval_id):
 
             row = {
                 'Group Name': group.name,
-                'Animal ID': animal.get('ID', ''),
+                'Animal ID': animal.get('ID', '') or animal.get('uid', ''),
                 'Status': animal.get('status', 'alive'),
-                'Date of Birth': animal.get('Date of Birth', ''),
+                'Date of Birth': animal.get('Date of Birth') or animal.get('date_of_birth', ''),
                 'Death Date': animal.get('death_date', ''),
                 'Age at Death (Days)': age_at_death,
                 'Euthanasia Reason': animal.get('euthanasia_reason', ''),

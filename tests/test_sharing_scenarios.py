@@ -56,7 +56,7 @@ def test_team_member_default_access(team1_member_client, init_database):
     )
     # App returns 200 with error flash for validation/permission errors on forms
     assert response.status_code == 200 
-    assert b"You do not have permission to create groups in this project" in response.data
+    assert b"Project not found or permission denied." in response.data
 
 def test_shared_project_as_viewer(team2_admin_client, db_session, init_database):
     """
@@ -94,7 +94,7 @@ def test_shared_project_as_viewer(team2_admin_client, db_session, init_database)
         follow_redirects=True
     )
     assert response.status_code == 200
-    assert b"You do not have permission to create groups in this project" in response.data
+    assert b"Project not found or permission denied." in response.data
 
 def test_shared_project_as_collaborator(team2_admin_client, db_session, init_database):
     """
@@ -127,7 +127,7 @@ def test_shared_project_as_collaborator(team2_admin_client, db_session, init_dat
         follow_redirects=True
     )
     assert response.status_code == 200
-    assert b'Group details and animal data saved successfully' in response.data
+    assert b'Group saved successfully' in response.data
 
     # Team 2 admin can access Group 1's page in edit mode
     response = team2_admin_client.get(f'/groups/edit/{group1.id}')

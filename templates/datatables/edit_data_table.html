@@ -830,7 +830,7 @@
         "hideMetadata": "{{ _('Hide Metadata') }}",
         "confirmDelete": "{{ _('Are you sure you want to delete this file?') }}"
     },
-    "animalData": {{ data_table.group.animal_data | tojson | safe if data_table.group.animal_data else '[]' }}
+    "animalData": {{ animals_dataset | tojson | safe }}
 }
 </script>
 

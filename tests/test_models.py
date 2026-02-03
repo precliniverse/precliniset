@@ -1,7 +1,7 @@
 # tests/test_models.py
 from datetime import datetime
 
-from app.models import (Analyte, AnalyteDataType, AnimalModel, Anticoagulant,
+from app.models import (Analyte, AnalyteDataType, Animal, AnimalModel, Anticoagulant,
                         APIToken, Attachment, DataTable, DataTableFile,
                         DerivedSampleType, EthicalApproval,
                         EthicalApprovalProcedure, ExperimentalGroup,
@@ -665,9 +665,14 @@ def test_sample_model(db_session):
     
     group = ExperimentalGroup(
         id='sample_group_001', name='Sample Group', project_id=project.id,
-        model_id=animal_model.id, owner_id=1, team_id=team.id,
-        animal_data=[{'ID': 'Animal001'}]
+        model_id=animal_model.id, owner_id=1, team_id=team.id
     )
+    db_session.add(group)
+    db_session.commit()
+    
+    animal = Animal(uid='Animal001', group_id=group.id, status='alive')
+    db_session.add(animal)
+    db_session.commit()
     anticoagulant = Anticoagulant(name='Heparin')
     organ = Organ(name='Kidney')
     derived_type = DerivedSampleType(name='Serum', parent_type=SampleType.BLOOD)

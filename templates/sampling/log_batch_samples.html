@@ -36,7 +36,7 @@
         <a href="{{ url_for('sampling.list_group_samples', group_id=group.id) }}" class="btn btn-info btn-sm"><i class="fas fa-list-ul"></i> {{ _('View Logged Samples') }}</a>
     </div>
 
-    {% if not group.animal_data %}
+    {% if not group.animals %}
         <div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> {{ _('No animals found in this group to log samples for.') }}</div>
     {% else %}
         <form id="logBatchSamplesForm">
@@ -196,7 +196,7 @@
     "sampleTypes": {{ sample_type_enum_json | safe }},
     "anticoagulants": {{ anticoagulant_choices_json | safe }},
     "animalModelFields": {{ animal_model_field_names | tojson | safe }},
-    "allAnimalData": {{ group.animal_data | tojson | safe }},
+    "allAnimalData": {{ animals_dataset | tojson | safe }},
     "csrfToken": "{{ csrf_token() }}",
     "urls": {
         "getAvailableAnimals": "{{ url_for('sampling.get_available_animals', group_id=group.id) }}",

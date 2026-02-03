@@ -226,7 +226,8 @@ def create_data_table(project_id=None):
             db.session.add(data_table)
             db.session.flush() 
 
-            if group.animal_data:
+            animals = sorted(group.animals, key=lambda a: a.id)
+            if animals:
                 ordered_cols_for_new_dt = get_ordered_column_names(data_table)
 
                 protocol_defaults = {}
@@ -248,12 +249,12 @@ def create_data_table(project_id=None):
                     elif col_name in animal_model_defaults:
                         combined_defaults_ordered[col_name] = animal_model_defaults[col_name]
 
-                for i in range(len(group.animal_data)):
+                for i, animal in enumerate(animals):
                     animal_info_ordered = {}
-                    current_animal_data = group.animal_data[i].copy() if i < len(group.animal_data) else {}
+                    current_animal_dict = animal.to_dict()
                     for col_name in ordered_cols_for_new_dt:
-                        if col_name in current_animal_data:
-                            animal_info_ordered[col_name] = current_animal_data[col_name]
+                        if col_name in current_animal_dict:
+                            animal_info_ordered[col_name] = current_animal_dict[col_name]
 
                     row_data = {**combined_defaults_ordered, **animal_info_ordered}
                     exp_row = ExperimentDataRow(data_table_id=data_table.id, row_index=i, row_data=row_data)
@@ -310,11 +311,13 @@ def create_data_table(project_id=None):
             has_permission = perms.get('can_view_datatables', False)
             
         if has_permission:
-            total_animals = len(dt.group.animal_data) if dt.group.animal_data else 0
-            animals_alive = sum(1 for animal in dt.group.animal_data if isinstance(animal, dict) and animal.get('status') != 'dead') if dt.group.animal_data else 0
-            dt.total_animals = total_animals
-            dt.animals_alive = animals_alive
-            processed_data_tables.append(dt)
+            if dt.group:
+                animals = sorted(dt.group.animals, key=lambda a: a.id)
+                total_animals = len(animals)
+                animals_alive = sum(1 for animal in animals if animal.status != 'dead')
+                dt.total_animals = total_animals
+                dt.animals_alive = animals_alive
+                processed_data_tables.append(dt)
             
     # Fetch all protocols for the filter dropdown
     all_protocols = ProtocolModel.query.order_by(ProtocolModel.name).all()
@@ -376,7 +379,8 @@ def edit_data_table(id):
         sorted_users = sorted(assignable_users.values(), key=lambda u: u.email)
         assignee_and_housing_form.assigned_to_id.choices = [('', lazy_gettext('Unassigned'))] + [(u.id, u.email) for u in sorted_users]
     
-    group_animal_data = data_table.group.animal_data or []
+    animals = sorted(data_table.group.animals, key=lambda a: a.id)
+    group_animal_data = [a.to_dict() for a in animals]
     
     column_names = get_ordered_column_names(data_table)
     field_types = get_field_types(data_table)
@@ -405,7 +409,7 @@ def edit_data_table(id):
     date_fields = [a.name for a in protocol_analytes_ordered if a.data_type.value == 'date'] if protocol_analytes_ordered else []
 
     metadata_fields = set()
-    EXCLUDED_METADATA_FIELDS = {'ID', 'Date of Birth', 'Age (Days)'} 
+    EXCLUDED_METADATA_FIELDS = {'ID', 'id', 'Date of Birth', 'date_of_birth', 'Age (Days)'} 
 
     if animal_model_analytes_ordered:
         for analyte in animal_model_analytes_ordered:
@@ -429,15 +433,27 @@ def edit_data_table(id):
         rows = []
         for i in range(len(current_group_data)):
             merged = current_group_data[i].copy() if i < len(current_group_data) else {}
+            # Update with saved experiment row data
             merged.update(current_rows_dict.get(i, {}))
-            age_in_days = None; date_of_birth_str = merged.get('Date of Birth') 
+            
+            age_in_days = None
+            date_of_birth_str = merged.get('Date of Birth') or merged.get('date_of_birth')
             if date_of_birth_str and data_table.date:
                 try:
                     dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date(); dt_date = datetime.strptime(data_table.date, '%Y-%m-%d').date()
                     delta = dt_date - dob; age_in_days = delta.days
                 except (ValueError, TypeError) as e: current_app.logger.warning(f"Could not calculate age for animal index {i} in datatable {data_table.id}: {e}"); age_in_days = None 
             
-            row_data = {col: merged.get(col) for col in all_columns_list}
+            # STRICT FILTERING: Only include columns that are in all_columns_list
+            row_data = {}
+            for col in all_columns_list:
+                # SPECIAL HANDLING FOR ID: Map column 'id' to animal 'uid'
+                if col == 'id' or col == 'ID': # Case-insensitive check might be safer but column names are usually standard
+                    # 'uid' usually comes from animal.to_dict()
+                    row_data[col] = merged.get('uid') or merged.get('ID') or merged.get('id')
+                else:
+                    row_data[col] = merged.get(col)
+
             if 'Age (Days)' in all_columns_list:
                 row_data['Age (Days)'] = age_in_days
 
@@ -596,7 +612,7 @@ def edit_data_table(id):
         elif upload_form.submit_upload.data and upload_form.validate_on_submit():
             file = request.files.get('file')
             if not file:
-                flash(_l("No file selected for upload."), "danger")
+                flash(_("No file selected for upload."), "danger")
                 return redirect(url_for('datatables.edit_data_table', id=id))
 
             try:
@@ -606,12 +622,12 @@ def edit_data_table(id):
                 
                 rows_updated_count = datatable_service.process_upload(data_table.id, df, protocol_field_names)
                 
-                flash(_l("Successfully uploaded and updated {count} rows from the Excel file.").format(count=rows_updated_count), "success")
+                flash(_("Successfully uploaded and updated {count} rows from the Excel file.").format(count=rows_updated_count), "success")
                 
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error processing uploaded Excel file for DataTable {id}: {e}", exc_info=True)
-                flash(_l(f"Error processing uploaded file: {str(e)}"), "danger")
+                flash(_(f"Error processing uploaded file: {str(e)}"), "danger")
             return redirect(url_for('datatables.edit_data_table', id=id))
 
         elif 'submit_grid' in request.form:
@@ -661,18 +677,19 @@ def edit_data_table(id):
             if data_changed and not validation_errors:
                 try:
                     datatable_service.save_manual_edits(data_table.id, updates, protocol_field_names)
-                    flash(_l('Modifications saved.'), 'success')
+                    flash(_('Modifications saved.'), 'success')
                     return redirect(url_for('datatables.edit_data_table', id=id))
                 except Exception as e:
                     db.session.rollback()
                     current_app.logger.error(f"Error saving manual edits: {e}", exc_info=True)
-                    flash(_l(f"Database save error: {str(e)}"), 'danger')
+                    flash(_(f"Database save error: {str(e)}"), 'danger')
             elif not data_changed and not validation_errors:
-                flash(_l('No changes were made.'), 'info')
+                flash(_('No changes were made.'), 'info')
 
     updated_rows = data_table.experiment_rows.order_by(ExperimentDataRow.row_index).all()
     updated_dict = {r.row_index: r.row_data for r in updated_rows}
-    updated_group_data = data_table.group.animal_data or []
+    updated_animals = sorted(data_table.group.animals, key=lambda a: a.id)
+    updated_group_data = [a.to_dict() for a in updated_animals]
     template_data = prepare_template_data(updated_dict, updated_group_data, column_names)
     protocol_field_units = {a.name: a.unit for a in data_table.protocol.analytes} if data_table.protocol else {}
     date_fields = [a.name for a in data_table.protocol.analytes if a.data_type == AnalyteDataType.DATE] if data_table.protocol else []
@@ -710,7 +727,8 @@ def edit_data_table(id):
                            animal_model_field_names=animal_model_field_names,
                            metadata_fields=list(metadata_fields), assignee_and_housing_form=assignee_and_housing_form,
                            edit_form=edit_form, calculated_fields=calculated_fields,
-                           controlled_molecules_data=controlled_molecules_data)
+                           controlled_molecules_data=controlled_molecules_data,
+                           animals_dataset=updated_group_data)
 
 
 @datatables_bp.route('/<int:datatable_id>/move', methods=['POST'])
@@ -901,7 +919,9 @@ def list_model_datatables(model_type, model_id):
     if model_type == 'protocol':
         all_animal_keys_union_list = set(); all_protocol_keys_union_list = set()
         for dt_item in readable_dts_list:
-             dt_animal_data_keys_list = set().union(*(d.keys() for d in (dt_item.group.animal_data or []))) if dt_item.group and dt_item.group.animal_data else set()
+             dt_animals = sorted(dt_item.group.animals, key=lambda a: a.id) if dt_item.group else []
+             dt_animal_data_list = [a.to_dict() for a in dt_animals]
+             dt_animal_data_keys_list = set().union(*(d.keys() for d in dt_animal_data_list)) if dt_animal_data_list else set()
              dt_protocol_field_names_list = [a.name for a in dt_item.protocol.analytes] if dt_item.protocol and dt_item.protocol.analytes else []
              all_animal_keys_union_list.update(dt_animal_data_keys_list); all_protocol_keys_union_list.update(dt_protocol_field_names_list)
         final_ordered_data_cols_list = get_custom_ordered_columns(all_animal_keys_union_list, all_protocol_keys_union_list)
@@ -909,7 +929,8 @@ def list_model_datatables(model_type, model_id):
         for dt_item in readable_dts_list:
             g_name_list = dt_item.group.name if dt_item.group else "N/A"; p_name_list = dt_item.protocol.name if dt_item.protocol else "N/A"; t_date_list = dt_item.date
             rows_q_list = dt_item.experiment_rows.order_by(ExperimentDataRow.row_index); data_dict_list = {r.row_index: r.row_data for r in rows_q_list.all()}
-            group_anim_data_list = dt_item.group.animal_data or []
+            dt_animals = sorted(dt_item.group.animals, key=lambda a: a.id) if dt_item.group else []
+            group_anim_data_list = [a.to_dict() for a in dt_animals]
             for i_list in range(len(group_anim_data_list)):
                 merged_list = group_anim_data_list[i_list].copy() if i_list < len(group_anim_data_list) else {}; merged_list.update(data_dict_list.get(i_list, {}))
                 row_dict_list = {'Group': g_name_list, 'Protocol': p_name_list, 'Date': t_date_list.strftime('%Y-%m-%d') if hasattr(t_date_list, 'strftime') else str(t_date_list)}
@@ -1287,12 +1308,14 @@ def get_reference_range_options(protocol_id):
         if not check_group_permission(group, 'read'):
             continue
         
-        if group.model and group.animal_data and isinstance(group.animal_data, list):
+        if group.model and group.animals:
             model_id = group.model.id
             if model_id not in model_info:
                 model_info[model_id] = group.model.name
             
-            for animal in group.animal_data:
+            # Use to_dict for dictionary-based logic below
+            animals_data = [a.to_dict() for a in group.animals]
+            for animal in animals_data:
                 for key, value in animal.items():
                     if key.lower() not in ['id', 'date of birth'] and value is not None and str(value).strip() != '':
                         parameters_by_model[model_id][key].add(str(value))
@@ -1337,12 +1360,13 @@ def calculate_reference_range(datatable_id):
                 potential_numerical_protocol_fields.append(analyte.name)
     
     current_dt_avg_age = None
-    if age_tolerance_days is not None and data_table.group.animal_data:
+    if age_tolerance_days is not None and data_table.group and data_table.group.animals:
         ages = []
         try:
             current_dt_date = datetime.strptime(data_table.date, '%Y-%m-%d').date()
-            for animal in data_table.group.animal_data:
-                dob_str = animal.get('Date of Birth')
+            animals_data = [a.to_dict() for a in data_table.group.animals]
+            for animal in animals_data:
+                dob_str = animal.get('Date of Birth') or animal.get('date_of_birth')
                 if dob_str:
                     try:
                         dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
@@ -1361,7 +1385,7 @@ def calculate_reference_range(datatable_id):
         
         reference_dt_ids.append(dt.id)
         
-        if not dt.group.animal_data:
+        if not dt.group or not dt.group.animals:
             continue
 
         try:
@@ -1369,7 +1393,10 @@ def calculate_reference_range(datatable_id):
         except (ValueError, TypeError):
             continue
 
-        for i, animal in enumerate(dt.group.animal_data):
+        # Sort animals by ID for consistent indexing
+        animals = sorted(dt.group.animals, key=lambda a: a.id)
+        animals_data = [a.to_dict() for a in animals]
+        for i, animal in enumerate(animals_data):
             if not ref_range.included_animals:
                 matches_cohort_or_inclusion = True
             elif str(dt.group.id) in ref_range.included_animals and i in ref_range.included_animals[str(dt.group.id)]:
@@ -1381,7 +1408,7 @@ def calculate_reference_range(datatable_id):
                 continue
 
             if current_dt_avg_age is not None and age_tolerance_days is not None:
-                dob_str = animal.get('Date of Birth')
+                dob_str = animal.get('Date of Birth') or animal.get('date_of_birth')
                 if dob_str:
                     try:
                         dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
@@ -1524,7 +1551,9 @@ def download_data_table(id):
     blinding_mode = request.args.get('blinding', 'default') 
     can_view_unblinded = user_has_permission(current_user, 'Project', 'view_unblinded_data', team_id=data_table_dl.group.project.team_id)
     
-    group_animal_data_dl = data_table_dl.group.animal_data or []
+    # Sort animals by ID for consistent indexing
+    animals_dl = sorted(data_table_dl.group.animals, key=lambda a: a.id)
+    group_animal_data_dl = [a.to_dict() for a in animals_dl]
     
     ordered_model_and_age_cols_dl = get_ordered_column_names(data_table_dl)
 
@@ -1538,7 +1567,7 @@ def download_data_table(id):
         merged_row_data_dl.update(existing_data_rows_dict_dl.get(i_dl, {}))
         
         age_in_days_dl = None
-        date_of_birth_str_dl = merged_row_data_dl.get('Date of Birth')
+        date_of_birth_str_dl = merged_row_data_dl.get('Date of Birth') or merged_row_data_dl.get('date_of_birth')
         if date_of_birth_str_dl and data_table_dl.date:
             try:
                 dob_dl = datetime.strptime(date_of_birth_str_dl, '%Y-%m-%d').date()
@@ -1619,7 +1648,9 @@ def download_transposed_data_table(id):
         flash(lazy_gettext("Permission denied to download this DataTable."), "danger")
         return redirect(request.referrer or url_for('groups.manage_groups'))
         
-    group_animal_data_trans = data_table_trans.group.animal_data or []
+    # Sort animals by ID for consistent indexing
+    animals_trans = sorted(data_table_trans.group.animals, key=lambda a: a.id)
+    group_animal_data_trans = [a.to_dict() for a in animals_trans]
     
     ordered_model_and_age_cols_trans = get_ordered_column_names(data_table_trans)
 
@@ -1633,7 +1664,7 @@ def download_transposed_data_table(id):
         merged_row_data_trans.update(existing_data_rows_dict_trans.get(i_trans, {}))
         
         age_in_days_trans = None
-        date_of_birth_str_trans = merged_row_data_trans.get('Date of Birth')
+        date_of_birth_str_trans = merged_row_data_trans.get('Date of Birth') or merged_row_data_trans.get('date_of_birth')
         if date_of_birth_str_trans and data_table_trans.date:
             try:
                 dob_trans = datetime.strptime(date_of_birth_str_trans, '%Y-%m-%d').date()
@@ -1803,7 +1834,7 @@ def view_data_table(datatable_id):
             return redirect(url_for('datatables.view_data_table', datatable_id=datatable_id))
 
     metadata_fields = set()
-    EXCLUDED_METADATA_FIELDS = {'ID', 'Date of Birth', 'Age (Days)'}
+    EXCLUDED_METADATA_FIELDS = {'ID', 'id', 'Date of Birth', 'date_of_birth', 'Age (Days)'}
 
     if data_table_view.group and data_table_view.group.model and data_table_view.group.model.analytes:
         for analyte in data_table_view.group.model.analytes:
@@ -1822,15 +1853,48 @@ def view_data_table(datatable_id):
     
     experimental_group_view = data_table_view.group
     animal_model_view = experimental_group_view.model
-    animal_data_list_view = experimental_group_view.animal_data or []
+    # Sort animals by ID for consistent indexing
+    animals_view = sorted(experimental_group_view.animals, key=lambda a: a.id)
+    animal_data_list_view = [a.to_dict() for a in animals_view]
     experiment_rows_query_view = data_table_view.experiment_rows.order_by(ExperimentDataRow.row_index)
     experiment_rows_dict_view = {row.row_index: row.row_data for row in experiment_rows_query_view.all()}
     if not animal_data_list_view: flash(lazy_gettext("No animal data found for the group associated with this DataTable."), "warning")
     processed_data_for_df_view = []
+    
+    # Get official list of columns to display/use
+    allowed_columns = set(get_ordered_column_names(data_table_view))
+    if 'Age (Days)' not in allowed_columns: allowed_columns.add('Age (Days)')
+    # Ensure ID/id are always accessible in the view processed data
+    allowed_columns.add('id')
+    allowed_columns.add('ID')
+    
+    # Also include potential metadata fields as they might be requested
+    if metadata_fields: allowed_columns.update(metadata_fields)
+
     for i_view, animal_info_view in enumerate(animal_data_list_view):
         exp_row_data_view = experiment_rows_dict_view.get(i_view, {})
-        merged_data_view = {**animal_info_view, **exp_row_data_view}
-        processed_data_for_df_view.append(merged_data_view)
+        merged_raw = {**animal_info_view, **exp_row_data_view}
+        
+        # Filter and Fix ID
+        clean_row = {}
+        for k, v in merged_raw.items():
+            # If the column is allowed, iterate it.
+            # We also need to be careful: simple filtering might miss protocol analytes if they aren't in 'allowed_columns' yet? 
+            # get_ordered_column_names includes protocol and animal model analytes.
+            
+            if k in allowed_columns:
+                if k.lower() == 'id':
+                     clean_row[k] = animal_info_view.get('uid')
+                else:
+                     clean_row[k] = v
+            # If 'id' is requested but case differs (e.g. 'ID'), handle it
+            elif k.lower() == 'id' and ('id' in allowed_columns or 'ID' in allowed_columns):
+                 # This branch might be redundant if 'id' or 'ID' is in allowed_columns, 
+                 # but serves to catch 'id' from animal dict if 'ID' is the strict column name
+                 target_col = 'ID' if 'ID' in allowed_columns else 'id'
+                 clean_row[target_col] = animal_info_view.get('uid')
+
+        processed_data_for_df_view.append(clean_row)
 
     df_processed_orig_view = pd.DataFrame(processed_data_for_df_view)
 
@@ -1844,9 +1908,12 @@ def view_data_table(datatable_id):
             if col_name not in df_processed_orig_view.columns:
                  df_processed_orig_view[col_name] = value
 
-    if 'Date of Birth' in df_processed_orig_view.columns and data_table_view.date:
+    # Calculate Age (Days) if Date of Birth is present
+    dob_col = next((col for col in df_processed_orig_view.columns if col.lower() == 'date of birth' or col.lower() == 'date_of_birth'), None)
+    
+    if dob_col and data_table_view.date:
         try:
-            birth_dates = pd.to_datetime(df_processed_orig_view['Date of Birth'], errors='coerce')
+            birth_dates = pd.to_datetime(df_processed_orig_view[dob_col], errors='coerce')
             datatable_date = pd.to_datetime(data_table_view.date)
             age_deltas = datatable_date - birth_dates
             df_processed_orig_view['Age (Days)'] = age_deltas.dt.days
@@ -1881,13 +1948,13 @@ def view_data_table(datatable_id):
     base_headers = get_ordered_column_names(data_table_view)
     final_headers = []
 
+    # Only use base headers (which are ordered correctly)
+    final_headers = []
     for header in base_headers:
         if header in df_processed_orig_view.columns:
             final_headers.append(header)
-
-    for col in df_processed_orig_view.columns:
-        if col not in final_headers:
-            final_headers.append(col)
+            
+    # Do NOT append other columns automatically. This prevents 'created_at', 'group_id' etc from showing up.
     # Filter and preserve order of headers, respecting randomization blinding
     has_randomization = bool(data_table_view.group.randomization_details)
     is_blinded = data_table_view.group.randomization_details.get('use_blinding', False) if has_randomization else False

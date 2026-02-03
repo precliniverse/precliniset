@@ -265,9 +265,8 @@ def register_audit_listeners(app):
 
                 new_val = getattr(target, prop_name)
                 
-                # For JSON columns, we need to compare content, not just identity
                 is_json = False
-                if prop_name == 'animal_data' or prop_name == 'row_data':
+                if prop_name in ('measurements', 'row_data', 'randomization_details'):
                     is_json = True
                 else:
                     try:

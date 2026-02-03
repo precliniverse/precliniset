@@ -225,7 +225,7 @@
                     <!-- Declare Death button moved here -->
                     <button type="button" class="btn btn-danger declare-dead-btn" data-group-id="{{ group.id }}"
                         data-group-name="{{ group.name }}" data-model-fields-id="model-fields-{{ group.id }}"
-                        data-model-fields='{{ (group.model.analytes | map(attribute="to_dict") | list | tojson if group.model and group.model.analytes else "[]") }}'>
+                        data-model-fields='{{ model_analytes_dataset | tojson }}'>
                         <i class="fas fa-skull-crossbones me-1"></i> {{ _('Declare Death') }}
                     </button>
 
@@ -463,14 +463,14 @@
     {% include 'components/_declare_death_modal.html' %}
 
     <!-- Data script for Declare Dead modal -->
-    {% if group and group.animal_data %}
+    {% if group and group.animals %}
     <script id="animal-data-{{ group.id }}" type="application/json">
-        {{ group.animal_data | tojson | safe }}
+        {{ animals_dataset | tojson | safe }}
     </script>
     {% endif %}
     {% if group and group.model %}
     <script id="model-fields-{{ group.id }}" type="application/json">
-        {{ group.model.analytes | map(attribute='to_dict') | list | tojson | safe }}
+        {{ model_analytes_dataset | tojson | safe }}
     </script>
     {% endif %}
 
@@ -729,7 +729,7 @@
             "group_has_randomization": {{ (group and group.randomization_details is not none) | tojson }},
             "group_randomization_blinding": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
             "can_view_unblinded": {{ can_view_unblinded | tojson }},
-            "existing_animal_data": {{ (group.animal_data if group else []) | tojson }},
+            "existing_animal_data": {{ animals_dataset | tojson }},
             "group_randomization_blinding_key": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
             "js_strings": {{ js_strings | tojson }}
         }
@@ -812,9 +812,8 @@
     "hasRandomization": {{ (group and group.randomization_details is not none) | tojson }},
     "isBlinded": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
     "canViewUnblinded": {{ can_view_unblinded | tojson }},
-    "canEditAnalytes": {{ user_has_permission(current_user, 'Analyte', 'edit') | tojson }},
     "blindingKey": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
-    "existingAnimalData": {{ (group.animal_data if group else []) | tojson }},
+    "existingAnimalData": {{ animals_dataset | tojson }},
     "ethicalApprovalId": {{ (group.ethical_approval_id if group else None) | tojson }},
     "urls": {
         "downloadTemplate": "{{ url_for('groups.download_template', model_id=0) }}",

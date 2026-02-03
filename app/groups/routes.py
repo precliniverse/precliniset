@@ -4,7 +4,7 @@ import json
 import os
 import random
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -24,6 +24,7 @@ from app.services.group_service import GroupService
 from app.services.project_service import ProjectService
 from app.services.datatable_service import DataTableService
 from app.exceptions import ValidationError, BusinessError # New exceptions
+from app.utils.transaction import transactional
 
 from app.services.ethical_approval_service import (
     get_animals_available_for_ea, get_eligible_ethical_approvals) # NEW IMPORT
@@ -331,39 +332,28 @@ def batch_delete_groups():
 @groups_bp.route('/edit/<string:id>', methods=['GET', 'POST'])
 @groups_bp.route('/view/<string:id>', methods=['GET'], endpoint='view_group') # View should only be GET
 @login_required
-def edit_group(id=None):
-    if id:
-        group = ExperimentalGroup.query.options(joinedload(ExperimentalGroup.animals)).filter_by(id=id).first_or_404()
-    else:
-        group = None
-    
+@transactional
+def edit_group(id: Optional[str] = None):
+    group = db.session.get(ExperimentalGroup, id) if id else None
     can_edit = False
 
     # --- PERMISSION CHECK ---
     if group:
-        # 1. Check READ permission first. If they can't read, abort.
         if not check_group_permission(group, 'read', allow_abort=True):
-            abort(403) # This will correctly trigger for users without view rights
-        
-        # 2. Check EDIT permission to determine UI state. Do NOT abort if false.
+            abort(403)
         can_edit = check_group_permission(group, 'edit_exp_group', allow_abort=False)
     else:
-        # Creating new group
         can_edit = True 
 
     is_read_only = not can_edit
 
     # --- FORM SETUP ---
-    # Handle project prefill from query parameters (common when clicking "Create Group" from a project page)
     prefill_project_id = request.args.get('project_id') or request.args.get('project_id_prefill')
-    prefilled_project = None
-    if prefill_project_id and not group:
-        prefilled_project = db.session.get(Project, prefill_project_id)
+    prefilled_project = db.session.get(Project, prefill_project_id) if prefill_project_id and not group else None
 
     team_id_for_eas = group.project.team_id if group and group.project else (prefilled_project.team_id if prefilled_project else None)
     
     if not team_id_for_eas and request.method == 'POST':
-        # Try to get team ID from selected project to populate EAs
         pid = request.form.get('project')
         if pid:
             p = db.session.get(Project, pid)
@@ -371,115 +361,95 @@ def edit_group(id=None):
         
     form = GroupForm(obj=group, team_id_for_eas=team_id_for_eas, formdata=request.form if request.method == 'POST' else None)
     
-    # Apply prefill to form if applicable
     if prefilled_project and request.method == 'GET':
         form.project.data = prefilled_project.id
-        # Ensure the project is in the choices (since it's a lazy-loaded select2)
         form.project.choices = [('', _l('Select Project...')), (prefilled_project.id, prefilled_project.name)]
 
     if request.method == 'POST':
         if not form.validate():
-             flash(_l("Form validation failed. Please check the fields."), "danger")
+            flash(_l("Form validation failed. Please check the fields."), "danger")
         else:
             if is_read_only: 
-                abort(403) # Double check for safety on POST
+                abort(403)
                 
             is_ajax = request.form.get('is_ajax') == 'true'
             update_dts_flag = request.form.get('update_data_tables', 'yes') == 'yes'
             
             try:
-                # 1. Create Group if New
+                # 1. Handle Group Creation/Update
                 if not group:
-                    project_id = form.project.data
-                    project = db.session.get(Project, project_id)
-                    if not project:
-                        raise ValueError(_l("Selected project not found."))
-                    
-                    if not can_create_group_for_project(project):
-                        raise ValueError(_l("You do not have permission to create groups in this project."))
+                    project = db.session.get(Project, form.project.data)
+                    if not project or not can_create_group_for_project(project):
+                        raise BusinessError(_l("Project not found or permission denied."))
                     
                     group = group_service.create_group(
                         name=form.name.data,
                         project_id=project.id,
                         team_id=project.team_id,
                         owner_id=current_user.id,
-                        model_id=form.model.data
+                        model_id=form.model.data,
+                        created_from_workplan_id=request.form.get('from_workplan_id')
                     )
-                    # Handle workplan link if present
-                    group.created_from_workplan_id = request.form.get('from_workplan_id')
-                    db.session.add(group) # Ensure it's in session
-
-                # 2. Update Details
+                
                 group_service.update_group_details(
                     group,
                     name=form.name.data,
                     model_id=form.model.data,
-                    ethical_approval_id=form.ethical_approval.data if form.ethical_approval.data else None,
+                    ethical_approval_id=form.ethical_approval.data or None,
                     default_euthanasia_reason=form.default_euthanasia_reason.data or None,
                     default_severity=form.default_severity.data or None
                 )
                 
-                allow_new_categories = request.form.get('allow_new_categories') == 'true'
-                
-                # 3. Process Animal Data
+                # 2. Process and Save Animal Data
                 animal_data_list, _ = group_service.process_animal_data(group, request.form, request.files)
-                
-                # 4. Save Data
-                group_service.save_group_data(group, animal_data_list, update_datatables=update_dts_flag, allow_new_categories=allow_new_categories)
+                group_service.save_group_data(
+                    group, 
+                    animal_data_list, 
+                    update_datatables=update_dts_flag, 
+                    allow_new_categories=request.form.get('allow_new_categories') == 'true'
+                )
                 
                 if is_ajax:
-                    return jsonify({'success': True, 'message': _l('Group details and animal data saved successfully.'), 'group_id': group.id, 
-'redirect_url': url_for('groups.edit_group', id=group.id)})
-                else:
-                    flash('Group details and animal data saved successfully', 'success')
-                    return redirect(url_for('groups.edit_group', id=group.id))
+                    return jsonify({
+                        'success': True, 
+                        'message': _l('Group saved successfully.'), 
+                        'group_id': group.id, 
+                        'redirect_url': url_for('groups.edit_group', id=group.id)
+                    })
+                
+                flash(_l('Group saved successfully'), 'success')
+                return redirect(url_for('groups.edit_group', id=group.id))
 
-            except (ValidationError, ValueError) as e:
-                db.session.rollback()
+            except (ValidationError, BusinessError) as e:
+                # Handle structured errors (like new categories)
                 error_msg = str(e)
-                # Check if this is a structured error (e.g. for new categories)
                 try:
                     structured_error = json.loads(error_msg)
-                    if isinstance(structured_error, dict) and structured_error.get('type') == 'new_categories':
-                        if is_ajax:
-                            return jsonify({'success': False, 'type': 'new_categories', 'data': structured_error['data']}), 400
+                    if is_ajax and isinstance(structured_error, dict) and structured_error.get('type') == 'new_categories':
+                        return jsonify({'success': False, 'type': 'new_categories', 'data': structured_error['data']}), 400
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-                current_app.logger.warning(f"Validation error saving group {id or 'new'}: {e}")
                 if is_ajax:
                     return jsonify({'success': False, 'message': error_msg}), 400
-                else:
-                    flash(f"Validation Error: {error_msg}", "danger")
+                flash(error_msg, "danger")
             
-            except BusinessError as e:
-                db.session.rollback()
-                current_app.logger.warning(f"Business error saving group {id or 'new'}: {e}")
-                if is_ajax:
-                    # 409 Conflict is appropriate for business rule violations
-                    return jsonify({'success': False, 'message': str(e)}), 409
-                else:
-                    flash(f"Business Error: {str(e)}", "danger")
-
             except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"Error saving group {id or 'new'}: {e}", exc_info=True)
+                current_app.logger.error(f"Error saving group: {e}", exc_info=True)
                 if is_ajax:
                     return jsonify({'success': False, 'message': str(e)}), 500
-                else:
-                    flash(f"Error saving group: {e}", "danger")
+                flash(_l(f"Unexpected error: {e}"), "danger")
 
-    # --- GET Request Logic (Prepare Template Data) ---
+    # --- GET Request Logic ---
     selected_model_id = group.model_id if group else form.model.data
-    selected_model_analytes = []
-    if selected_model_id:
-        model = db.session.get(AnimalModel, selected_model_id)
-        if model:
-            selected_model_analytes = get_ordered_analytes_for_model(model.id)
+    selected_model_analytes = get_ordered_analytes_for_model(selected_model_id) if selected_model_id else []
 
     is_unblinded = group.randomization_details.get('unblinded_at') if group and group.randomization_details else False
     can_view_unblinded = (can_view_unblinded_data(group) or is_unblinded) if group else False
-    current_app.logger.debug(f"Rendering group '{group.name if group else 'new'}'. is_read_only = {is_read_only}")
+
+    # Prepare datasets for frontend JSON serialization
+    animals_dataset = [a.to_dict() for a in group.animals] if group else []
+    model_analytes_dataset = [a.to_dict for a in group.model.analytes] if group and group.model else []
 
     return render_template(
         'groups/edit_group.html',
@@ -489,6 +459,8 @@ def edit_group(id=None):
         is_read_only=is_read_only,
         can_view_unblinded=can_view_unblinded,
         selected_model_analytes=selected_model_analytes,
+        animals_dataset=animals_dataset,
+        model_analytes_dataset=model_analytes_dataset,
         animal_models_data=[model.to_dict() for model in AnimalModel.query.order_by(AnimalModel.name).all()],
         js_strings={'deceased_label': str(_l('Deceased:'))}
     )
@@ -686,8 +658,9 @@ def download_group_data(group_id):
             final_ordered_field_names_set.add('Death Date')
 
         # Prepare data first to handle renames
-        animal_data = group.animal_data if isinstance(group.animal_data, list) else []
+        animal_data = [a.to_dict() for a in sorted(group.animals, key=lambda a: a.id)]
         processed_animal_data = []
+        today = date.today()
         for animal in animal_data:
             processed_animal = animal.copy()
             if 'death_date' in processed_animal:
@@ -696,6 +669,22 @@ def download_group_data(group_id):
                 processed_animal['Euthanasia Reason'] = processed_animal.pop('euthanasia_reason')
             if 'severity' in processed_animal:
                 processed_animal['Severity'] = processed_animal.pop('severity')
+            
+            # Map standard fields
+            if 'date_of_birth' in processed_animal:
+                processed_animal['Date of Birth'] = processed_animal.get('date_of_birth')
+            if 'uid' in processed_animal:
+                processed_animal['ID'] = processed_animal.get('uid')
+            
+            # Calculate Age
+            dob_str = processed_animal.get('Date of Birth')
+            if dob_str:
+                try:
+                    dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+                    processed_animal['Age (Days)'] = (today - dob).days
+                except:
+                    pass
+                    
             processed_animal_data.append(processed_animal)
 
         # Now build field names from processed data
@@ -830,6 +819,8 @@ def declare_dead(group_id):
     except ValueError:
         return jsonify({'success': False, 'message': 'Invalid date format'}), 400
 
+    sorted_animals = sorted(group.animals, key=lambda a: a.id)
+    
     for animal_info in animals_data:
         index = animal_info.get('index')
         euthanasia_reason = animal_info.get('euthanasia_reason')
@@ -842,15 +833,19 @@ def declare_dead(group_id):
 
         try:
             index = int(index)
-            if 0 <= index < len(group.animal_data):
-                group.animal_data[index]['status'] = 'dead'
-                group.animal_data[index]['death_date'] = death_date
-                group.animal_data[index]['euthanasia_reason'] = euthanasia_reason
-                group.animal_data[index]['severity'] = severity
+            if 0 <= index < len(sorted_animals):
+                animal = sorted_animals[index]
+                animal.status = 'dead'
+                # Update measurements for extra fields
+                measurements = animal.measurements.copy() if animal.measurements else {}
+                measurements['death_date'] = death_date
+                measurements['euthanasia_reason'] = euthanasia_reason
+                measurements['severity'] = severity
+                animal.measurements = measurements
+                db.session.add(animal)
         except (ValueError, IndexError):
             pass
 
-    flag_modified(group, "animal_data")
     try:
         db.session.commit()
         return jsonify({'success': True, 'message': 'Animals declared dead.'})
@@ -949,8 +944,9 @@ def generate_datatables_from_workplan(group_id):
             db.session.add(dt)
             db.session.flush()
 
-            if group.animal_data:
-                for i in range(len(group.animal_data)):
+            animals_count = db.session.query(func.count(Animal.id)).filter_by(group_id=group.id).scalar()
+            if animals_count > 0:
+                for i in range(animals_count):
                     exp_row = ExperimentDataRow(data_table_id=dt.id, row_index=i, row_data={})
                     db.session.add(exp_row)
             
@@ -1009,7 +1005,12 @@ def randomize_group(group_id):
     use_blinding = data.get('use_blinding', True)
     
     # 1. Define the total pool of animals
-    all_animals = [{'index': i, **animal} for i, animal in enumerate(group.animal_data) if animal.get('status') != 'dead']
+    # 1. Define the total pool of animals (sorted by ID for index consistency)
+    all_animals = []
+    animals_sorted = sorted(group.animals, key=lambda a: a.id)
+    for i, animal in enumerate(animals_sorted):
+        if animal.status != 'dead':
+            all_animals.append({'index': i, **animal.to_dict()})
     
     # 2. Apply primary stratification
     stratification_factor = data.get('stratification_factor')
@@ -1175,16 +1176,22 @@ def randomize_group(group_id):
                 }
 
     # 5. Apply assignments
+    sorted_animals = sorted(group.animals, key=lambda a: a.id)
     for index, info in final_assignments.items():
-        # ALWAYS set Treatment Group
-        group.animal_data[index]["Treatment Group"] = info['actual']
-        if use_blinding:
-            group.animal_data[index]["Blinded Group"] = info['blinded']
-        elif "Blinded Group" in group.animal_data[index]:
-            # Clean up if we re-randomized without blinding
-            del group.animal_data[index]["Blinded Group"]
-    
-    flag_modified(group, "animal_data")
+        if 0 <= index < len(sorted_animals):
+            animal = sorted_animals[index]
+            measurements = animal.measurements.copy() if animal.measurements else {}
+            
+            # ALWAYS set Treatment Group
+            measurements["Treatment Group"] = info['actual']
+            if use_blinding:
+                measurements["Blinded Group"] = info['blinded']
+            elif "Blinded Group" in measurements:
+                # Clean up if we re-randomized without blinding
+                del measurements["Blinded Group"]
+            
+            animal.measurements = measurements
+            db.session.add(animal)
 
     if minimization_details and minimization_details.get('source') == 'datatable':
         datatable = db.session.get(DataTable, minimization_details['datatable_id'])
@@ -1230,11 +1237,12 @@ def delete_randomization(group_id):
     use_blinding = group.randomization_details.get('use_blinding', True)
     assignment_analyte_name = "Blinded Group" if use_blinding else "Treatment Group"
 
-    for animal in group.animal_data:
-        if assignment_analyte_name in animal:
-            del animal[assignment_analyte_name]
-    
-    flag_modified(group, "animal_data")
+    for animal in group.animals:
+        measurements = animal.measurements.copy() if animal.measurements else {}
+        if assignment_analyte_name in measurements:
+            del measurements[assignment_analyte_name]
+            animal.measurements = measurements
+            db.session.add(animal)
     group.randomization_details = None
     flag_modified(group, "randomization_details")
 
@@ -1283,11 +1291,13 @@ def unblind_group(group_id):
             group.model.analytes.append(treatment_analyte)
 
         blinding_key = group.randomization_details['blinding_key']
-        for animal in group.animal_data:
-            blinded_value = animal.get("Blinded Group")
+        for animal in group.animals:
+            measurements = animal.measurements.copy() if animal.measurements else {}
+            blinded_value = measurements.get("Blinded Group")
             if blinded_value in blinding_key:
-                animal[treatment_analyte_name] = blinding_key[blinded_value]
-        flag_modified(group, "animal_data")
+                measurements[treatment_analyte_name] = blinding_key[blinded_value]
+                animal.measurements = measurements
+                db.session.add(animal)
 
         group.randomization_details['unblinded_at'] = datetime.now(current_app.config['UTC_TZ']).isoformat()
         group.randomization_details['unblinded_by'] = current_user.email
@@ -1316,14 +1326,13 @@ def get_randomization_summary(group_id):
     summary_data = group.randomization_details.copy()
 
     # Calculate actual group sizes
-    if group.animal_data:
-        assignment_analyte_name = "Blinded Group" if group.randomization_details.get('use_blinding') else "Treatment Group"
-        actual_assignments = defaultdict(int)
-        for animal in group.animal_data:
-            assignment = animal.get(assignment_analyte_name)
-            if assignment:
-                actual_assignments[assignment] += 1
-        summary_data['actual_group_sizes'] = dict(actual_assignments)
+    assignment_analyte_name = "Blinded Group" if group.randomization_details.get('use_blinding') else "Treatment Group"
+    actual_assignments = defaultdict(int)
+    for animal in group.animals:
+        assignment = animal.measurements.get(assignment_analyte_name) if animal.measurements else None
+        if assignment:
+            actual_assignments[assignment] += 1
+    summary_data['actual_group_sizes'] = dict(actual_assignments)
 
     return jsonify(summary_data)
 
@@ -1336,7 +1345,7 @@ def get_group_animal_data(group_id):
 
     # Get datatable info for animals
     datatable_info = {}
-    if group.animal_data:
+    if group.animals:
         # Get all datatables for this group
         datatables = DataTable.query.filter_by(group_id=group_id).options(db.joinedload(DataTable.protocol)).all()
 
@@ -1355,7 +1364,7 @@ def get_group_animal_data(group_id):
                 })
 
     response = {
-        'animals': group.animal_data or [],
+        'animals': [a.to_dict() for a in sorted(group.animals, key=lambda x: x.id)],
         'datatable_info': datatable_info
     }
 
@@ -1466,19 +1475,25 @@ def group_molecule_usage_summary(group_id):
     analytes = get_ordered_analytes_for_model(group.model_id) if group else []
 
     animals = []
-    if group.animal_data:
-        for animal in group.animal_data:
-            a_id = animal.get('ID')
-            # Extract only the analyte values for client-side filtering
-            animal_metadata = {a.name: animal.get(a.name) for a in analytes}
-            
-            animals.append({
-                'id': a_id,
-                'status': animal.get('status', 'alive'),
-                'treatment_group': animal.get('Treatment Group') or animal.get('Blinded Group'),
-                'usages': animal_usage.get(str(a_id), []),
-                'metadata': animal_metadata
-            })
+    # Fetch sorted animals to match row_index used in molecule usage aggregation if needed,
+    # or just to provide a consistent list for the UI.
+    animals_list = sorted(group.animals, key=lambda a: a.id)
+    for animal_obj in animals_list:
+        animal_dict = animal_obj.to_dict()
+        a_id = animal_dict.get('id') # Internal ID or UID? UI likely expects UID as 'id'
+        # Check UI expectations: animal.get('ID') was used before. animal.to_dict() has 'uid'.
+        
+        animal_uid = animal_obj.uid
+        # Extract only the analyte values for client-side filtering
+        animal_metadata = {a.name: animal_dict.get(a.name) for a in analytes}
+        
+        animals.append({
+            'id': animal_uid,
+            'status': animal_obj.status,
+            'treatment_group': animal_dict.get('Treatment Group') or animal_dict.get('Blinded Group'),
+            'usages': animal_usage.get(str(animal_uid), []), # Molecule usage uses UID as animal_id string?
+            'metadata': animal_metadata
+        })
 
     return render_template(
         'groups/molecule_usage_summary.html',
@@ -1532,27 +1547,27 @@ def export_molecule_usage_summary(group_id):
             animal_usage[str(animal_id)].append(usage_info)
 
     export_data = []
-    if group.animal_data:
-        for animal in group.animal_data:
-            a_id = str(animal.get('ID'))
-            base_info = {
-                'Animal ID': a_id,
-                'Status': animal.get('status', 'alive'),
-                'Group/Blinding': animal.get('Treatment Group') or animal.get('Blinded Group')
-            }
-            # Add animal metadata from animal_data
-            for key, val in animal.items():
-                if key not in ['ID', 'status', 'Treatment Group', 'Blinded Group']:
-                    base_info[key] = val
-                    
-            animal_usages = animal_usage.get(a_id, [])
-            if not animal_usages:
-                export_data.append(base_info)
-            else:
-                for u in animal_usages:
-                    row = base_info.copy()
-                    row.update(u)
-                    export_data.append(row)
+    for animal_obj in sorted(group.animals, key=lambda a: a.id):
+        animal_dict = animal_obj.to_dict()
+        a_id = animal_obj.uid
+        base_info = {
+            'Animal ID': a_id,
+            'Status': animal_obj.status,
+            'Group/Blinding': animal_dict.get('Treatment Group') or animal_dict.get('Blinded Group')
+        }
+        # Add animal metadata from animal_dict
+        for key, val in animal_dict.items():
+            if key not in ['id', 'uid', 'group_id', 'status', 'Treatment Group', 'Blinded Group', 'measurements', 'created_at', 'updated_at', 'date_of_birth', 'sex']:
+                base_info[key] = val
+                
+        animal_usages = animal_usage.get(str(a_id), [])
+        if not animal_usages:
+            export_data.append(base_info)
+        else:
+            for u in animal_usages:
+                row = base_info.copy()
+                row.update(u)
+                export_data.append(row)
 
     df = pd.DataFrame(export_data)
     

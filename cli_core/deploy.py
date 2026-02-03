@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 import subprocess
+import sys
 from .utils import console, run_command, get_architecture, confirm_action, IS_WINDOWS
 from .config import ConfigManager
 from .diagnostics import DockerManager
@@ -253,15 +254,42 @@ class NativeDeployer:
         console.print("[info]Initializing database...[/info]")
         migrations_env = os.path.join("migrations", "env.py")
         
-        if os.path.exists(migrations_env):
-             run_command(f'"{python_exec}" -m flask db upgrade', check=False)
-        else:
-             console.print("[bold red]CRITICAL: 'migrations/' directory missing![/bold red]")
-             console.print("   The database schema cannot be initialized without migration scripts.")
-             console.print("   Please ensure you have pulled the latest code with 'git pull'.")
-             # We do NOT auto-generate migrations here on production/deployment. 
-             # That is a development task.
-             return
+        if not os.path.exists(migrations_env):
+             console.print("[yellow]Migrations directory or env.py missing. Initializing database baseline...[/yellow]")
+             
+             # Set FLASK_APP explicitly for initialization
+             # Using app:create_app() ensures the factory is found even without manage.py pivot behavior
+             env = os.environ.copy()
+             env['FLASK_APP'] = 'app:create_app()'
+             
+             # Clean up any partial migration folder
+             if os.path.exists("migrations") and not os.path.exists(migrations_env):
+                 console.print("[dim]Removing partial/empty migrations directory...[/dim]")
+                 shutil.rmtree("migrations")
+             
+             # If migrations folder doesn't exist, init it
+             if not os.path.exists("migrations"):
+                 console.print(f"[dim]Running: {python_exec} -m flask db init[/dim]")
+                 run_command(f'"{python_exec}" -m flask db init', env=env)
+                 time.sleep(2)  # Give Windows/filesystem time to catch up
+             
+             # Double check env.py was created before migrating
+             if os.path.exists(migrations_env):
+                 console.print(f"[dim]Running: {python_exec} -m flask db migrate[/dim]")
+                 run_command(f'"{python_exec}" -m flask db migrate -m "Initial_Baseline"', env=env)
+                 time.sleep(1)
+             else:
+                 if os.path.exists("migrations"):
+                     console.print(f"[bold red]ERROR: Initialization failed! 'migrations/' exists but '{migrations_env}' is missing.[/bold red]")
+                     console.print(f"[dim]Directory contents: {os.listdir('migrations')}[/dim]")
+                 else:
+                     console.print("[bold red]ERROR: Initialization failed! 'migrations/' directory was not created.[/bold red]")
+                 return
+        
+        # Run upgrade
+        env = os.environ.copy()
+        env['FLASK_APP'] = 'app:create_app()'
+        run_command(f'"{python_exec}" -m flask db upgrade', check=False, env=env)
         
         # Precliniset specific custom setup commands
         console.print("[info]Running application setup/seed...[/info]")

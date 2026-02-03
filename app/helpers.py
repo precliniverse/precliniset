@@ -73,7 +73,7 @@ def sort_analytes_list_by_name(analytes_list):
     """Sorts a list of Analyte objects."""
     if not analytes_list:
         return []
-    order = {'ID': 0, 'Date of Birth': 1}
+    order = {'id': 0, 'date_of_birth': 1}
     next_order_val = len(order)
     return sorted(analytes_list, key=lambda a: (order.get(a.name, next_order_val), a.name))
 
@@ -94,8 +94,8 @@ def get_ordered_analytes_for_model(model_id):
     final_ordered_analytes = []
     seen_analyte_names = set()
 
-    # ID and Date of Birth are mandatory and should come first
-    priority_field_names = ['ID', 'Date of Birth']
+    # id and date_of_birth are mandatory and should come first
+    priority_field_names = ['id', 'date_of_birth']
     
     for name in priority_field_names:
         analyte = next((a for a in model_analytes_ordered_by_association if a.name == name), None)
@@ -113,16 +113,16 @@ def get_ordered_analytes_for_model(model_id):
         'Death Date': Analyte(name='Death Date', data_type=AnalyteDataType.DATE, description='Date animal was declared dead'),
     }
 
-    # ID and Date of Birth must exist as analytes for validation logic
-    if 'ID' not in seen_analyte_names:
-        final_ordered_analytes.insert(0, Analyte(name='ID', data_type=AnalyteDataType.TEXT, description='Unique animal identifier', is_mandatory=True))
-        seen_analyte_names.add('ID')
+    # id and date_of_birth must exist as analytes for validation logic
+    if 'id' not in seen_analyte_names:
+        final_ordered_analytes.insert(0, Analyte(name='id', data_type=AnalyteDataType.TEXT, description='Unique animal identifier', is_mandatory=True))
+        seen_analyte_names.add('id')
     
-    if 'Date of Birth' not in seen_analyte_names:
-        # Insert after ID
-        idx = 1 if final_ordered_analytes[0].name == 'ID' else 0
-        final_ordered_analytes.insert(idx, Analyte(name='Date of Birth', data_type=AnalyteDataType.DATE, description="Animal's date of birth", is_mandatory=True))
-        seen_analyte_names.add('Date of Birth')
+    if 'date_of_birth' not in seen_analyte_names:
+        # Insert after id
+        idx = 1 if final_ordered_analytes[0].name == 'id' else 0
+        final_ordered_analytes.insert(idx, Analyte(name='date_of_birth', data_type=AnalyteDataType.DATE, description="Animal's date of birth", is_mandatory=True))
+        seen_analyte_names.add('date_of_birth')
 
     # Add any other analytes from the model not already included
     for analyte in model.analytes:
@@ -144,7 +144,7 @@ def get_ordered_columns_for_single_datatable_download(animal_model_field_defs, p
         for field_def in animal_model_field_defs:
             if isinstance(field_def, (list, tuple)) and len(field_def) > 0:
                 field_name = field_def[0]
-                if field_name == 'ID':
+                if field_name == 'id':
                     animal_id_field = field_name
                 else:
                     animal_fields_temp_ordered.append(field_name)
@@ -158,9 +158,9 @@ def get_ordered_columns_for_single_datatable_download(animal_model_field_defs, p
             ordered_columns.append(field_name)
             seen_columns.add(field_name)
 
-    if include_age_column and 'Age (Days)' not in seen_columns:
-        ordered_columns.append('Age (Days)')
-        seen_columns.add('Age (Days)')
+    if include_age_column and 'age_days' not in seen_columns:
+        ordered_columns.append('age_days')
+        seen_columns.add('age_days')
 
     if protocol_model_field_defs:
         for field_def in protocol_model_field_defs:
@@ -246,11 +246,11 @@ def get_ordered_column_names(data_table):
         ).order_by(ProtocolAnalyteAssociation.order).all()
         protocol_analytes_ordered = [assoc.analyte for assoc in associations]
 
-    ordered_columns = []
-    seen_columns = set()
+    ordered_columns = ['id']
+    seen_columns = {'id'}
 
     for analyte in animal_analytes_ordered:
-        col_name = 'ID' if analyte.name == 'Animal ID' else analyte.name
+        col_name = 'id' if analyte.name == 'Animal ID' else analyte.name
         if col_name not in seen_columns:
             ordered_columns.append(col_name)
             seen_columns.add(col_name)
@@ -260,7 +260,7 @@ def get_ordered_column_names(data_table):
         seen_columns.add('Age (Days)')
 
     for analyte in protocol_analytes_ordered:
-        col_name = 'ID' if analyte.name == 'Animal ID' else analyte.name
+        col_name = 'id' if analyte.name == 'Animal ID' else analyte.name
         if col_name not in seen_columns:
             ordered_columns.append(col_name)
             seen_columns.add(col_name)
@@ -319,8 +319,8 @@ def update_associated_data_tables(db, group, animal_data_list, animal_field_name
                         elif field_name in new_animal_data and field_name not in existing_row.row_data:
                              existing_row.row_data[field_name] = new_value
                              updated = True
-                        elif field_name == 'ID' and existing_row.row_data.get('ID') != new_value:
-                             existing_row.row_data['ID'] = new_value
+                        elif field_name == 'id' and existing_row.row_data.get('id') != new_value:
+                             existing_row.row_data['id'] = new_value
                              updated = True
 
                     if updated:
@@ -568,8 +568,8 @@ def ensure_mandatory_analytes_exist(app, db):
                 return
 
             mandatory_analytes = {
-                "ID": {"type": AnalyteDataType.TEXT, "description": "Unique animal identifier"},
-                "Date of Birth": {"type": AnalyteDataType.DATE, "description": "Animal's date of birth"}
+                "id": {"type": AnalyteDataType.TEXT, "description": "Unique animal identifier"},
+                "date_of_birth": {"type": AnalyteDataType.DATE, "description": "Animal's date of birth"}
             }
 
             for name, details in mandatory_analytes.items():

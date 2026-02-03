@@ -32,7 +32,7 @@ class Animal(db.Model):
     __tablename__ = 'animal'
     
     id = db.Column(db.Integer, primary_key=True)
-    uid = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    uid = db.Column(db.String(100), nullable=False, index=True)
     group_id = db.Column(
         db.String(40),
         db.ForeignKey('experimental_group.id', ondelete='CASCADE'),
@@ -43,6 +43,10 @@ class Animal(db.Model):
     status = db.Column(db.String(20), nullable=False, default='alive', index=True)
     date_of_birth = db.Column(db.Date, nullable=True, index=True)
     measurements = db.Column(db.JSON, nullable=True, default=dict)
+
+    __table_args__ = (
+        db.UniqueConstraint('group_id', 'uid', name='_group_animal_uid_uc'),
+    )
     
     created_at = db.Column(
         db.DateTime,
@@ -74,23 +78,27 @@ class Animal(db.Model):
         """Convert animal to dictionary.
         
         Args:
-            include_measurements: Whether to include measurements JSON
+            include_measurements: Whether to include measurements
             
         Returns:
             Dictionary representation of animal
         """
+        dob_iso = self.date_of_birth.isoformat() if self.date_of_birth else None
         result = {
             'id': self.id,
             'uid': self.uid,
+            'ID': self.uid,  # Compatibility for capitalized lookup
             'group_id': self.group_id,
             'sex': self.sex,
             'status': self.status,
-            'date_of_birth': self.date_of_birth.isoformat() if self.date_of_birth else None,
+            'date_of_birth': dob_iso,
+            'Date of Birth': dob_iso,  # Compatibility for capitalized lookup
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
         
         if include_measurements and self.measurements:
-            result['measurements'] = self.measurements
+            # Flatten measurements for frontend compatibility
+            result.update(self.measurements)
         
         return result

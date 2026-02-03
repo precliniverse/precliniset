@@ -263,8 +263,7 @@
                     <span><i class="fas fa-dna fa-fw me-1"></i><a
                             href="{{ url_for('core_models.edit_model', model_type='animal', id=group.model.id) if group.model else '#' }}"
                             class="text-muted">{{ group.model.name if group.model else _('N/A') }}</a></span>
-                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ group.animal_data|length if group.animal_data else 0
-                        }} {{ _('Animals') }}</span>
+                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ group.animals|length }} {{ _('Animals') }}</span>
                 </div>
             </div>
             <div class="item-actions-line">
@@ -316,8 +315,7 @@
                             href="{{ url_for('projects.view_edit_project', project_slug=dt.group.project.slug) if dt.group and dt.group.project else '#' }}"
                             class="text-muted">{{ dt.group.project.name if dt.group and dt.group.project else _('N/A')
                             }}</a></span>
-                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ dt.group.animal_data|length if dt.group and
-                        dt.group.animal_data else 0 }} {{ _('Animals in Group') }}</span>
+                    <span><i class="fas fa-paw fa-fw me-1 Bridget-2"></i>{{ dt.group.animals|length if dt.group else 0 }} {{ _('Animals in Group') }}</span>
                 </div>
             </div>
             <div class="item-actions-line">
@@ -370,8 +368,7 @@
                     <span><i class="fas fa-dna fa-fw me-1"></i><a
                             href="{{ url_for('core_models.edit_model', model_type='animal', id=group.model.id) if group.model else '#' }}"
                             class="text-muted">{{ group.model.name if group.model else _('N/A') }}</a></span>
-                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ group.animal_data|length if group.animal_data else 0
-                        }} {{ _('Animals') }}</span>
+                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ group.animals|length }} {{ _('Animals') }}</span>
                 </div>
             </div>
             <div class="item-actions-line">
@@ -437,8 +434,7 @@
                             href="{{ url_for('projects.view_edit_project', project_slug=dt.group.project.slug) if dt.group and dt.group.project else '#' }}"
                             class="text-muted">{{ dt.group.project.name if dt.group and dt.group.project else _('N/A')
                             }}</a></span>
-                    <span><i class="fas fa-paw fa-fw me-1"></i>{{ dt.group.animal_data|length if dt.group and
-                        dt.group.animal_data else 0 }} {{ _('Animals in Group') }}</span>
+                    <span><i class="fas fa-paw fa-fw me-1 Bridget-2"></i>{{ dt.group.animals|length if dt.group else 0 }} {{ _('Animals in Group') }}</span>
                 </div>
             </div>
             <div class="item-actions-line">

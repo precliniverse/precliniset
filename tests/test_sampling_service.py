@@ -17,8 +17,10 @@ def test_log_batch_samples(db_session, init_database):
     service = SamplingService()
     group = init_database['group1']
     
-    # Ensure group has animal data for the indices we will use
-    group.animal_data = [{'ID': 'Mouse-1'}, {'ID': 'Mouse-2'}]
+    # Ensure group has animal entities for the indices we will use
+    from app.models import Animal
+    db_session.add(Animal(uid='Mouse-1', group_id=group.id, status='alive'))
+    db_session.add(Animal(uid='Mouse-2', group_id=group.id, status='alive'))
     db_session.commit()
     
     # Mock the form data structure coming from the frontend
@@ -67,7 +69,9 @@ def test_log_batch_samples_terminal(db_session, init_database):
     """
     service = SamplingService()
     group = init_database['group1']
-    group.animal_data = [{'ID': 'Mouse-1', 'status': 'alive'}, {'ID': 'Mouse-2', 'status': 'alive'}]
+    from app.models import Animal
+    db_session.add(Animal(uid='Mouse-1', group_id=group.id, status='alive'))
+    db_session.add(Animal(uid='Mouse-2', group_id=group.id, status='alive'))
     db_session.commit()
 
     common_details = {
@@ -81,9 +85,12 @@ def test_log_batch_samples_terminal(db_session, init_database):
 
     service.log_batch_samples(group, common_details, sample_set, animal_indices)
     
-    # Refresh group from DB to check JSON update
-    db_session.refresh(group)
+    # Refresh group from DB to check JSON update - No longer JSON, need to check Entities
+    db_session.expire_all()
     
-    assert group.animal_data[0]['status'] == 'dead'
-    assert group.animal_data[0]['death_date'] == date.today().isoformat()
-    assert group.animal_data[1]['status'] == 'alive' # Mouse-2 should be untouched
+    mouse1 = Animal.query.filter_by(group_id=group.id, uid='Mouse-1').first()
+    mouse2 = Animal.query.filter_by(group_id=group.id, uid='Mouse-2').first()
+    
+    assert mouse1.status == 'dead'
+    assert mouse1.measurements.get('death_date') == date.today().isoformat()
+    assert mouse2.status == 'alive' # Mouse-2 should be untouched

@@ -19,7 +19,7 @@ def test_team_member_cannot_create_group(team1_member_client, db_session, init_d
     animal_model = init_database['animal_model']
     response = team1_member_client.post('/groups/edit', data={'project': proj1.id, 'model': animal_model.id, 'name': 'Member Group Attempt'}, follow_redirects=True)
     assert response.status_code == 200
-    assert b"You do not have permission to create groups in this project" in response.data
+    assert b"Project not found or permission denied." in response.data
     group = db_session.query(ExperimentalGroup).filter_by(name='Member Group Attempt').first()
     assert group is None
 
@@ -48,7 +48,7 @@ def test_edit_group_animal_data(team1_admin_client, db_session, init_database):
     group = init_database['group1']
     animal_model = init_database['animal_model']
     ea1 = init_database['ea1']  # Get the ethical approval from the fixture
-    animal_data = [{'ID': 'Mouse-01', 'Genotype': 'WT'}, {'ID': 'Mouse-02', 'Genotype': 'KO'}]
+    animal_data = [{'ID': 'Mouse-01', 'Genotype': 'WT', 'Date of Birth': '2023-01-01'}, {'ID': 'Mouse-02', 'Genotype': 'KO', 'Date of Birth': '2023-01-01'}]
     payload = {
         'name': group.name,
         'model': animal_model.id,
@@ -58,9 +58,12 @@ def test_edit_group_animal_data(team1_admin_client, db_session, init_database):
     }
     response = team1_admin_client.post(f'/groups/edit/{group.id}', data=payload, follow_redirects=True)
     assert response.status_code == 200
-    assert b'Group details and animal data saved successfully' in response.data
+    assert b'Group saved successfully' in response.data
     db_session.refresh(group)
-    assert len(group.animal_data) == 2 and group.animal_data[0]['ID'] == 'Mouse-01'
+    assert len(group.animals) == 2
+    uids = {a.uid for a in group.animals}
+    assert 'Mouse-01' in uids
+    assert 'Mouse-02' in uids
 
 def test_archive_and_unarchive_group(team1_admin_client, db_session, init_database):
     group = init_database['group1']

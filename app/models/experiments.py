@@ -13,7 +13,6 @@ class ExperimentalGroup(db.Model):
     
     model_id = db.Column(db.Integer, db.ForeignKey('animal_model.id'), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id', ondelete='CASCADE'), nullable=False, index=True)
-    # animal_data is now a @property - see below (V2 refactoring)
     randomization_details = db.Column(db.JSON, nullable=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     team_id = db.Column(db.Integer, db.ForeignKey('team.id', ondelete='CASCADE'), nullable=False)
@@ -73,111 +72,13 @@ class ExperimentalGroup(db.Model):
         self.id = group_id
         kwargs['id'] = group_id
         
-        # 2. Call super constructor - this will trigger other setters (like animal_data)
+        # 2. Call super constructor - this will trigger other setters
         super(ExperimentalGroup, self).__init__(**kwargs)
 
     @property
     def sample_count(self):
         return self.samples.count()
     
-    @property
-    def animal_data(self):
-        """Reconstruct animal_data JSON from Animal table.
-        
-        This property provides backward compatibility by dynamically
-        reconstructed the JSON format expected by the frontend from
-        the Animal table (single source of truth).
-        
-        Returns:
-            List of animal dictionaries in legacy JSON format
-        """
-        if not self.animals:
-            return []
-        
-        # Determine sequence sort order (SQLAlchemy order_by(Animal.id))
-        sorted_animals = sorted(self.animals, key=lambda a: a.id)
-        
-        result = []
-        for animal in sorted_animals:
-            # Reconstruct the JSON format
-            animal_dict = {
-                'ID': animal.uid,
-                'Date of Birth': animal.date_of_birth.isoformat() if animal.date_of_birth else None,
-            }
-            
-            # Add sex if present
-            if animal.sex:
-                animal_dict['sex'] = animal.sex
-            
-            # Always include status for compatibility
-            animal_dict['status'] = animal.status or 'alive'
-            
-            # Merge measurements from JSON column
-            if animal.measurements:
-                animal_dict.update(animal.measurements)
-            
-            result.append(animal_dict)
-        
-        return result
-
-    @animal_data.setter
-    def animal_data(self, data_list):
-        """Update Animal entities from a list of animal dictionaries.
-        
-        This setter allows direct assignment to animal_data for tests and legacy services.
-        
-        Args:
-            data_list: List of animal dictionaries
-        """
-        # Clear existing animals via relationship
-        self.animals = []
-        
-        if not data_list:
-            return
-
-        from .animal import Animal
-        for i, animal_dict in enumerate(data_list):
-            animal_id = animal_dict.get('ID') or f"{self.id}-A{i+1}"
-            
-            # Parse Date of Birth
-            dob = None
-            dob_val = animal_dict.get('Date of Birth')
-            if dob_val:
-                try:
-                    if isinstance(dob_val, str):
-                        from datetime import datetime
-                        dob = datetime.strptime(dob_val, '%Y-%m-%d').date()
-                    elif hasattr(dob_val, 'date'):
-                        dob = dob_val
-                except (ValueError, TypeError):
-                    pass
-            
-            # Extract core fields
-            sex = animal_dict.get('sex') or animal_dict.get('Sex')
-            status = animal_dict.get('status', 'alive')
-            
-            # Remaining fields go into measurements
-            measurements = {}
-            for key, value in animal_dict.items():
-                if key not in {'ID', 'Date of Birth', 'sex', 'Sex', 'status'}:
-                    measurements[key] = value
-            
-            animal = Animal(
-                uid=animal_id,
-                group_id=self.id,
-                sex=sex,
-                status=status,
-                date_of_birth=dob,
-                measurements=measurements if measurements else None
-            )
-            self.animals.append(animal)
-        
-        # We try to flush to catch integrity errors early, but only if we're in a session
-        try:
-            db.session.flush()
-        except:
-            pass
-
     def __repr__(self):
         return f'<ExperimentalGroup ID: {self.id} Name: {self.name}>'
 

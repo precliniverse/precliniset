@@ -85,26 +85,14 @@ class Sample(db.Model):
     def animal_display_id(self):
         """
         Constructs a display ID for the animal based on available data.
-        Tries to use the 'ID' analyte if available, otherwise falls back to index.
+        Tries to use the Animal UID from the relationship.
         """
-        if self.experimental_group and self.experimental_group.animal_data is not None:
-            if 0 <= self.animal_index_in_group < len(self.experimental_group.animal_data):
-                animal_info = self.experimental_group.animal_data[self.animal_index_in_group]
-
-                # Try to find the primary ID field from the AnimalModel's analytes
-                if self.experimental_group.model and self.experimental_group.model.analytes:
-                    # Prioritize an analyte named 'ID' or similar
-                    id_analyte_name = None
-                    for analyte in self.experimental_group.model.analytes:
-                        if analyte.name == 'ID':
-                            id_analyte_name = 'ID'
-                            break
-
-                    if id_analyte_name:
-                        return animal_info.get(id_analyte_name, f"Index {self.animal_index_in_group}")
-
-                # Fallback to a generic 'ID' key if no specific analyte is found or model is missing
-                return animal_info.get('ID', f"Index {self.animal_index_in_group}")
+        if self.experimental_group:
+            # Note: animal_index_in_group is still used to link Sample to Animal list index
+            # sorted by ID for consistency.
+            animals = sorted(self.experimental_group.animals, key=lambda a: a.id)
+            if 0 <= self.animal_index_in_group < len(animals):
+                return animals[self.animal_index_in_group].uid
         return f"Index {self.animal_index_in_group}"
 
     def __repr__(self):

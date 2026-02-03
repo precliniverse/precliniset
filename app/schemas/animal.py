@@ -16,15 +16,15 @@ class AnimalSchema(BaseModel):
     Sex validation is performed dynamically against database configuration.
     
     Attributes:
-        animal_id: Unique identifier for the animal
+        id: Unique identifier for the animal
         date_of_birth: Animal's date of birth
         sex: Animal's sex (validated against Analyte configuration)
         measurements: Dynamic scientific measurements (weight, tumor size, etc.)
     """
     
-    animal_id: str = Field(..., alias="ID", description="Unique animal identifier")
-    date_of_birth: date = Field(..., alias="Date of Birth", description="Date of birth")
-    sex: Optional[str] = Field(None, description="Animal sex (e.g., Male, Female, M, F)")
+    animal_id: str = Field(..., alias="id", description="Unique animal identifier")
+    date_of_birth: date = Field(..., description="Date of birth")
+    sex: Optional[str] = Field(None, description="Animal sex (e.g., Male, Female)")
     measurements: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
         description="Dynamic scientific measurements"
@@ -52,21 +52,31 @@ class AnimalSchema(BaseModel):
         
         # Define fields that are NOT measurements
         # (Using actual field names AND aliases)
-        known_fields = {'animal_id', 'ID', 'date_of_birth', 'Date of Birth', 'sex', 'Sex', 'measurements', 'status'}
+        known_fields = {'animal_id', 'id', 'ID', 'date_of_birth', 'Date of Birth', 'date of birth', 'sex', 'Sex', 'measurements', 'status', 'Status'}
         
+        # Map capitalized variants to known fields for Pydantic
+        mapping = {
+            'ID': 'id',
+            'Date of Birth': 'date_of_birth',
+            'date of birth': 'date_of_birth',
+            'Sex': 'sex',
+            'Status': 'status'
+        }
+        for k, v in mapping.items():
+            if k in data and v not in data:
+                data[v] = data[k]
+                # We keep the original in data if it's a known field variant 
+                # to satisfy known_fields check later if needed, but del is fine
+                # because we already mapped it to a Pydantic field.
+
         # Ensure measurements exists
         if 'measurements' not in data:
             data['measurements'] = {}
         
         # Move extra fields to measurements
-        # We need to create a copy to avoid "dict changed size during iteration" if we were deleting, 
-        # but here we are just selecting.
         extras = {k: v for k, v in data.items() if k not in known_fields}
         data['measurements'].update(extras)
         
-        # Optional: remove extras from top level if we want a clean model
-        # For Pydantic with extra='allow', they stay at top level too unless we remove them.
-        # But we want them in .measurements for our Animal model sync.
         for k in extras:
             del data[k]
             

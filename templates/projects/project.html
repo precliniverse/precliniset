@@ -238,8 +238,7 @@
                                         _('Archived') }}</span>{% endif %}
                                 </td>
                                 <td>{{ group_item.model.name if group_item.model else 'N/A' }}</td>
-                                <td class="text-center">{{ group_item.animal_data|length if group_item.animal_data else
-                                    0 }}</td>
+                                <td class="text-center">{{ group_item.animals|length }}</td>
                                 <td>
                                     {% if g_data.datatables_preview %}
                                     <div class="small">

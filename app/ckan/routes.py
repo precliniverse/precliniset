@@ -8,8 +8,7 @@ from flask import (current_app, flash, jsonify, redirect, render_template,
 from flask_babel import lazy_gettext as _l
 from flask_login import current_user, login_required
 
-from app.extensions import db
-from app.models import Attachment, DataTable, ExperimentalGroup, Project
+from app.models import Animal, Attachment, DataTable, ExperimentalGroup, Project
 
 from ..helpers import get_ordered_column_names
 from . import ckan_bp
@@ -135,13 +134,14 @@ def upload_resource(project_slug, datatable_id):
     data_for_df = []
     for row in datatable.experiment_rows.order_by('row_index'):
         row_data = {}
-        if datatable.group.animal_data and row.row_index < len(datatable.group.animal_data):
-            row_data.update(datatable.group.animal_data[row.row_index])
+        animals = sorted(datatable.group.animals, key=lambda a: a.id)
+        if row.row_index < len(animals):
+            row_data.update(animals[row.row_index].to_dict())
         row_data.update(row.row_data)
 
         # Calculate Age (Days) on the fly for the export
         age_in_days = None
-        date_of_birth_str = row_data.get('Date of Birth')
+        date_of_birth_str = row_data.get('Date of Birth') or row_data.get('date_of_birth')
         if date_of_birth_str and datatable.date:
             try:
                 dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()

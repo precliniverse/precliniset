@@ -1,15 +1,7 @@
-"""
-This script serves as the main entry point for the Precliniset application.
-
-It loads environment variables, creates the Flask app instance using the application
-factory pattern, and starts a Waitress production server. It also provides startup
-logging to confirm the application's configuration, including debug mode status,
-host, and port.
-"""
+import sys
 import os
 import logging
 from dotenv import load_dotenv
-from waitress import serve
 from app import create_app
 
 # Load environment variables from .env file
@@ -20,7 +12,13 @@ app = create_app()
 
 if __name__ == '__main__':
     # BEST PRACTICE: Add startup logging to confirm configuration
-    log = logging.getLogger('waitress')
+    if sys.platform == 'win32':
+        from waitress import serve
+        log = logging.getLogger('waitress')
+    else:
+        from gunicorn.app.base import BaseApplication
+        log = logging.getLogger('gunicorn')
+
     log.setLevel(logging.INFO)
 
     config_name = os.getenv('FLASK_CONFIG', 'development')
@@ -38,4 +36,28 @@ if __name__ == '__main__':
 
     log.info("Server starting on http://%s:%s", host, port)
 
-    serve(app, host=host, port=port)
+    if sys.platform == 'win32':
+        serve(app, host=host, port=port)
+    else:
+        class StandaloneApplication(BaseApplication):
+            def __init__(self, app, options=None):
+                self.options = options or {}
+                self.application = app
+                super().__init__()
+
+            def load_config(self):
+                config = {key: value for key, value in self.options.items()
+                          if key in self.cfg.settings and value is not None}
+                for key, value in config.items():
+                    self.cfg.set(key.lower(), value)
+
+            def load(self):
+                return self.application
+
+        gunicorn_options = {
+            'bind': f"{host}:{port}",
+            'workers': int(os.environ.get('GUNICORN_WORKERS', 4)),
+            'worker_class': os.environ.get('GUNICORN_WORKER_CLASS', 'sync'),
+            'loglevel': os.environ.get('GUNICORN_LOG_LEVEL', 'info'),
+        }
+        StandaloneApplication(app, gunicorn_options).run()

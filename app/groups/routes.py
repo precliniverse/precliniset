@@ -3,7 +3,7 @@ import io
 import json
 import os
 import random
-from collections import defaultdict
+from typing import Optional
 from datetime import date, datetime, timedelta
 
 import numpy as np

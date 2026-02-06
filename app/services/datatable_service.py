@@ -274,12 +274,17 @@ class DataTableService(BaseService):
                     if analyte.name in row_data and row_data[analyte.name] is not None:
                         if analyte.name not in concatenated_data[animal_id]:
                             concatenated_data[animal_id][analyte.name] = []
-                        concatenated_data[animal_id][analyte.name].append((dt_date, row_data[analyte.name]))
+                        protocol_name = dt.protocol.name if dt.protocol else 'Unknown'
+                        concatenated_data[animal_id][analyte.name].append({
+                            'date': dt_date, 
+                            'value': row_data[analyte.name],
+                            'protocol': protocol_name
+                        })
 
         # Sort each list by date
         for aid in concatenated_data:
             for analyte_name in concatenated_data[aid]:
-                concatenated_data[aid][analyte_name].sort(key=lambda x: x[0])
+                concatenated_data[aid][analyte_name].sort(key=lambda x: x['date'])
 
 
         return {

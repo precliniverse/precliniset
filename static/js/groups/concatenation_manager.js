@@ -207,6 +207,7 @@ export class ConcatenationManager {
         document.getElementById('load-concatenation-btn')?.addEventListener('click', () => this.loadConcatenatedData());
         document.getElementById('run-global-measurement-btn')?.addEventListener('click', () => this.runGlobalMeasurement());
         document.getElementById('generate-graph-btn')?.addEventListener('click', () => this.generateGraph());
+        document.getElementById('calculate-stats-btn')?.addEventListener('click', () => this.calculateStats());
         document.getElementById('export-concatenated-btn')?.addEventListener('click', () => this.exportConcatenated());
     }
 
@@ -234,25 +235,227 @@ export class ConcatenationManager {
     }
 
     loadConcatenatedData() {
-        // ... Logic from original code ... (simplified here, but should be full)
-        const selectedOptions = document.getElementById('analyte-selector').selectedOptions;
-        if (selectedOptions.length === 0) { alert('Please select analytes.'); return; }
-        // Populate table (omitted for brevity but implies moving logic here)
-        this.populateTableAndSelectors();
+        const selectedOptions = Array.from(document.getElementById('analyte-selector').selectedOptions);
+        if (selectedOptions.length === 0) {
+            alert('Please select at least one analyte.');
+            return;
+        }
+
+        const selectedAnalytes = selectedOptions.map(opt => {
+            const analyteId = parseInt(opt.value);
+            return this.availableAnalytes.find(a => a.id === analyteId).name;
+        });
+
+        this.populateTableAndSelectors(selectedAnalytes);
+        document.getElementById('concatenated-data-container').style.display = 'block';
     }
-    
-    populateTableAndSelectors() {
-        // Logic to build table from this.concatenatedData based on selection
-        // Logic to populate dropdowns
+
+    populateTableAndSelectors(selectedAnalytes) {
+        const tbody = document.querySelector('#concatenated-data-table tbody');
+        tbody.innerHTML = '';
+
+        const globalSelect = document.getElementById('global-analyte-select');
+        const graphSelect = document.getElementById('graph-analyte-select');
+        const statsSelect = document.getElementById('stats-analyte-select');
+
+        // Populate selects
+        [globalSelect, graphSelect, statsSelect].forEach(sel => {
+            if (!sel) return;
+            const currentVal = sel.value;
+            sel.innerHTML = '<option value="">Choose Analyte</option>';
+            selectedAnalytes.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                sel.appendChild(opt);
+            });
+            sel.value = currentVal;
+        });
+
+        // Populate Table
+        Object.entries(this.concatenatedData.animal_data).forEach(([animalId, analytes]) => {
+            selectedAnalytes.forEach(analyteName => {
+                const values = analytes[analyteName] || [];
+                values.forEach(entry => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${animalId}</td>
+                        <td>${analyteName}</td>
+                        <td>${entry.date}</td>
+                        <td>${entry.value}</td>
+                        <td>${entry.protocol || '-'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        });
     }
 
     runGlobalMeasurement() {
-        // ... Logic moved from groups_edit.js ...
+        const analyteName = document.getElementById('global-analyte-select').value;
+        const type = document.getElementById('measurement-type-select').value;
+        const value = parseFloat(document.getElementById('measurement-value').value);
+        const unit = document.getElementById('measurement-unit').value;
+
+        if (!analyteName || isNaN(value)) {
+            alert("Please select an analyte and enter a valid value.");
+            return;
+        }
+
+        const resultsContainer = document.getElementById('global-measurement-results');
+        const output = document.getElementById('global-measurement-output');
+        output.innerHTML = '';
+        resultsContainer.style.display = 'block';
+
+        const summary = [];
+
+        Object.entries(this.concatenatedData.animal_data).forEach(([animalId, analytes]) => {
+            const data = analytes[analyteName];
+            if (!data || data.length === 0) return;
+
+            // Sort by date just in case
+            data.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            if (type === 'baseline-reduction') {
+                const baseline = data[0].value;
+                const last = data[data.length - 1].value;
+                const reduction = ((baseline - last) / baseline) * 100;
+                if (reduction >= value) {
+                    summary.push(`Animal <strong>${animalId}</strong>: ${reduction.toFixed(1)}% reduction (Target: ${value}%)`);
+                }
+            } else if (type === 'threshold-check') {
+                const breached = data.some(d => d.value > value);
+                if (breached) {
+                    summary.push(`Animal <strong>${animalId}</strong>: Threshold of ${value} breached.`);
+                }
+            }
+        });
+
+        if (summary.length === 0) {
+            output.innerHTML = "No animals matched the criteria.";
+        } else {
+            output.innerHTML = `<ul class="mb-0"><li>${summary.join('</li><li>')}</li></ul>`;
+        }
     }
 
     generateGraph() {
-        // ... Logic moved from groups_edit.js ...
-        // Requires Chart.js (already loaded globally)
+        const analyteName = document.getElementById('graph-analyte-select').value;
+        if (!analyteName) {
+            alert("Please select an analyte for the graph.");
+            return;
+        }
+
+        const container = document.getElementById('graph-container');
+        container.style.display = 'block';
+
+        const canvas = document.getElementById('evolution-chart');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        
+        // Destroy existing chart if any
+        if (this.chart) {
+            this.chart.destroy();
+        }
+
+        const datasets = [];
+        const colors = [
+            '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', 
+            '#fd7e14', '#6610f2', '#6f42c1', '#e83e8c', '#20c997'
+        ];
+        let colorIdx = 0;
+
+        Object.entries(this.concatenatedData.animal_data).forEach(([animalId, analytes]) => {
+            const data = analytes[analyteName];
+            if (!data || data.length === 0) return;
+
+            // Sort by date
+            const sortedData = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            datasets.push({
+                label: `Animal ${animalId}`,
+                data: sortedData.map(d => ({ x: d.date, y: d.value })),
+                borderColor: colors[colorIdx % colors.length],
+                backgroundColor: colors[colorIdx % colors.length],
+                fill: false,
+                tension: 0.1
+            });
+            colorIdx++;
+        });
+
+        this.chart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'day',
+                            displayFormats: { day: 'MM-dd' }
+                        },
+                        title: { display: true, text: 'Date' }
+                    },
+                    y: {
+                        title: { display: true, text: analyteName }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    }
+
+    calculateStats() {
+        const analyteName = document.getElementById('stats-analyte-select').value;
+        if (!analyteName) {
+            alert("Please select an analyte for statistics.");
+            return;
+        }
+
+        const resultsContainer = document.getElementById('stats-results');
+        const output = document.getElementById('stats-output');
+        output.innerHTML = '';
+        resultsContainer.style.display = 'block';
+
+        const allValues = [];
+        Object.values(this.concatenatedData.animal_data).forEach(analytes => {
+            const data = analytes[analyteName];
+            if (data) {
+                data.forEach(d => {
+                    const val = parseFloat(d.value);
+                    if (!isNaN(val)) allValues.push(val);
+                });
+            }
+        });
+
+        if (allValues.length === 0) {
+            output.innerHTML = "No numeric data available for the selected analyte.";
+            return;
+        }
+
+        const mean = allValues.reduce((a, b) => a + b, 0) / allValues.length;
+        const sorted = [...allValues].sort((a, b) => a - b);
+        const median = sorted.length % 2 === 0 
+            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 
+            : sorted[Math.floor(sorted.length / 2)];
+        
+        const variance = allValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / allValues.length;
+        const stdDev = Math.sqrt(variance);
+
+        output.innerHTML = `
+            <div class="row">
+                <div class="col-6"><strong>N:</strong> ${allValues.length}</div>
+                <div class="col-6"><strong>Mean:</strong> ${mean.toFixed(2)}</div>
+                <div class="col-6"><strong>Median:</strong> ${median.toFixed(2)}</div>
+                <div class="col-6"><strong>Std Dev:</strong> ${stdDev.toFixed(2)}</div>
+                <div class="col-6"><strong>Min:</strong> ${Math.min(...allValues).toFixed(2)}</div>
+                <div class="col-6"><strong>Max:</strong> ${Math.max(...allValues).toFixed(2)}</div>
+            </div>
+        `;
     }
 
     exportConcatenated() {

@@ -451,7 +451,7 @@ def edit_group(id: Optional[str] = None):
 
     # Prepare datasets for frontend JSON serialization
     animals_dataset = [a.to_dict() for a in group.animals] if group else []
-    model_analytes_dataset = [a.to_dict for a in group.model.analytes] if group and group.model else []
+    model_analytes_dataset = [a.to_dict() for a in group.model.analytes] if group and group.model else []
 
     return render_template(
         'groups/edit_group.html',
@@ -1471,12 +1471,12 @@ def export_concatenated_analytes(group_id):
 
         for animal_id, analyte_data in animal_data.items():
             for analyte_name, values in analyte_data.items():
-                for date, value in values:
+                for entry in values:
                     rows.append({
                         'Animal ID': animal_id,
                         'Analyte': analyte_name,
-                        'Date': date,
-                        'Value': value
+                        'Date': entry.get('date'),
+                        'Value': entry.get('value')
                     })
 
         df = pd.DataFrame(rows)

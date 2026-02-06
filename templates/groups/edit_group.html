@@ -246,7 +246,7 @@
                         <div class="input-group input-group-sm" style="max-width: 350px;">
                             <input type="file" name="xlsx_upload" id="xlsx_upload" class="form-control form-control-sm"
                                 accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-                            <span class="input-group-text bg-white border-start-0">
+                            <span class="input-group-text bg-body border-start-0">
                                 <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
                                    title="{{ _('File must contain columns matching the selected Animal Model fields, including an ID column. Uploading will override manual entries.') }}"></i>
                             </span>
@@ -338,7 +338,7 @@
                                 {% endif %}
 
                                 <!-- Age (Days) Column -->
-                                <td class="text-center bg-light">
+                                <td class="text-center bg-body-tertiary">
                                     <span class="age-display" data-birth-date="{{ animal.date_of_birth.isoformat() if animal.date_of_birth else '' }}">
                                         {{ animal.measurements.get('Age (Days)', '-') }}
                                     </span>
@@ -558,7 +558,7 @@
                     <div id="rand-step-3" class="rand-step" style="display: none;">
                         <h6>{{ _('Step 3: Configure Assignment Method') }}</h6>
 
-                        <div class="mb-3 p-3 border rounded bg-light">
+                        <div class="mb-3 p-3 border rounded bg-body-tertiary">
                             <label for="stratification-factor-select" class="form-label fw-bold">{{ _('Primary
                                 Stratification Factor (Optional)') }}</label>
                             <select id="stratification-factor-select" class="form-select">
@@ -590,7 +590,7 @@
                             </div>
                         </div>
 
-                        <div id="minimization-options" class="p-3 border rounded bg-light" style="display: none;">
+                        <div id="minimization-options" class="p-3 border rounded bg-body-tertiary" style="display: none;">
                             <h6>{{ _('Minimization Options') }}</h6>
                             <div class="mb-3">
                                 <label for="minimize-source" class="form-label">{{ _('Balance Groups Based on Data
@@ -670,7 +670,7 @@
             </td>
 
             <!-- Age Cell -->
-            <td class="text-center bg-light age-cell">
+            <td class="text-center bg-body-tertiary age-cell">
                 <span class="age-display">-</span>
             </td>
 
@@ -824,7 +824,7 @@
     <div class="modal fade" id="newCategoryModal" tabindex="-1" aria-labelledby="newCategoryModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content border-warning shadow">
-                <div class="modal-header bg-warning text-dark">
+                <div class="modal-header bg-warning-subtle text-warning-emphasis">
                     <h5 class="modal-title" id="newCategoryModalLabel"><i class="fas fa-exclamation-triangle me-2"></i>{{ _('New Category Values Found') }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -834,7 +834,7 @@
                         <!-- Populated by JS -->
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
+                <div class="modal-footer bg-body-tertiary">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
                     <button type="button" class="btn btn-warning" id="confirm-add-categories">
                         <i class="fas fa-plus me-1"></i> {{ _('Add and Continue') }}

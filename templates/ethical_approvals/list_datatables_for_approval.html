@@ -53,7 +53,7 @@
                     <tr class="{{ 'table-secondary text-muted' if dt.group.is_archived or (dt.group.project and dt.group.project.is_archived) else '' }}">
                         <td>
                             <a href="{{ url_for('groups.edit_group', id=dt.group.id) }}">{{ dt.group.name if dt.group else _('N/A') }}</a>
-                            {% if dt.group and dt.group.is_archived %}<span class="badge bg-warning text-dark ms-1">{{ _('Group Archived') }}</span>{% endif %}
+                            {% if dt.group and dt.group.is_archived %}<span class="badge bg-warning-subtle text-warning-emphasis ms-1">{{ _('Group Archived') }}</span>{% endif %}
                         </td>
                         <td>{{ dt.protocol.name if dt.protocol else _('N/A') }}</td>
                         <td>

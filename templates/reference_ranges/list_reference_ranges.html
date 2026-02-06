@@ -14,7 +14,7 @@
     
     <!-- Filters -->
     <div class="card mb-4 border-0 shadow-sm">
-        <div class="card-body bg-light rounded">
+        <div class="card-body bg-body-tertiary rounded">
             <form method="GET" action="{{ url_for('reference_ranges.list_reference_ranges') }}" class="row g-3 align-items-end" id="filterForm">
                 <div class="col-md-5">
                     <label for="analyte_id" class="form-label small text-muted text-uppercase fw-bold">{{ _('Filter by Analyte') }}</label>
@@ -88,7 +88,7 @@
                 <span class="badge bg-secondary">{{ team.name }}</span>
                 {% endfor %}
                 {% else %}
-                <span class="badge bg-light text-dark">{{ _('Private') }}</span>
+                <span class="badge bg-body-tertiary text-body">{{ _('Private') }}</span>
                 {% endif %}
             </div>
             <small class="text-muted">{{ range.description or _('No description.') }}</small>

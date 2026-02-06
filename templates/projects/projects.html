@@ -14,36 +14,36 @@
     }
 
     .project-table th {
-        background-color: #f8f9fa;
-        border-bottom: 2px solid #dee2e6;
+        background-color: var(--bs-tertiary-bg);
+        border-bottom: 2px solid var(--bs-border-color);
         font-weight: 600;
         text-transform: uppercase;
         font-size: 0.75rem;
         letter-spacing: 0.5px;
-        color: #6c757d;
+        color: var(--bs-secondary-color);
     }
 
     /* Team Group Header */
     .team-group-header {
-        background-color: #e9ecef;
-        color: #495057;
+        background-color: var(--bs-secondary-bg);
+        color: var(--bs-body-color);
         font-weight: bold;
         font-size: 0.85rem;
         padding: 8px 12px;
-        border-top: 1px solid #dee2e6;
-        border-bottom: 1px solid #dee2e6;
+        border-top: 1px solid var(--bs-border-color);
+        border-bottom: 1px solid var(--bs-border-color);
     }
 
     /* Project Rows */
     .project-row td {
         vertical-align: middle;
         padding: 8px 12px;
-        border-bottom: 1px solid #e9ecef;
+        border-bottom: 1px solid var(--bs-border-color);
         font-size: 0.9rem;
     }
 
     .project-row:hover {
-        background-color: #f1f3f5;
+        background-color: var(--bs-secondary-bg);
         cursor: pointer;
     }
 
@@ -58,7 +58,7 @@
         display: inline-block;
         min-width: 30px;
         margin-right: 10px;
-        color: #495057;
+        color: var(--bs-secondary-color);
         font-size: 0.85rem;
     }
 
@@ -94,7 +94,7 @@
         <!-- Search & Filter -->
         <form class="d-flex align-items-center" method="GET" action="{{ url_for('projects.list_projects') }}">
             <div class="input-group input-group-sm me-2" style="width: 300px;">
-                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                <span class="input-group-text bg-body"><i class="fas fa-search text-muted"></i></span>
                 <input type="text" class="form-control border-start-0" placeholder="{{ _('Search projects...') }}"
                     name="q" value="{{ request.args.get('q', '') }}">
             </div>
@@ -144,7 +144,7 @@
                         <!-- Name & Slug -->
                         <td>
                             <div class="d-flex align-items-center">
-                                <div class="fw-bold text-dark">
+                                <div class="fw-bold text-body">
                                     {{ project_obj.name }}
                                 </div>
                                 {% if project_obj.is_archived %}
@@ -209,14 +209,14 @@
 
         <!-- Pagination Footer -->
         {% if total_pages > 1 %}
-        <div class="card-footer bg-white border-top-0 py-3">
+        <div class="card-footer bg-body border-top-0 py-3">
             {% include 'components/_pagination.html' %}
         </div>
         {% endif %}
     </div>
 
     {% else %}
-    <div class="text-center p-5 bg-light rounded border border-dashed">
+    <div class="text-center p-5 bg-body-tertiary rounded border border-dashed">
         <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
         <h5>{{ _('No projects found') }}</h5>
         <p class="text-muted">{{ _('Get started by creating a new project for your team.') }}</p>

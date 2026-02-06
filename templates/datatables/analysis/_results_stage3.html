@@ -14,7 +14,7 @@
         <p class="text-muted small mb-0 mt-1">
             <strong>{{ _('Analyzed Data:') }}</strong> 
             {% for identifier in source_identifiers %}
-            <span class="badge bg-light text-dark border fw-normal">{{ identifier }}</span>
+            <span class="badge bg-body-tertiary text-body border fw-normal">{{ identifier }}</span>
             {% endfor %}
         </p>
         {% elif data_table %}
@@ -50,7 +50,7 @@
     {# --- Survival Analysis Results (New) --- #}
     {% if analysis_results.survival_results %}
     <div class="card mb-4 border-primary">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <div class="card-header bg-primary-subtle text-primary-emphasis d-flex justify-content-between align-items-center">
             <span class="fw-bold"><i class="fas fa-heartbeat me-2"></i>{{ _('Survival Analysis (Kaplan-Meier)')
                 }}</span>
         </div>
@@ -69,12 +69,12 @@
 
                 </div>
                 <div class="col-lg-4">
-                    <div class="card h-100 bg-light">
+                    <div class="card h-100 bg-body-tertiary">
                         <div class="card-header fw-bold small">{{ _('Log-Rank Test Results') }}</div>
                         <div class="card-body small p-2">
                             {{ macros.render_stats_table(analysis_results.survival_results.stats_data) }}
                             {% if analysis_results.survival_results.p_value is not none %}
-                            <div class="mt-2 text-center p-2 border rounded bg-white">
+                            <div class="mt-2 text-center p-2 border rounded bg-body">
                                 <strong class="d-block">{{ _('P-Value') }}</strong>
                                 <span
                                     class="fs-5 {% if analysis_results.survival_results.p_value <= 0.05 %}text-danger fw-bold{% else %}text-muted{% endif %}">
@@ -94,12 +94,12 @@
     {# --- Group Summary --- #}
     {% if analysis_results.group_summary_html %}
     <div class="card mb-4">
-        <div class="card-header bg-light">
+        <div class="card-header bg-body-tertiary">
             <i class="fas fa-users me-2"></i>{{ _('Group Composition Summary') }}
         </div>
         <div class="card-body p-0" style="overflow-x: auto;">
             <table class="table table-sm table-striped table-bordered mb-0">
-                <thead class="table-light">
+                <thead class="">
                     <tr>
                         <th class="text-center">
                             {% if analysis_results.group_summary_html.grouping_params|length == 1 %}

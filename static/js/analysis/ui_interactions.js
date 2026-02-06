@@ -114,11 +114,9 @@ const UI = {
             // Update Visuals
             const updateVisuals = () => {
                 if (checkbox.checked) {
-                    checkDiv.classList.remove('bg-white');
-                    checkDiv.classList.add('bg-primary', 'bg-opacity-10', 'border-primary');
+                    checkDiv.classList.add('bg-primary-subtle', 'border-primary', 'text-primary-emphasis');
                 } else {
-                    checkDiv.classList.add('bg-white');
-                    checkDiv.classList.remove('bg-primary', 'bg-opacity-10', 'border-primary');
+                    checkDiv.classList.remove('bg-primary-subtle', 'border-primary', 'text-primary-emphasis');
                 }
             };
             updateVisuals();
@@ -266,11 +264,9 @@ const UI = {
             // Update Visuals
             const updateVisuals = () => {
                 if (checkbox.checked) {
-                    checkDiv.classList.remove('bg-white');
-                    checkDiv.classList.add('bg-primary', 'bg-opacity-10', 'border-primary');
+                    checkDiv.classList.add('bg-primary-subtle', 'border-primary', 'text-primary-emphasis');
                 } else {
-                    checkDiv.classList.add('bg-white');
-                    checkDiv.classList.remove('bg-primary', 'bg-opacity-10', 'border-primary');
+                    checkDiv.classList.remove('bg-primary-subtle', 'border-primary', 'text-primary-emphasis');
                 }
             };
             updateVisuals();
@@ -311,11 +307,9 @@ const UI = {
         if (rmCheck && rmContainer) {
             const updateRmVisuals = () => {
                 if (rmCheck.checked) {
-                    rmContainer.classList.remove('bg-white');
-                    rmContainer.classList.add('bg-primary', 'bg-opacity-10', 'border-primary');
+                    rmContainer.classList.add('bg-primary-subtle', 'border-primary', 'text-primary-emphasis');
                 } else {
-                    rmContainer.classList.add('bg-white');
-                    rmContainer.classList.remove('bg-primary', 'bg-opacity-10', 'border-primary');
+                    rmContainer.classList.remove('bg-primary-subtle', 'border-primary', 'text-primary-emphasis');
                 }
             };
             // Init and Listen

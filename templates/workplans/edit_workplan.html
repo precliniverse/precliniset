@@ -22,15 +22,15 @@
 
     .projected-date {
         font-style: italic;
-        color: #6c757d;
+        color: var(--bs-secondary-color);
         font-size: 0.8rem;
         white-space: nowrap;
     }
 
     .weekend-row,
     .weekend-row td {
-        background-color: #fffbe6 !important;
-        /* Light yellow warning */
+        background-color: var(--bs-warning-bg-subtle) !important;
+        color: var(--bs-warning-text-emphasis) !important;
     }
 
     /* Hide spinner buttons */
@@ -160,7 +160,7 @@
             <!-- DRAFT MODE: EDITABLE TABLE -->
             <div class="table-responsive">
                 <table class="table table-bordered workplan-table">
-                    <thead class="table-light">
+                    <thead class="">
                         <tr>
                             <th style="width: 100px;">{{ _('Day Offset') }}</th>
                             <th style="width: 60px;">{{ _('Week') }}</th>
@@ -199,7 +199,7 @@
             <!-- PLANNED/RUNNING MODE: READ ONLY TABLE (with Assignee dropdown) -->
             <div class="table-responsive">
                 <table class="table table-hover">
-                    <thead class="table-light">
+                    <thead class="">
                         <tr>
                             <th>{{ _('Date') }}</th>
                             <th>{{ _('Protocol') }}</th>
@@ -439,7 +439,7 @@
                         </div>
                         <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
                             <table class="table table-sm table-bordered">
-                                <thead class="table-light sticky-top">
+                                <thead class=" sticky-top">
                                     <tr>
                                         <th>{{ _('Day') }}</th>
                                         <th>{{ _('Week') }}</th>

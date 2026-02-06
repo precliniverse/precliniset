@@ -210,7 +210,7 @@
                 </div>
                 {% if analyte.data_type == 'CATEGORY' and analyte.allowed_values %}
                 <div class="collapse mt-2" id="collapse-{{ analyte.id }}">
-                    <div class="card card-body bg-light">
+                    <div class="card card-body bg-body-tertiary">
                         <small class="text-muted">{{ _('Allowed values:') }}</small>
                         <ul class="list-unstyled mb-0 small">
                             {% for val in analyte.allowed_values.split(';') %}
@@ -477,7 +477,7 @@
 
                     collapseHtml = `
                 <div class="collapse mt-2" id="collapse-${analyteId}">
-                    <div class="card card-body bg-light">
+                    <div class="card card-body bg-body-tertiary">
                         <small class="text-muted">{{ _('Allowed values:') }}</small>
                         <ul class="list-unstyled mb-0 small">
                             ${valuesList}
@@ -525,7 +525,7 @@
 
                     collapseHtml = `
                 <div class="collapse mt-2" id="collapse-${analyteId}">
-                    <div class="card card-body bg-light">
+                    <div class="card card-body bg-body-tertiary">
                         <small class="text-muted">{{ _('Allowed values:') }}</small>
                         <ul class="list-unstyled mb-0 small">
                             ${valuesList}

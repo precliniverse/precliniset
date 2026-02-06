@@ -33,7 +33,7 @@
                             {% if dt.group %}
                                 <a href="{{ url_for('groups.edit_group', id=dt.group.id) }}">{{ dt.group.name }}</a>
                                 {% if dt.group.is_archived %}
-                                    <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>
+                                    <span class="badge bg-warning-subtle text-warning-emphasis">{{ _('Archived') }}</span>
                                 {% endif %}
                             {% else %}
                                 {{ _('N/A') }}
@@ -43,7 +43,7 @@
                             {% if dt.group and dt.group.project %}
                                 <a href="{{ url_for('projects.view_project', id=dt.group.project.id) }}">{{ dt.group.project.name }}</a>
                                 {% if dt.group.project.is_archived %}
-                                    <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>
+                                    <span class="badge bg-warning-subtle text-warning-emphasis">{{ _('Archived') }}</span>
                                 {% endif %}
                             {% else %}
                                 {{ _('N/A') }}

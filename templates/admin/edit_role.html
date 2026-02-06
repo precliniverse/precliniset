@@ -6,7 +6,7 @@
     <div class="row">
         <div class="col-lg-10 offset-lg-1">
             <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary-subtle text-primary-emphasis">
                     <div class="d-flex justify-content-between align-items-center">
                         <h2 class="mb-0"><i class="fas fa-user-cog me-2"></i>{{ title }}</h2>
                         {% if using_template %}
@@ -73,7 +73,7 @@
                             {% for resource, permissions in grouped_permissions.items()|sort %}
                                 {% set group_id = resource|replace(' ', '_')|lower %}
                                 <div class="card mb-4 shadow-sm border-0">
-                                    <div class="card-header bg-light border-primary">
+                                    <div class="card-header bg-body-tertiary border-primary">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div>
                                                 <h6 class="card-title mb-0 text-primary fw-bold">

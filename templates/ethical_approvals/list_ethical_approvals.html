@@ -92,7 +92,7 @@
                     <td class="text-center">
                         {% if contributing_groups_count > 0 %}
                         <a href="{{ url_for('ethical_approvals.list_groups_for_ethical_approval', ethical_approval_id=ethical_approval.id) }}"
-                            class="badge bg-info text-dark text-decoration-none group-link-stop-propagation"
+                            class="badge bg-info-subtle text-info-emphasis text-decoration-none group-link-stop-propagation"
                             title="{{ _('View %(count)s linked group(s)', count=contributing_groups_count) }}">
                             {{ contributing_groups_count }}
                         </a>
@@ -103,7 +103,7 @@
                     <td class="text-center">
                         {% if linked_datatables_count > 0 %}
                         <a href="{{ url_for('ethical_approvals.list_datatables_for_ethical_approval', ethical_approval_id=ethical_approval.id) }}"
-                            class="badge bg-primary text-white text-decoration-none datatable-link-stop-propagation"
+                            class="badge bg-primary-subtle text-primary-emphasis text-decoration-none datatable-link-stop-propagation"
                             title="{{ _('View %(count)s linked DataTable(s)', count=linked_datatables_count) }}">
                             {{ linked_datatables_count }}
                         </a>

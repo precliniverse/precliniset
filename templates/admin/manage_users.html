@@ -97,7 +97,7 @@
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-striped table-hover">
-                        <thead class="table-light">
+                        <thead class="">
                             <tr>
                                 <th class="checkbox-column"><input type="checkbox" id="select-all-users"></th>
                                 <th data-sort-column="email" data-sort-type="text">Email <i class="bi bi-arrow-down-up"></i></th>
@@ -118,12 +118,12 @@
                                             <span class="badge bg-secondary"><i class="bi bi-slash-circle-fill me-1"></i>Inactive</span>
                                         {% endif %}
                                         {% if not user.email_confirmed %}
-                                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>Not Confirmed</span>
+                                            <span class="badge bg-warning-subtle text-warning-emphasis"><i class="bi bi-exclamation-triangle-fill me-1"></i>Not Confirmed</span>
                                         {% endif %}
                                     </td>
                                     <td>
                                         {% for membership in user.memberships %}
-                                            <a href="{{ url_for('admin.manage_team_members', team_id=membership.team.id) }}" class="badge bg-info text-dark me-1 mb-1 text-decoration-none">
+                                            <a href="{{ url_for('admin.manage_team_members', team_id=membership.team.id) }}" class="badge bg-info-subtle text-info-emphasis me-1 mb-1 text-decoration-none">
                                                 {{ membership.team.name }}
                                             </a>
                                         {% else %}

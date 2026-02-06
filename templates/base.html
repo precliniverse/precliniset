@@ -25,13 +25,20 @@
     {% block head_extra %}
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
     {% endblock %} {# Added block for extra head content like Quill CSS #}
+    <script nonce="{{ csp_nonce }}">
+        // Prevent theme flash
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', savedTheme);
+        })();
+    </script>
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <nav class="navbar navbar-expand-lg border-bottom sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="{{ _('Home') }}" width="60" height="60" class="d-inline-block align-top me-2">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="{{ _('Home') }}" width="60" height="60" class="d-inline-block align-top me-2 logo-img">
                 {{ _('Precliniset') }}
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
@@ -109,13 +116,18 @@
                         placeholder="{{ _('Global Search...') }}" aria-label="Search"
                         value="{{ request.args.get('q', '') }}">
                     <button class="btn btn-sm btn-outline-success me-2" type="submit"><i class="fas fa-search"></i></button>
-                    <a href="{{ url_for('main.documentation') }}" class="text-secondary" title="{{ _('Documentation') }}">
+                    <a href="{{ url_for('main.documentation') }}" class="text-secondary me-2" title="{{ _('Documentation') }}">
                         <i class="fas fa-question-circle fa-lg"></i>
                     </a>
                 </form>
 
-                <!-- User Menu -->
-                <ul class="navbar-nav">
+                <!-- Theme Toggle & User Menu -->
+                <ul class="navbar-nav align-items-center">
+                    <li class="nav-item me-2">
+                        <button class="btn btn-link nav-link px-2" id="bd-theme" type="button" aria-expanded="false" title="{{ _('Toggle Theme') }}">
+                            <i class="fas fa-moon theme-icon-active" id="theme-icon"></i>
+                        </button>
+                    </li>
                     {% if current_user.is_authenticated %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.endpoint in ['main.my_page', 'main.settings', 'admin.manage_teams'] %}active{% endif %}"
@@ -214,9 +226,61 @@
                 }
             }
         });
+
+        // Theme Toggle Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeBtn = document.getElementById('bd-theme');
+            const themeIcon = document.getElementById('theme-icon');
+            
+            const getStoredTheme = () => localStorage.getItem('theme');
+            const setStoredTheme = theme => localStorage.setItem('theme', theme);
+
+            const setTheme = theme => {
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                setStoredTheme(theme);
+                updateIcon(theme);
+                updateCharts(theme);
+            };
+
+            const updateIcon = theme => {
+                if (theme === 'dark') {
+                    themeIcon.classList.remove('fa-moon');
+                    themeIcon.classList.add('fa-sun');
+                } else {
+                    themeIcon.classList.remove('fa-sun');
+                    themeIcon.classList.add('fa-moon');
+                }
+            };
+
+            const updateCharts = theme => {
+                // Handle Plotly charts if they exist
+                const charts = document.querySelectorAll('.plotly-graph-div');
+                charts.forEach(chart => {
+                    const themeLayout = theme === 'dark' ? {
+                        paper_bgcolor: '#212529',
+                        plot_bgcolor: '#212529',
+                        font: { color: '#f8f9fa' }
+                    } : {
+                        paper_bgcolor: '#fff',
+                        plot_bgcolor: '#fff',
+                        font: { color: '#212529' }
+                    };
+                    Plotly.relayout(chart.id, themeLayout);
+                });
+            };
+
+            // Initialize icon
+            updateIcon(getStoredTheme() || 'light');
+
+            themeBtn.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                setTheme(newTheme);
+            });
+        });
     </script>
 
-    <footer class="footer mt-auto py-3 bg-light border-top">
+    <footer class="footer mt-auto py-3 border-top">
         <div class="container text-center">
             <span class="text-muted small">Precliniset v{{ app_version }} | &copy; 2026</span>
         </div>

@@ -15,8 +15,8 @@
 
 {% block content %}
 <h1>{{ _('DataTables for Group:') }} {{ group.name }}
-    {% if group.is_archived %}<span class="badge bg-warning text-dark ms-1">{{ _('Group Archived') }}</span>{% endif %}
-    {% if group.project and group.project.is_archived %}<span class="badge bg-secondary text-dark ms-1">{{ _('Project Archived') }}</span>{% endif %}
+    {% if group.is_archived %}<span class="badge bg-warning-subtle text-warning-emphasis ms-1">{{ _('Group Archived') }}</span>{% endif %}
+    {% if group.project and group.project.is_archived %}<span class="badge bg-secondary text-body ms-1">{{ _('Project Archived') }}</span>{% endif %}
 </h1>
 
 {# Configuration for datatables_list.js #}

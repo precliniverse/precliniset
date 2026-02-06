@@ -12,28 +12,28 @@
         background-color: var(--bs-primary-bg-subtle);
     }
     .description-view {
-        border: 1px solid #ced4da;
+        border: 1px solid var(--bs-border-color);
         padding: 12px 15px;
         border-radius: .25rem;
-        background-color: #f8f9fa;
+        background-color: var(--bs-tertiary-bg);
         min-height: 100px;
         white-space: pre-wrap;
     }
     .archived-project-banner {
-        background-color: #ffeeba;
-        border-color: #ffdf7e;
-        color: #856404;
+        background-color: var(--bs-warning-bg-subtle);
+        border-color: var(--bs-warning-border-subtle);
+        color: var(--bs-warning-text-emphasis);
     }
     .card-form-section {
-        border: 1px solid rgba(0, 0, 0, .125);
+        border: 1px solid var(--bs-border-color);
         border-radius: .25rem;
         padding: 1rem;
-        background-color: #f8f9fa;
+        background-color: var(--bs-tertiary-bg);
     }
     .perm-icon {
         font-size: 0.8rem;
         margin-right: 4px;
-        color: #adb5bd;
+        color: var(--bs-secondary-color);
     }
     .perm-icon.active {
         color: #198754;
@@ -53,7 +53,7 @@
             <h1 class="mb-0">
                 {{ project.name }} <small class="text-muted">({{ project.slug }})</small>
                 {% if project.is_archived %}
-                <span class="badge bg-warning text-dark ms-2 fs-6">{{ _('Archived') }}</span>
+                <span class="badge bg-warning-subtle text-warning-emphasis ms-2 fs-6">{{ _('Archived') }}</span>
                 {% endif %}
             </h1>
             <div class="ms-3">
@@ -215,7 +215,7 @@
                 {% if groups_with_datatables %}
                 <div class="table-responsive">
                     <table class="table table-sm table-hover">
-                        <thead class="table-light">
+                        <thead class="">
                             <tr>
                                 <th>{{ _('Group Name') }}</th>
                                 <th>{{ _('Animal Model') }}</th>
@@ -244,7 +244,7 @@
                                     <div class="small">
                                         {% for dt in g_data.datatables_preview %}
                                         <a href="{{ url_for('datatables.view_data_table', datatable_id=dt.id) }}"
-                                            class="badge bg-light text-dark border me-1 mb-1 text-decoration-none"
+                                            class="badge bg-body-secondary text-body border me-1 mb-1 text-decoration-none"
                                             title="{{ dt.protocol.name if dt.protocol else 'N/A' }} - {{ dt.date }}">
                                             <i class="fas fa-table fa-xs"></i> {{ dt.date }}
                                         </a>
@@ -300,7 +300,7 @@
             
             <!-- Share Form (Collapsed by default) -->
             <div class="collapse" id="shareProjectCollapse">
-                <div class="card-body bg-light border-bottom">
+                <div class="card-body bg-body-tertiary border-bottom">
                     {% if can_edit and share_user_form and share_team_form and not project.is_archived %}
                     <ul class="nav nav-tabs mb-3" id="shareTabs" role="tablist">
                         <li class="nav-item" role="presentation">
@@ -334,7 +334,7 @@
                                 </div>
 
                                 <!-- Granular Permissions -->
-                                <div class="p-2 border rounded bg-white">
+                                <div class="p-2 border rounded bg-body">
                                     <div class="form-check form-switch mb-1">
                                         {{ share_user_form.can_view_project(class="form-check-input user-perm-check", id="user_can_view") }}
                                         <label class="form-check-label fw-bold" for="user_can_view">{{ share_user_form.can_view_project.label.text }}</label>
@@ -418,7 +418,7 @@
                                 </div>
 
                                 <!-- Granular Permissions (Team) -->
-                                <div class="p-2 border rounded bg-white">
+                                <div class="p-2 border rounded bg-body">
                                     <div class="form-check form-switch mb-1">
                                         {{ share_team_form.can_view_project(class="form-check-input team-perm-check", id="team_can_view") }}
                                         <label class="form-check-label fw-bold" for="team_can_view">{{ share_team_form.can_view_project.label.text }}</label>
@@ -721,9 +721,9 @@
                 <ul class="item-list-inline">
                     {% for ea in ethical_approvals %}
                     <li class="mb-1">
-                        <span class="badge bg-light text-dark border p-2">
+                        <span class="badge bg-body-secondary text-body border p-2">
                             <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=ea.id) }}"
-                                class="text-decoration-none text-dark">
+                                class="text-decoration-none text-body">
                                 <i class="fas fa-shield-alt me-1 text-success"></i> {{ ea.reference_number }}
                                 ({{ea.overall_severity.value}})
                             </a>

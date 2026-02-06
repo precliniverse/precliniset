@@ -1,7 +1,7 @@
 {# templates/datatables/analysis/_form_stage2.html #}
 <div id="propose-workflow-stage" {% if analysis_stage !='propose_workflow' %}style="display: none;" {% endif %}>
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-info text-dark">
+        <div class="card-header bg-info-subtle text-info-emphasis">
             <h5 class="mb-0">{{ _('Step 2: Review Data & Select Tests') }}</h5>
             <input type="hidden" name="analysis_stage" id="analysis_stage_2" value="execute_analysis">
         </div>
@@ -20,7 +20,7 @@
                                 {% if checks.error %}
                                 <span class="badge bg-danger me-2">Error</span>
                                 {% elif checks.warning %}
-                                <span class="badge bg-warning text-dark me-2">Warning</span>
+                                <span class="badge bg-warning-subtle text-warning-emphasis me-2">Warning</span>
                                 {% else %}
                                 <span class="badge bg-success me-2">OK</span>
                                 {% endif %}
@@ -79,7 +79,7 @@
                 {# Independent Layout #}
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle">
-                        <thead class="table-light">
+                        <thead class="">
                             <tr>
                                 <th>{{ _('Parameter') }}</th>
                                 <th class="text-center">{{ _('Normality') }}</th>
@@ -102,7 +102,7 @@
                                         <i class="fas fa-check"></i> Normal
                                     </span>
                                     {% elif checks.get('any_group_not_normal') %}
-                                    <span class="badge bg-warning text-dark"
+                                    <span class="badge bg-warning-subtle text-warning-emphasis"
                                         title="One or more groups failed Shapiro-Wilk test (p < 0.05)">
                                         <i class="fas fa-exclamation-triangle"></i> Not Normal
                                     </span>
@@ -136,7 +136,7 @@
                                     </div>
                                     {% endif %}
                                     {% elif checks.get('variance_results') and checks.variance_results.get('p_value') %}
-                                    <span class="badge bg-warning text-dark" title="Levene's test failed (p < 0.05)">
+                                    <span class="badge bg-warning-subtle text-warning-emphasis" title="Levene's test failed (p < 0.05)">
                                         <i class="fas fa-exclamation-triangle"></i> Unequal
                                     </span>
                                     <div class="text-muted" style="font-size: 0.75rem;">

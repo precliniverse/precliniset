@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 import re
+from collections import defaultdict
 from flask import (abort, current_app, flash, jsonify, redirect,
                    render_template, request, send_file, url_for)
 from flask_babel import lazy_gettext as _l
@@ -1465,7 +1466,7 @@ def export_concatenated_analytes(group_id):
 
         # Convert to DataFrame-like structure for export
         rows = []
-        analytes = Object.keys(concatenated_data.get('analytes', {}))
+        analytes = list(concatenated_data.get('analytes', {}).keys())
         animal_data = concatenated_data.get('animal_data', {})
 
         for animal_id, analyte_data in animal_data.items():

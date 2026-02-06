@@ -13,14 +13,14 @@
     </div>
 
     <div class="card shadow-sm border-0">
-        <div class="card-header bg-white py-3">
+        <div class="card-header bg-body py-3">
             <h5 class="card-title mb-0 text-secondary">{{ _('Recent Changes') }}</h5>
             <small class="text-muted">{{ _('Showing the last 1000 events.') }}</small>
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover align-middle" id="auditTable">
-                    <thead class="bg-light">
+                    <thead class="bg-body-tertiary">
                         <tr>
                             <th>{{ _('Timestamp') }}</th>
                             <th>{{ _('User') }}</th>
@@ -39,7 +39,7 @@
                             <td>
                                 {% if log.user %}
                                 <div class="d-flex align-items-center">
-                                    <div class="bg-light rounded-circle text-center me-2"
+                                    <div class="bg-body-tertiary rounded-circle text-center me-2"
                                         style="width: 30px; height: 30px; line-height: 30px;">
                                         <i class="fas fa-user text-secondary"></i>
                                     </div>
@@ -51,7 +51,7 @@
                             </td>
                             <td>
                                 {% if log.action == 'UPDATE' %}
-                                <span class="badge bg-warning text-dark"><i class="fas fa-edit me-1"></i>UPDATE</span>
+                                <span class="badge bg-warning-subtle text-warning-emphasis"><i class="fas fa-edit me-1"></i>UPDATE</span>
                                 {% elif log.action == 'INSERT' %}
                                 <span class="badge bg-success"><i class="fas fa-plus-circle me-1"></i>INSERT</span>
                                 {% elif log.action == 'DELETE' %}
@@ -88,7 +88,7 @@
 <div class="modal fade" id="changesModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-light">
+            <div class="modal-header bg-body-tertiary">
                 <div>
                     <h5 class="modal-title" id="modalTitle"></h5>
                     <div id="modalSubtitle" class="text-muted small mt-1"></div>
@@ -98,7 +98,7 @@
             <div class="modal-body p-0">
                 <div id="changesContainer"></div>
             </div>
-            <div class="modal-footer bg-light">
+            <div class="modal-footer bg-body-tertiary">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Close') }}</button>
             </div>
         </div>
@@ -132,7 +132,7 @@
             };
 
             let html = '<div class="table-responsive"><table class="table table-striped mb-0">';
-            html += '<thead class="table-light"><tr><th style="width: 30%">Field</th><th>Change Details</th></tr></thead><tbody>';
+            html += '<thead class=""><tr><th style="width: 30%">Field</th><th>Change Details</th></tr></thead><tbody>';
 
             // Logique d'affichage (Compatible Ancien format et Nouveau format Delta)
             if (changes.before && changes.after) {
@@ -187,7 +187,7 @@
                             const added = diff.iterable_item_added || diff.dictionary_item_added;
                             if (added) {
                                 Object.entries(added).forEach(([path, val]) => {
-                                    diffHtml += `<div class="mb-2"><span class="badge bg-success me-2">Added</span><small class="text-muted">${path}</small><pre class="mt-1 small border p-1 bg-light">${JSON.stringify(val, null, 2)}</pre></div>`;
+                                    diffHtml += `<div class="mb-2"><span class="badge bg-success me-2">Added</span><small class="text-muted">${path}</small><pre class="mt-1 small border p-1 bg-body-tertiary">${JSON.stringify(val, null, 2)}</pre></div>`;
                                 });
                             }
 
@@ -212,12 +212,12 @@
                             }
 
                             if (diffHtml === '<div class="deep-diff-container">') {
-                                diffHtml += `<pre class="mb-0 small bg-white border rounded p-2 text-muted">${truncate(diff, 500)}</pre>`;
+                                diffHtml += `<pre class="mb-0 small bg-body border rounded p-2 text-muted">${truncate(diff, 500)}</pre>`;
                             }
                             diffHtml += '</div>';
                             html += diffHtml;
                         } else {
-                            html += `<pre class="mb-0 small bg-white border rounded p-2 text-muted">${truncate(diff, 500)}</pre>`;
+                            html += `<pre class="mb-0 small bg-body border rounded p-2 text-muted">${truncate(diff, 500)}</pre>`;
                         }
                     }
                     html += `</td></tr>`;

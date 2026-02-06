@@ -31,9 +31,8 @@
     }
 
     .fc-event.highlight {
-        border: 2px solid #ffc107;
-        /* Bootstrap warning yellow */
-        box-shadow: 0 0 10px rgba(255, 193, 7, 0.7);
+        border: 2px solid var(--bs-warning);
+        box-shadow: 0 0 10px rgba(var(--bs-warning-rgb), 0.7);
     }
 
     .fc-event.draft-event {
@@ -46,15 +45,13 @@
     }
 
     .fc-event.unassigned-event {
-        background-color: #dc3545;
-        /* Bootstrap danger red */
-        border-color: #dc3545;
+        background-color: var(--bs-danger);
+        border-color: var(--bs-danger);
     }
 
     /* Corrected class for weekend highlighting */
     .fc-day-weekend {
-        background-color: #fcf8e3;
-        /* A light yellow */
+        background-color: var(--bs-warning-bg-subtle) !important;
     }
 </style>
 {% endblock %}

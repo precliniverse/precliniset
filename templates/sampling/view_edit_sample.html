@@ -30,7 +30,7 @@
         {% if parent_sample.collection_conditions %}
         <br><strong>{{ _('Parent Collection Conditions:') }}</strong>
         {% for condition in parent_sample.collection_conditions %}
-            <span class="badge bg-light text-dark">{{ condition.name }}</span>
+            <span class="badge bg-body-tertiary text-body">{{ condition.name }}</span>
         {% endfor %}
         {% endif %}
         {% if parent_sample.sample_type.name == 'BLOOD' and parent_sample.anticoagulant %}

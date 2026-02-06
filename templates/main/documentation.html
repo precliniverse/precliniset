@@ -27,7 +27,7 @@
         <div class="col-md-9 col-lg-10">
             <section id="overview" class="mb-5">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h1 class="display-5 fw-bold mb-0 text-dark">{{ _('Precliniset Documentation') }}</h1>
+                    <h1 class="display-5 fw-bold mb-0 text-body">{{ _('Precliniset Documentation') }}</h1>
                     <a href="/docs/site/" target="_blank" class="btn btn-primary">
                         <i class="fas fa-external-link-alt me-2"></i>{{ _('Full Technical Manual') }}
                     </a>
@@ -78,10 +78,10 @@
                 </div>
             </section>
 
-            <section id="audit-glp" class="mb-5 bg-light p-4 rounded-3 shadow-sm">
+            <section id="audit-glp" class="mb-5 bg-body-tertiary p-4 rounded-3 shadow-sm">
                 <div class="row align-items-center">
                     <div class="col-lg-8">
-                        <h2 class="h4 mb-3 text-dark"><i class="fas fa-shield-alt me-2 text-warning"></i>{{ _('GLP
+                        <h2 class="h4 mb-3 text-body"><i class="fas fa-shield-alt me-2 text-warning"></i>{{ _('GLP
                             Compliance & Audit Trail') }}</h2>
                         <p class="text-muted">Precliniset is built for regulatory excellence. Every data point is
                             tracked through a resource-efficient audit logging system.</p>
@@ -111,7 +111,7 @@
                         <span><code class="text-info">GET</code> /api/projects/</span>
                         <small class="text-muted text-uppercase">List Projects</small>
                     </div>
-                    <div class="card-body bg-light">
+                    <div class="card-body bg-body-tertiary">
                         <h6 class="mb-2">{{ _('Example Request (cURL)') }}</h6>
                         <pre class="bg-dark text-success p-3 rounded small"><code>curl -X GET "https://app.precliniset.com/api/projects/" \
      -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
@@ -133,7 +133,7 @@
                         <span><code class="text-warning">PATCH</code> /api/groups/{id}</span>
                         <small class="text-muted text-uppercase">Update Group Status</small>
                     </div>
-                    <div class="card-body bg-light">
+                    <div class="card-body bg-body-tertiary">
                         <pre class="bg-dark text-success p-3 rounded small"><code># Python Example
 import requests
 

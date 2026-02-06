@@ -96,7 +96,7 @@
     </div>
 </div>
 
-<div class="metadata-form-container p-3 mb-2 rounded bg-light border-0">
+<div class="metadata-form-container p-3 mb-2 rounded bg-body-tertiary border-0">
     <form method="POST" id="metadata-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="update_metadata" value="true" />
@@ -240,7 +240,7 @@
     }
 </style>
 
-<div class="card bg-light border-0 mb-3">
+<div class="card bg-body-tertiary border-0 mb-3">
     <div class="card-body py-2">
         <div class="row g-2 align-items-center">
              <!-- Worksheets & Raw Data (Edit Form) -->
@@ -250,7 +250,7 @@
                     <div class="row g-2 align-items-center">
                         <div class="col">
                              <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-link text-muted"></i></span>
+                                <span class="input-group-text bg-body border-end-0"><i class="fa-solid fa-link text-muted"></i></span>
                                 {% if data_table.raw_data_url and (data_table.raw_data_url.startswith('http://') or data_table.raw_data_url.startswith('https://')) %}
                                     <a href="{{ data_table.raw_data_url }}" target="_blank" class="form-control form-control-sm border-start-0 text-truncate" title="{{ data_table.raw_data_url }}">{{ data_table.raw_data_url }}</a>
                                 {% else %}
@@ -311,7 +311,7 @@
 <!-- Controlled Molecules Section -->
 {% if controlled_molecules_data %}
 <div class="card border-0 mb-3">
-    <div class="card-header bg-white py-2 border-bottom">
+    <div class="card-header bg-body py-2 border-bottom">
         <h6 class="m-0 font-weight-bold text-primary">{{ _('Controlled Molecules Usage') }}</h6>
     </div>
     <div class="card-body p-2">
@@ -328,7 +328,7 @@
                             data-bs-target="#collapseMol{{ molecule.id }}" aria-expanded="true"
                             aria-controls="collapseMol{{ molecule.id }}">
                             <span class="d-flex align-items-center">
-                                <strong class="text-dark">{{ molecule.name }}</strong>
+                                <strong class="text-body">{{ molecule.name }}</strong>
                                 <span class="badge bg-secondary ms-2 small" style="font-size: 0.7rem;">{{ molecule.regulation_category.value }}</span>
                             </span>
                             <span class="text-muted small">{{ _('Record Usage') }} <i class="fas fa-chevron-down ms-1"></i></span>
@@ -474,7 +474,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <div class="table-responsive">
                 <table class="table table-bordered table-striped table-hover" id="data-table-edit">
-                    <thead class="table-light">
+                    <thead class="">
                         <tr>
                             {% for col_name in column_names %}
                             <th data-column-name="{{ col_name }}"
@@ -502,7 +502,7 @@
 
                                 <div class="position-relative h-100">
                                     <input type="{{ 'date' if col_name in date_fields else 'text' }}"
-                                        class="form-control form-control-sm border-0 h-100 rounded-0 cell-input {% if is_readonly_structural or is_calculated %}bg-light text-muted{% endif %}"
+                                        class="form-control form-control-sm border-0 h-100 rounded-0 cell-input {% if is_readonly_structural or is_calculated %}bg-body-tertiary text-muted{% endif %}"
                                         name="cell_{{ row_index }}_{{ col_index }}"
                                         value="{{ current_row_data.get(col_name, '') }}" style="min-width: 80px;" {% if
                                         is_readonly_structural or is_read_only or is_calculated %}readonly tabindex="-1"
@@ -591,7 +591,7 @@
         <div class="modal fade" id="importWizardModal" tabindex="-1" aria-labelledby="importWizardModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered">
                 <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
+                    <div class="modal-header bg-primary-subtle text-primary-emphasis">
                         <h5 class="modal-title" id="importWizardModalLabel"><i class="fa-solid fa-file-import me-2"></i>{{ _('Import Raw Data Assistant') }}</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -622,7 +622,7 @@
                                     <i class="fas fa-cog"></i> {{ _('Advanced Parsing Options') }}
                                 </button>
                                 <div class="collapse mt-2" id="advanced-parse-options">
-                                    <div class="card card-body bg-light shadow-sm border-0">
+                                    <div class="card card-body bg-body-tertiary shadow-sm border-0">
                                         <div class="row">
                                             <div class="col-md-6 mb-2">
                                                 <label class="form-label small fw-bold">{{ _('Rows to skip') }}</label>
@@ -689,7 +689,7 @@
                             </div>
 
                             <div class="collapse mb-3" id="import-help-guide">
-                                <div class="card card-body bg-light small shadow-sm border-0">
+                                <div class="card card-body bg-body-tertiary small shadow-sm border-0">
                                     <h6><i class="fas fa-info-circle text-primary"></i> {{ _('Advanced Logic Guide') }}</h6>
                                     <p class="mb-2">{{ _('You can enter Python formulas in the <code>f(x)=</code> fields. Use <code>x</code> as the placeholder for the raw value.') }}</p>
                                     <div class="row">
@@ -711,7 +711,7 @@
 
                             <div class="table-responsive" style="max-height: 400px;">
                                 <table class="table table-sm table-bordered">
-                                    <thead class="table-light">
+                                    <thead class="">
                                         <tr>
                                             <th>{{ _('File Column Header') }}</th>
                                             <th>{{ _('Map to Analyte') }}</th>

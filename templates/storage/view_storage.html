@@ -35,14 +35,14 @@
         <!-- Summary Panel -->
         <div class="col-md-4">
             <div class="card mb-4">
-                <div class="card-header bg-light">
+                <div class="card-header bg-body-tertiary">
                     <h5 class="mb-0">{{ _('Contents Summary') }}</h5>
                 </div>
                 <div class="card-body p-0">
                     {% if grouped_samples_data %}
                     <div class="table-responsive">
                         <table class="table table-sm table-hover mb-0">
-                            <thead class="table-light">
+                            <thead class="">
                                 <tr>
                                     <th>{{ _('Project') }}</th>
                                     <th>{{ _('Type') }}</th>
@@ -70,7 +70,7 @@
         <!-- Main List Panel -->
         <div class="col-md-8">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                <div class="card-header d-flex justify-content-between align-items-center bg-body">
                     <h5 class="mb-0">{{ _('Stored Samples') }}</h5>
                     <div class="d-flex gap-2">
                         <select id="projectFilter" class="form-select form-select-sm" style="width: 200px;">

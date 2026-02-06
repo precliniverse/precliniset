@@ -3,21 +3,10 @@
 /* 1. Global Styles & Typography Base
 -------------------------------------------------- */
 body {
-    /* Bootstrap 5 utilise une pile de polices système modernes par défaut, ce qui est généralement préférable.
-       Si vous tenez absolument à Arial, vous pouvez décommenter la ligne ci-dessous,
-       mais cela pourrait surcharger la pile de polices plus optimisée de Bootstrap. */
-    /* font-family: Arial, sans-serif; */
-
-    /* Taille de police de base pour toute l'application.
-       1rem équivaut généralement à 16px. Ajustez selon vos besoins pour une mise à l'échelle globale. */
     font-size: 0.95rem;
-    /* Réduit la taille de police de base */
     line-height: 1.6;
-    /* Améliore la lisibilité des blocs de texte */
-    color: #343a40;
-    /* Couleur de texte par défaut de Bootstrap, un peu plus douce que le noir pur */
-    background-color: #f8f9fa;
-    /* Un fond très légèrement grisé peut être agréable */
+    color: var(--bs-body-color);
+    background-color: var(--bs-body-bg);
 }
 
 /* Titres - Les valeurs par défaut de Bootstrap sont bonnes, mais vous pouvez les affiner */
@@ -207,7 +196,7 @@ textarea::placeholder {
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 15px;
-    background-color: #fff; /* Ajout pour se démarquer du fond body si différent */
+    background-color: var(--bs-body-bg);
 /* } */
 
 /* .list-group-item h2 {
@@ -293,7 +282,41 @@ textarea::placeholder {
     color: #fff;
 }
 
-/* 10. Navbar Customizations
+/* 10. Theme Color Overrides (Less Turquoise)
+-------------------------------------------------- */
+:root {
+    --bs-info: #0d6efd; /* Map info to primary blue for consistency if user hates turquoise */
+    --bs-info-rgb: 13, 110, 253;
+}
+
+[data-bs-theme="dark"] {
+    --bs-info: #3d8bfd;
+    --bs-info-bg-subtle: #031633;
+    --bs-info-text-emphasis: #6ea8fe;
+    --bs-info-border-subtle: #084298;
+
+    /* Fix for "pink" cells having light text */
+    .table-danger {
+        --bs-table-bg: #4b1a1a !important;
+        --bs-table-color: #f89d9d !important;
+        background-color: #4b1a1a !important;
+        color: #f89d9d !important;
+    }
+    .table-warning {
+        --bs-table-bg: #4b3e1a !important;
+        --bs-table-color: #f8df9d !important;
+        background-color: #4b3e1a !important;
+        color: #f8df9d !important;
+    }
+    
+    /* Outlier specific fix */
+    .outlier {
+        background-color: #4b1a1a !important;
+        color: #f89d9d !important;
+    }
+}
+
+/* 11. Navbar Customizations
 -------------------------------------------------- */
 #userDropdown::after {
     display: none;
@@ -405,7 +428,7 @@ textarea::placeholder {
     }
 
     .bg-light {
-        background-color: #f8f9fa !important;
+        background-color: white !important;
         color: black !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
@@ -424,11 +447,9 @@ textarea::placeholder {
 
 
 
-/* Controlled molecules tables readability */
+/* Controlled molecules tables readability - using variables for dark mode compatibility */
 #moleculesTable,
 #usageTable {
-    background-color: #ffffff !important;
-    color: #212529 !important;
     border-collapse: collapse !important;
 }
 
@@ -436,17 +457,15 @@ textarea::placeholder {
 #moleculesTable th,
 #usageTable td,
 #usageTable th {
-    color: #212529 !important;
-    background-color: #ffffff !important;
-    border: 1px solid #dee2e6 !important;
+    border: 1px solid var(--bs-border-color) !important;
     padding: 0.75rem !important;
     vertical-align: middle !important;
 }
 
 #moleculesTable thead th,
 #usageTable thead th {
-    background-color: #f8f9fa !important;
-    color: #212529 !important;
+    background-color: var(--bs-secondary-bg) !important;
+    color: var(--bs-body-color) !important;
     font-weight: 600 !important;
 }
 
@@ -570,17 +589,52 @@ textarea::placeholder {
     white-space: normal !important;
 }
 
+/* Dark Mode specific Fixes */
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-dropdown {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-results__option {
+    color: var(--bs-body-color);
+}
+
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-results__option--highlighted {
+    background-color: var(--bs-primary);
+    color: white;
+}
+
+[data-bs-theme="dark"] .card {
+    border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .card-header {
+    background-color: var(--bs-tertiary-bg);
+    border-bottom-color: var(--bs-border-color);
+}
+
 /* Fix for DataTables labels and info text in these views */
 .dataTables_wrapper .dataTables_info,
 .dataTables_wrapper .dataTables_length,
 .dataTables_wrapper .dataTables_filter,
 .dataTables_wrapper .pagination .page-link {
-    color: #212529 !important;
+    color: var(--bs-body-color) !important;
     margin-bottom: 0.5rem;
 }
 
 .dataTables_wrapper .pagination .page-item.active .page-link {
-    background-color: #0d6efd !important;
-    border-color: #0d6efd !important;
+    background-color: var(--bs-primary) !important;
+    border-color: var(--bs-primary) !important;
     color: white !important;
 }

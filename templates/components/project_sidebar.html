@@ -1,6 +1,6 @@
 {# templates/components/project_sidebar.html #}
 {% macro project_sidebar(teams_data, active_context='all') %}
-<div class="card shadow-sm h-100 project-sidebar-wrapper border-0 bg-light">
+<div class="card shadow-sm h-100 project-sidebar-wrapper border-0 bg-body-tertiary">
     <div class="card-body p-2 d-flex flex-column h-100">
         
         <!-- Archive Toggle (Search Removed) -->
@@ -19,7 +19,7 @@
             {% for team in teams_data %}
             <div class="team-section mb-3">
                 <!-- Team Header -->
-                <div class="team-header text-uppercase text-muted small fw-bold px-2 mb-1 border-bottom">
+                <div class="team-header text-uppercase text-secondary small fw-bold px-2 mb-1 border-bottom">
                     {{ team.name }}
                 </div>
                 
@@ -77,18 +77,18 @@
     /* Project Items */
     .sidebar-nav-item {
         border-radius: 0.25rem;
-        color: #333;
+        color: var(--bs-body-color);
         /* Allow text to wrap if needed, or stay full width */
         white-space: normal; 
         line-height: 1.2;
     }
 
     .nav-pills .sidebar-nav-item:hover {
-        background-color: #e9ecef;
+        background-color: var(--bs-secondary-bg);
     }
 
     .nav-pills .sidebar-nav-item.active {
-        background-color: #0d6efd;
+        background-color: var(--bs-primary);
         color: white;
     }
 
@@ -100,7 +100,7 @@
 
     /* Archived nodes styling */
     .archived-node a {
-        color: #6c757d;
+        color: var(--bs-secondary-color);
         font-style: italic;
     }
 

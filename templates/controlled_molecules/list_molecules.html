@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h3 mb-0 text-dark">{{ _('Controlled Molecules') }}</h1>
+        <h1 class="h3 mb-0 text-body">{{ _('Controlled Molecules') }}</h1>
         {% if can_create %}
         <a href="{{ url_for('controlled_molecules.create_molecule') }}" class="btn btn-primary shadow-sm">
             <i class="fas fa-plus fa-sm text-white-50"></i> {{ _('New Molecule') }}
@@ -77,7 +77,7 @@
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-bordered table-hover" id="moleculesTable" width="100%" cellspacing="0">
-                    <thead class="table-light">
+                    <thead class="">
                         <tr>
                             <th>{{ _('Name') }}</th>
                             <th>{{ _('Category') }}</th>
@@ -94,12 +94,12 @@
                             <td>
                                 <strong>{{ molecule.name }}</strong>
                                 {% if molecule.requires_secure_prescription %}
-                                <span class="badge bg-warning text-dark"
+                                <span class="badge bg-warning-subtle text-warning-emphasis"
                                     title="{{ _('Requires Secure Prescription') }}"><i
                                         class="fas fa-file-prescription"></i></span>
                                 {% endif %}
                             </td>
-                            <td><span class="badge bg-info text-dark">{{ molecule.regulation_category.value }}</span>
+                            <td><span class="badge bg-info-subtle text-info-emphasis">{{ molecule.regulation_category.value }}</span>
                             </td>
                             <td>{{ molecule.internal_reference or '' }}</td>
                             <td>{{ molecule.storage_location or '' }}</td>

@@ -45,7 +45,7 @@
             {# --- STAGE 1: Select Animals & Common Details --- #}
             <div id="stage1_select_animals" class="stage active">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-primary text-white"><h4><i class="fas fa-mouse me-2"></i>{{ _('Step 1: Common Details & Select Sampled Animals') }}</h4></div>
+                    <div class="card-header bg-primary-subtle text-primary-emphasis"><h4><i class="fas fa-mouse me-2"></i>{{ _('Step 1: Common Details & Select Sampled Animals') }}</h4></div>
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-3 mb-3">{{ render_field(common_details_form.collection_date, class="form-control") }}</div>
@@ -65,7 +65,7 @@
                         <h5>{{ _('Select ALL Animals Sampled in this Event') }}</h5>
                         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                             <table class="table table-sm table-hover animal-list-table">
-                                <thead class="table-light sticky-top">
+                                <thead class=" sticky-top">
                                     <tr>
                                         <th style="width: 5%;"><input type="checkbox" id="masterAnimalCheckboxS1" title="{{_('Select/Deselect All Visible')}}"></th>
                                         {% for field_name in animal_model_field_names %}
@@ -90,7 +90,7 @@
             {# --- STAGE 2: Define Sample Set --- #}
             <div id="stage2_define_sample_set" class="stage">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-info text-dark"><h4><i class="fas fa-flask me-2"></i>{{ _('Step 2: Define the Set of Samples Collected') }}</h4></div>
+                    <div class="card-header bg-info-subtle text-info-emphasis"><h4><i class="fas fa-flask me-2"></i>{{ _('Step 2: Define the Set of Samples Collected') }}</h4></div>
                     <div class="card-body">
                         <div class="alert alert-secondary small">
                             <strong>{{ _('Common Event Details:') }}</strong><br>
@@ -124,12 +124,12 @@
                             <br>{{ _('Event Notes:') }} <pre class="mb-0 small" id="s3_event_notes_display" style="white-space: pre-wrap;"></pre>
                         </div>
                         <h5>{{ _('Defined Sample Set:') }}</h5>
-                        <div id="definedSampleSetSummaryForStage3" class="mb-3 p-2 border rounded bg-light small"></div>
+                        <div id="definedSampleSetSummaryForStage3" class="mb-3 p-2 border rounded bg-body-tertiary small"></div>
                         <hr>
                         <h5>{{ _('Confirm Animals Receiving This Sample Set') }}</h5>
                         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                             <table class="table table-sm table-hover animal-assignment-table">
-                                <thead class="table-light sticky-top">
+                                <thead class=" sticky-top">
                                     <tr>
                                         <th style="width: 5%;"><input type="checkbox" id="masterAnimalCheckboxS3" title="{{_('Select/Deselect All')}}" checked></th>
                                         {% for field_name in animal_model_field_names %}

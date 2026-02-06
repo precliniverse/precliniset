@@ -22,7 +22,7 @@
 
 <!-- Statistics Panel -->
 <div class="card mb-4">
-    <div class="card-header bg-light">
+    <div class="card-header bg-body-tertiary">
         <h5 class="mb-0">{{ _('Animal Usage Statistics') }}</h5>
     </div>
     <div class="card-body">
@@ -53,7 +53,7 @@
                 <small class="text-muted d-block mb-2">{{ _('(Animals counted in the year of their first procedure)')
                     }}</small>
                 <table class="table table-sm table-bordered w-auto mb-0">
-                    <thead class="table-light">
+                    <thead class="">
                         <tr>
                             <th>{{ _('Year') }}</th>
                             <th class="text-center">{{ _('Count') }}</th>
@@ -105,7 +105,7 @@
                 <td class="text-center">{{ group.animals|length }}</td>
                 <td>
                     {% if group.is_archived %}
-                    <span class="badge bg-warning text-dark">{{ _('Archived') }}</span>
+                    <span class="badge bg-warning-subtle text-warning-emphasis">{{ _('Archived') }}</span>
                     {% else %}
                     <span class="badge bg-success">{{ _('Active') }}</span>
                     {% endif %}

@@ -35,6 +35,7 @@ from ..helpers import (generate_unique_name, generate_xlsx_template,
                        get_ordered_analytes_for_model, replace_undefined,
                        sort_analytes_list_by_name,
                        update_associated_data_tables, validate_and_convert)
+from app.utils.files import dataframe_to_excel_bytes
 from ..models import (Analyte, AnalyteDataType, AnimalModel, DataTable,
                       DataTableMoleculeUsage, ControlledMolecule,
                       EthicalApproval, ExperimentalGroup, ExperimentDataRow,
@@ -734,50 +735,58 @@ def download_group_data(group_id):
         df = pd.DataFrame(processed_animal_data, columns=final_ordered_field_names)
         df = df.fillna('')
 
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Animal Data')
-            
-            # Add data validation for category fields (like the template does)
-            workbook = writer.book
-            worksheet = writer.sheets['Animal Data']
-            
-            # Create a mapping of field names to analytes for validation
-            analyte_map = {analyte.name: analyte for analyte in ordered_animal_model_analytes}
-            
-            for col_idx, field_name in enumerate(final_ordered_field_names, 1):
-                if field_name in analyte_map:
-                    analyte = analyte_map[field_name]
-                    col_letter = openpyxl.utils.get_column_letter(col_idx)
-                    header_cell = worksheet.cell(row=1, column=col_idx)
-                    comment_lines = []
-                    
-                    if analyte.description:
-                        comment_lines.append(f"Description: {analyte.description}")
-                    if analyte.unit:
-                        comment_lines.append(f"Unit: {analyte.unit}")
-                    
-                    # Add data validation for category fields
-                    if analyte.data_type == AnalyteDataType.CATEGORY and analyte.allowed_values:
-                        allowed_list = [v.strip() for v in analyte.allowed_values.split(';')]
-                        formula = f'"{",".join(allowed_list)}"'
-                        dv = DataValidation(type="list", formula1=formula, allow_blank=True)
-                        worksheet.add_data_validation(dv)
-                        dv.add(f'{col_letter}2:{col_letter}1048576')
-                        comment_lines.append(f"Allowed values: {', '.join(allowed_list)}")
-                    
-                    # Add date validation
-                    elif analyte.data_type == AnalyteDataType.DATE:
-                        dv = DataValidation(type="date", operator="greaterThan", formula1="1900-01-01")
-                        worksheet.add_data_validation(dv)
-                        dv.add(f'{col_letter}2:{col_letter}1048576')
-                        comment_lines.append("Format: YYYY-MM-DD")
-                        for cell in worksheet[col_letter][1:]:
-                            cell.number_format = 'YYYY-MM-DD'
-                    
-                    if comment_lines:
-                        header_cell.comment = Comment("\n".join(comment_lines), "System")
+        # Use dataframe_to_excel_bytes for CSV injection protection
+        output = dataframe_to_excel_bytes(df, sheet_name='Animal Data', index=False)
         
+        # Add data validation and comments to the workbook
+        import openpyxl
+        from openpyxl.comments import Comment
+        from openpyxl.worksheet.datavalidation import DataValidation
+        
+        # Reopen the BytesIO to add validation
+        output.seek(0)
+        workbook = openpyxl.load_workbook(output)
+        worksheet = workbook['Animal Data']
+        
+        # Create a mapping of field names to analytes for validation
+        analyte_map = {analyte.name: analyte for analyte in ordered_animal_model_analytes}
+        
+        for col_idx, field_name in enumerate(final_ordered_field_names, 1):
+            if field_name in analyte_map:
+                analyte = analyte_map[field_name]
+                col_letter = openpyxl.utils.get_column_letter(col_idx)
+                header_cell = worksheet.cell(row=1, column=col_idx)
+                comment_lines = []
+                
+                if analyte.description:
+                    comment_lines.append(f"Description: {analyte.description}")
+                if analyte.unit:
+                    comment_lines.append(f"Unit: {analyte.unit}")
+                
+                # Add data validation for category fields
+                if analyte.data_type == AnalyteDataType.CATEGORY and analyte.allowed_values:
+                    allowed_list = [v.strip() for v in analyte.allowed_values.split(';')]
+                    formula = f'"{";".join(allowed_list)}"'
+                    dv = DataValidation(type="list", formula1=formula, allow_blank=True)
+                    worksheet.add_data_validation(dv)
+                    dv.add(f'{col_letter}2:{col_letter}1048576')
+                    comment_lines.append(f"Allowed values: {', '.join(allowed_list)}")
+                
+                # Add date validation
+                elif analyte.data_type == AnalyteDataType.DATE:
+                    dv = DataValidation(type="date", operator="greaterThan", formula1="1900-01-01")
+                    worksheet.add_data_validation(dv)
+                    dv.add(f'{col_letter}2:{col_letter}1048576')
+                    comment_lines.append("Format: YYYY-MM-DD")
+                    for cell in worksheet[col_letter][1:]:
+                        cell.number_format = 'YYYY-MM-DD'
+                
+                if comment_lines:
+                    header_cell.comment = Comment("\n".join(comment_lines), "System")
+        
+        # Save back to BytesIO
+        output = io.BytesIO()
+        workbook.save(output)
         output.seek(0)
 
         safe_group_name = _safe_filename(group.name)
@@ -1059,35 +1068,100 @@ def randomize_group(group_id):
         units = []
         if unit_key == '__individual__' or allow_splitting:
             units = [[animal] for animal in pool]
+            # Standard Randomization for Individuals
+            # Shuffle units
+            random.shuffle(units)
+            
+            total_pool_units = len(units)
+            total_requested_units_overall = sum(tg['count'] for tg in data['treatment_groups'])
+            
+            assignment_pool = []
+            if total_requested_units_overall > 0:
+                for tg in data['treatment_groups']:
+                    num_to_assign = round((tg['count'] / total_requested_units_overall) * total_pool_units)
+                    tg_info = {'blinded': tg['blinded_name'], 'actual': tg['actual_name']}
+                    assignment_pool.extend([tg_info] * int(num_to_assign))
+                
+                # Fill remaining or cut excess
+                while len(assignment_pool) < total_pool_units:
+                     all_possible_groups = [{'blinded': tg['blinded_name'], 'actual': tg['actual_name']} for tg in data['treatment_groups']]
+                     if not all_possible_groups: break
+                     assignment_pool.append(random.choice(all_possible_groups))
+                
+                assignment_pool = assignment_pool[:total_pool_units]
+                random.shuffle(assignment_pool)
+
+            # Assign
+            for unit, assignment in zip(units, assignment_pool):
+                for animal_data in unit:
+                    final_assignments[animal_data['index']] = assignment
+
         else:
+            # Cluster Randomization (e.g. by Cage)
+            # Greedy Balance Algorithm
             clusters = defaultdict(list)
             for animal in pool:
-                clusters[animal.get(unit_key, 'N/A')].append(animal)
-            units = list(clusters.values())
-
-        total_pool_units = len(units)
-        total_requested_units_overall = sum(tg['count'] for tg in data['treatment_groups'])
-        
-        assignment_pool = []
-        if total_requested_units_overall > 0:
-            for tg in data['treatment_groups']:
-                num_to_assign = round((tg['count'] / total_requested_units_overall) * total_pool_units)
-                # Store the FULL treatment group object or a tuple of names
-                tg_info = {'blinded': tg['blinded_name'], 'actual': tg['actual_name']}
-                assignment_pool.extend([tg_info] * int(num_to_assign))
+                key = animal.get(unit_key, 'N/A')
+                clusters[key].append(animal)
             
-            while len(assignment_pool) < total_pool_units:
-                if not assignment_pool:
-                    all_possible_groups = [{'blinded': tg['blinded_name'], 'actual': tg['actual_name']} for tg in data['treatment_groups']]
-                    if not all_possible_groups: break
-                    assignment_pool.append(random.choice(all_possible_groups))
-                else:
-                    assignment_pool.append(random.choice(assignment_pool))
+            # Sort clusters by size (Descending) - "Water Bottle Problem" fix
+            sorted_clusters = sorted(clusters.values(), key=len, reverse=True)
+            
+            # Prepare Trackers
+            # We need to track assignments made SO FAR to balance this stratum/overall
+            # If we want to balance *overall*, we should pass a counter in. 
+            # But here `final_assignments` is local. We can count from it.
+            
+            # Calculate current group counts from `final_assignments`
+            current_counts = defaultdict(int) 
+            for assign in final_assignments.values():
+                name = assign['blinded'] if use_blinding else assign['actual']
+                current_counts[name] += 1
+            
+            # Also init with 0 for all groups
+            group_defs = {tg['blinded_name']: tg for tg in data['treatment_groups']} if use_blinding else {tg['actual_name']: tg for tg in data['treatment_groups']}
+            for name in group_defs:
+                if name not in current_counts: current_counts[name] = 0
 
-            assignment_pool = assignment_pool[:total_pool_units]
-            random.shuffle(assignment_pool)
+            # Iterate Sorted Clusters
+            for cluster in sorted_clusters:
+                # Find eligible group with LOWEST current count ratio (or absolute count?)
+                # Ratio is better if target sizes differ.
+                
+                best_group = None
+                min_ratio = float('inf')
+                
+                for tg in data['treatment_groups']:
+                    name = tg['blinded_name'] if use_blinding else tg['actual_name']
+                    target_n = tg['count']
+                    if target_n == 0: continue
+                    
+                    current_n = current_counts[name]
+                    ratio = current_n / target_n
+                    
+                    if ratio < min_ratio:
+                        min_ratio = ratio
+                        best_group = tg
+                    elif ratio == min_ratio:
+                        # Tie-breaker: Randomize or stick to order? Randomize.
+                        if random.choice([True, False]):
+                            best_group = tg
+                
+                if not best_group:
+                     # Fallback if no targets (shouldn't happen)
+                     best_group = data['treatment_groups'][0]
 
-        random.shuffle(units)
+                # Assign this cluster to best_group
+                assign_obj = {'blinded': best_group['blinded_name'], 'actual': best_group['actual_name']}
+                target_name_key = assign_obj['blinded' if use_blinding else 'actual']
+                
+                for animal_data in cluster:
+                    final_assignments[animal_data['index']] = assign_obj
+                
+                # Update counter
+                current_counts[target_name_key] += len(cluster)
+            
+            current_app.logger.info(f"Cluster Randomization (Greedy): Assigned {len(sorted_clusters)} clusters in this pool.")
         
         if assignment_method == 'Minimization' and minimization_details:
             # For minimization, we need to track counts of ASSIGNED groups to stay balanced

@@ -208,7 +208,7 @@ def perform_data_checks(df, grouping_params, numerical_params, is_repeated, subj
                 for _, group_df_iter in df_clean_for_param.groupby(group_col, dropna=False):
                     current_group_series = group_df_iter[num_param].dropna()
                     if not current_group_series.empty:
-                        outliers_mask_group = detect_outliers(current_group_series)
+                        outliers_mask_group, _ = detect_outliers(current_group_series)
                         n_outliers_in_group = outliers_mask_group.sum()
                         total_outliers_for_param_checks += n_outliers_in_group
                         df_clean_after_outliers_list.append(group_df_iter[~outliers_mask_group])

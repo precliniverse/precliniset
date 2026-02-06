@@ -32,13 +32,20 @@ def analyze_datatable(datatable_id):
     
     if request.method == 'GET' and not 'latest_analysis_results' in session:
          # FAST PATH
-         numerical_cols, categorical_cols = analysis_service.get_datatable_metadata(data_table)
+         numerical_cols, categorical_cols, column_types = analysis_service.get_datatable_metadata(data_table)
          df = None # We don't need the DF for the form
          subject_id_col = 'ID' # Default
          subject_id_col_present = True # Assumed for form
     else:
          # SLOW PATH (Analysis execution or Result display)
          df, numerical_cols, categorical_cols = analysis_service.prepare_dataframe(data_table)
+         
+         # Build column_types from the dataframe
+         column_types = {}
+         for col in numerical_cols:
+             column_types[col] = 'numerical'
+         for col in categorical_cols:
+             column_types[col] = 'categorical'
          
          if df is None or df.empty:
             flash(_("No data rows available in this DataTable to analyze."), "warning")
@@ -113,6 +120,7 @@ def analyze_datatable(datatable_id):
         data_table=data_table,
         categorical_columns=categorical_cols,
         numerical_columns=numerical_cols,
+        column_types=column_types,
         analysis_stage=analysis_stage,
         form_data=form_data,
         analysis_results=analysis_results,
@@ -184,14 +192,17 @@ def analyze_selected_datatables():
     
     numerical_cols = []
     categorical_cols = []
+    column_types = {}  # New: track column types
     import pandas as pd
     internal_cols = ['_source_datatable_id', '_source_experimental_group_name', '_source_protocol_name', '_source_datatable_date']
     for col in df_combined.columns:
         if col in internal_cols or col == subject_id_col: continue
         if pd.api.types.is_numeric_dtype(df_combined[col]):
             numerical_cols.append(col)
+            column_types[col] = 'numerical'
         else:
             categorical_cols.append(col)
+            column_types[col] = 'categorical'
 
     # 3. Handle POST Actions
     if request.method == 'POST':
@@ -233,6 +244,7 @@ def analyze_selected_datatables():
         analysis_page_title=page_title,
         categorical_columns=sorted(categorical_cols),
         numerical_columns=sorted(numerical_cols),
+        column_types=column_types,
         analysis_stage=analysis_stage,
         form_data=form_data,
         analysis_results=analysis_results,
@@ -387,6 +399,8 @@ def _extract_form_data(form, stage):
         'graph_type': form.get('graph_type') or form.get('confirmed_graph_type', 'Box Plot'),
         'start_y_at_zero': (form.get('start_y_at_zero') == 'true') or (form.get('confirmed_start_y_at_zero') == 'true'),
         'exclude_outliers': (form.get('exclude_outliers') == 'true') or (form.get('confirmed_exclude_outliers') == 'true'),
+        'outlier_method': form.get('outlier_method') or form.get('confirmed_outlier_method', 'iqr'),
+        'outlier_threshold': float(form.get('outlier_threshold') or form.get('confirmed_outlier_threshold', 1.5)),
         'reference_range_id': form.get('reference_range_id') or form.get('confirmed_reference_range_id'),
         'control_group_param': form.get('control_group_param') or form.get('confirmed_control_group_param'),
         'covariate_param': form.get('covariate_param') or form.get('confirmed_covariate_param'),
@@ -411,6 +425,8 @@ def _extract_form_data(form, stage):
         'confirmed_graph_type': data['graph_type'],
         'confirmed_start_y_at_zero': data['start_y_at_zero'],
         'confirmed_exclude_outliers': data['exclude_outliers'],
+        'confirmed_outlier_method': data['outlier_method'],
+        'confirmed_outlier_threshold': data['outlier_threshold'],
         'confirmed_reference_range_id': data['reference_range_id'],
         'confirmed_control_group_param': data['control_group_param'],
         'confirmed_covariate_param': data['covariate_param'],

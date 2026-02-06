@@ -5,6 +5,13 @@ import os
 import subprocess
 import platform
 
+# Load environment variables from .env if present (fails gracefully if dotenv not installed)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 def check_dependencies():
     """Check if critical dependencies are installed."""
     missing = []

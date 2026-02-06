@@ -90,24 +90,27 @@ def list_ethical_approvals():
         
         datatable_counts_map = {r.ethical_approval_id: r.dt_count for r in datatable_counts_query}
         
-        # 3. Animal Counts (DISABLED FOR PERFORMANCE)
-        # Parsing JSON for 80k groups causes timeouts.
-        # animal_counts_map = {} 
+        # 3. Animal Counts (OPTIMIZED SQL)
+        # Uses direct SQL count instead of loading JSON objects
+        animal_counts_query = db.session.query(
+            ExperimentalGroup.ethical_approval_id,
+            func.count(Animal.id).label('animal_count')
+        ).join(Animal, ExperimentalGroup.id == Animal.group_id)\
+         .filter(ExperimentalGroup.ethical_approval_id.in_(ea_ids))\
+         .group_by(ExperimentalGroup.ethical_approval_id).all()
+        
+        animal_counts_map = {r.ethical_approval_id: r.animal_count for r in animal_counts_query}
         
         for approval in ethical_approvals:
-            # animals_used = animal_counts_map.get(approval.id, 0)
-            # animals_available = approval.number_of_animals - animals_used
+            animals_used = animal_counts_map.get(approval.id, 0)
+            animals_available = approval.number_of_animals - animals_used
             
-            # Placeholder values to prevent crash
-            animals_used = "Calc. Disabled" 
-            animals_available = "N/A"
-
             approval_summaries.append({
                 'approval': approval,
                 'team_name': approval.owner_team.name if approval.owner_team else _l("N/A"),
-                'animals_available_count': "...",
-                'animals_used_count': "...", 
-                'animals_linked_count': "...",
+                'animals_available_count': animals_available,
+                'animals_used_count': animals_used, 
+                'animals_linked_count': animals_used, # Assuming linked means used for now
                 'contributing_groups_count': group_counts_map.get(approval.id, 0),
                 'linked_datatables_count': datatable_counts_map.get(approval.id, 0),
                 'ea_id': approval.id
@@ -833,31 +836,28 @@ def export_statistics():
             
             output_data.sort(key=lambda x: (x['ea_short_ref'], x['group_name']))
     
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = str(_l("Animal Usage Statistics"))
-
-    headers = [
+    # Convert to DataFrame and use dataframe_to_excel_bytes for CSV injection protection
+    import pandas as pd
+    from app.utils.files import dataframe_to_excel_bytes
+    
+    df = pd.DataFrame(output_data, columns=[
+        'ea_short_ref',
+        'ea_title',
+        'group_name',
+        'nb_animals_with_datatable',
+        'highest_severity_in_range'
+    ])
+    
+    # Rename columns to user-friendly names
+    df.columns = [
         str(_l('Ethical Approval Short Ref')),
         str(_l('Ethical Approval Title')),
         str(_l('Group Name')),
         str(_l('Number of Animals with DataTable')),
         str(_l('Highest Severity in Range'))
     ]
-    ws.append(headers)
-
-    for row_data in output_data:
-        ws.append([
-            row_data['ea_short_ref'],
-            row_data['ea_title'],
-            row_data['group_name'],
-            row_data['nb_animals_with_datatable'],
-            row_data['highest_severity_in_range']
-        ])
-
-    excel_file = io.BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
+    
+    excel_file = dataframe_to_excel_bytes(df, sheet_name=str(_l("Animal Usage Statistics")))
 
     filename = f"animal_usage_statistics_{start_date_str}_to_{end_date_str}.xlsx"
     return send_file(excel_file,
@@ -924,12 +924,10 @@ def export_animals_for_ethical_approval(ethical_approval_id):
             export_data.append(row)
 
     df = pd.DataFrame(export_data)
-
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Animals')
-
-    output.seek(0)
+    
+    # Use dataframe_to_excel_bytes for CSV injection protection
+    from app.utils.files import dataframe_to_excel_bytes
+    output = dataframe_to_excel_bytes(df, sheet_name='Animals')
 
     # Safe filename
     safe_ref = re.sub(r'[^\w\s-]', '', approval.reference_number or 'unknown').strip().replace(' ', '_')

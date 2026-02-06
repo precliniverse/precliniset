@@ -110,55 +110,35 @@ class ImportPipelineService(BaseService):
 
     def execute_script(self, script_content, file_path):
         """
-        Executes raw script content safely.
+        Executes raw script content safely using asteval.
         """
-        # Prepare safe environment
-        safe_globals = {
-            'pd': pd,
-            'np': np,
-            're': re,
-            'math': math,
-            'statistics': statistics,
-            'datetime': datetime,
-            'json': json,
-            '__builtins__': {
-                'range': range,
-                'list': list,
-                'dict': dict,
-                'set': set,
-                'int': int,
-                'float': float,
-                'str': str,
-                'len': len,
-                'enumerate': enumerate,
-                'zip': zip,
-                'print': print,
-                'sum': sum,
-                'min': min,
-                'max': max,
-                'round': round,
-                'any': any,
-                'all': all,
-                'sorted': sorted,
-                'map': map,
-                'filter': filter,
-                'Exception': Exception,
-                'ValueError': ValueError,
-                'TypeError': TypeError,
-            }
-        }
-        
-        local_scope = {}
-        
         try:
-            # Execute the script to load the parse function into local_scope
-            exec(script_content, safe_globals, local_scope)
+            import asteval
             
-            if 'parse' not in local_scope:
-                raise ValueError("Script successfully executed but 'parse' function was not found in local scope.")
+            # Create a safe interpreter with allowed symbols
+            interpreter = asteval.Interpreter()
             
-            # Call the parse function
-            result = local_scope['parse'](file_path)
+            # Add allowed libraries to the symbol table
+            interpreter.symtable['pd'] = pd
+            interpreter.symtable['np'] = np
+            interpreter.symtable['re'] = re
+            interpreter.symtable['math'] = math
+            interpreter.symtable['statistics'] = statistics
+            interpreter.symtable['datetime'] = datetime
+            interpreter.symtable['json'] = json
+            
+            # Execute the script to define the parse function
+            interpreter.eval(script_content)
+            
+            # Check if parse function was defined
+            if 'parse' not in interpreter.symtable:
+                raise ValueError("Script successfully executed but 'parse' function was not found.")
+            
+            # Get the parse function from the symbol table
+            parse_func = interpreter.symtable['parse']
+            
+            # Call the parse function with the file path
+            result = parse_func(file_path)
             
             # Convert DataFrame to list of dicts if necessary
             if isinstance(result, pd.DataFrame):

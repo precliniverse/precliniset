@@ -1,5 +1,6 @@
 # app/services/analysis_service.py
 import pandas as pd
+from sqlalchemy import func
 from datetime import datetime
 from flask import current_app
 from flask_babel import lazy_gettext as _l
@@ -31,28 +32,59 @@ class AnalysisService:
         """
         from app.models import Animal
         
-        # 1. Query animals for this group
-        animals = Animal.query.filter_by(group_id=data_table.group_id).order_by(Animal.id).all()
+        # 1. Determine fields to extract
+        # Core columns in the Animal model that we already query explicitly
+        core_cols = {'sex', 'status', 'date_of_birth', 'id', 'uid'}
         
-        if not animals:
-            return None, [], []
+        json_fields = []
+        if data_table.group and data_table.group.model:
+            json_fields.extend([
+                a.name for a in data_table.group.model.analytes 
+                if a.name and a.name.lower() not in core_cols
+            ])
         
-        # 2. Build base DataFrame from Animal records
-        animal_data = []
-        for animal in animals:
-            row = {
-                'ID': animal.uid,
-                'Date of Birth': animal.date_of_birth.isoformat() if animal.date_of_birth else None,
-                'sex': animal.sex,
-                'status': animal.status
-            }
-            
-            # Add measurements from JSON column using pd.json_normalize approach
-            if animal.measurements:
-                row.update(animal.measurements)
-            
-            animal_data.append(row)
+        # 2. Build optimized SQL query
+        # We select core columns + specific JSON keys
+        query = db.session.query(
+            Animal.uid.label('ID'),
+            Animal.date_of_birth,
+            Animal.sex,
+            Animal.status,
+            *[func.json_extract(Animal.measurements, f'$.{field}').label(field) for field in json_fields]
+        ).filter_by(group_id=data_table.group_id).order_by(Animal.id)
         
+        try:
+             # Execute SQL query directly into a list of dictionaries
+             results = query.all()
+             
+             # Convert Row objects to dicts
+             animal_data = []
+             for row in results:
+                 row_dict = {
+                     'ID': row.ID,
+                     'date_of_birth': row.date_of_birth.isoformat() if row.date_of_birth else None,
+                     'Date of Birth': row.date_of_birth.isoformat() if row.date_of_birth else None, # Compatibility
+                     'sex': row.sex,
+                     'Sex': row.sex, # Compatibility
+                     'status': row.status,
+                     'Status': row.status, # Compatibility
+                 }
+                 # Add extracted JSON fields
+                 for field in json_fields:
+                     row_dict[field] = getattr(row, field, None)
+                 animal_data.append(row_dict)
+
+        except Exception as e:
+            current_app.logger.warning(f"Optimized SQL JSON query failed: {e}")
+            # Fallback: legacy object loading
+            animals = Animal.query.filter_by(group_id=data_table.group_id).order_by(Animal.id).all()
+            animal_data = []
+            for animal in animals:
+                animal_data.append(animal.to_dict())
+
+        if not animal_data:
+             return None, [], []
+                
         # 3. Merge with protocol data from ExperimentDataRow
         rows_query = data_table.experiment_rows.order_by(ExperimentDataRow.row_index)
         existing_data_rows_dict = {row.row_index: row.row_data for row in rows_query.all()}
@@ -112,19 +144,36 @@ class AnalysisService:
         """
         Fast-path to get column metadata without loading the full DataFrame.
         Relies on Model definitions rather than inspecting every row.
+        
+        Returns:
+            Tuple of (numerical_columns, categorical_columns, column_types)
+            where column_types is a dict mapping column name to 'numerical' or 'categorical'
         """
         numerical_columns = []
         categorical_columns = []
+        column_types = {}  # New: maps column name to type
         
         # 1. Animal Model Fields
         if data_table.group and data_table.group.model:
+            # We skip internal IDs and raw date fields (Age is provided separately)
+            # sex and status are biological factors and must be available for grouping.
+            skip_fields = {'id', 'uid', 'animal_id', 'date_of_birth', 'date of birth'}
             for analyte in data_table.group.model.analytes:
-                if analyte.name in ['ID', 'Date of Birth']:
+                if not analyte.name or analyte.name.lower() in skip_fields:
                     continue
+                
+                # Use Title Case for these core factors for better UI display
+                # while keeping compatibility with prepare_dataframe keys
+                display_name = analyte.name
+                if display_name.lower() == 'sex': display_name = 'Sex'
+                if display_name.lower() == 'status': display_name = 'Status'
+
                 if analyte.data_type.value in ['int', 'float']:
-                    numerical_columns.append(analyte.name)
+                    numerical_columns.append(display_name)
+                    column_types[display_name] = 'numerical'
                 else:
-                    categorical_columns.append(analyte.name)
+                    categorical_columns.append(display_name)
+                    column_types[display_name] = 'categorical'
         
         # 2. Protocol Fields
         if data_table.protocol:
@@ -137,8 +186,10 @@ class AnalysisService:
                  analyte = assoc.analyte
                  if analyte.data_type.value in ['int', 'float']:
                      numerical_columns.append(analyte.name)
+                     column_types[analyte.name] = 'numerical'
                  else:
                      categorical_columns.append(analyte.name)
+                     column_types[analyte.name] = 'categorical'
         
         # 3. Calculated Age
         # We assume if 'Date of Birth' is in the model (or implicitly available) and we have a Date, we have Age.
@@ -146,17 +197,19 @@ class AnalysisService:
         # Let's check the Animal Model for 'Date of Birth'.
         has_dob = False
         if data_table.group and data_table.group.model:
-            if any(a.name == 'Date of Birth' for a in data_table.group.model.analytes):
+            dob_names = {'date of birth', 'date_of_birth'}
+            if any(a.name and a.name.lower() in dob_names for a in data_table.group.model.analytes):
                 has_dob = True
         
         # If not in model, it might still be in data... but this is FAST PATH.
         # We'll assume strict Model adherence for fast path.
         if has_dob and data_table.date:
              numerical_columns.append('Age (Days)')
+             column_types['Age (Days)'] = 'numerical'
              
         # Also ensure ID is not in either list (usually handled by UI exclusion, but good to be safe)
         
-        return numerical_columns, categorical_columns
+        return numerical_columns, categorical_columns, column_types
 
     def aggregate_datatables(self, selected_datatable_ids, user_id=None):
         """
@@ -299,13 +352,24 @@ class AnalysisService:
         # 1.5 Suggest Tests
         extra_context = {
             'has_control_group': bool(form_data.get('control_group_param')),
-            'has_covariate': bool(form_data.get('covariate_param'))
+            'has_covariate': bool(form_data.get('covariate_param')),
+            'exclude_outliers': bool(exclude_outliers),
+            'outlier_method': form_data.get('outlier_method', 'iqr'),
+            'outlier_threshold': float(form_data.get('outlier_threshold', 1.5))
         }
+        
+        # Build column_types dictionary for test suggester
+        column_types = {}
+        for col in available_numerical:
+            column_types[col] = 'numerical'
+        for col in available_categorical:
+            column_types[col] = 'categorical'
 
         suggestions = suggest_statistical_tests(
             len(grouping_params), len(numerical_params), is_repeated, 
             checks, subject_id_col, subject_id_col_present, available_numerical,
-            extra_context=extra_context
+            extra_context=extra_context,
+            column_types=column_types
         )
         results['repeated_measures_test_suggestions'] = suggestions.get('repeated_measures_test_suggestions', {})
         results['overall_suggestion_notes'] = suggestions.get('overall_suggestion_notes', [])
@@ -334,9 +398,9 @@ class AnalysisService:
              self._analyze_survival(df, grouping_params, form_data, results)
 
         if is_repeated:
-            self._analyze_repeated(df, grouping_params, numerical_params, chosen_tests, graph_type, start_y_at_zero, subject_id_col, exclude_outliers, results, form_data, reference_range_summary=ref_range_summary)
+            self._analyze_repeated(df, grouping_params, numerical_params, chosen_tests, graph_type, start_y_at_zero, subject_id_col, exclude_outliers, results, form_data, reference_range_summary=ref_range_summary, suggestions=suggestions)
         else:
-            self._analyze_independent(df, grouping_params, numerical_params, chosen_tests, graph_type, start_y_at_zero, subject_id_col, exclude_outliers, results, form_data, reference_range_summary=ref_range_summary)
+            self._analyze_independent(df, grouping_params, numerical_params, chosen_tests, graph_type, start_y_at_zero, subject_id_col, exclude_outliers, results, form_data, reference_range_summary=ref_range_summary, suggestions=suggestions)
 
         return replace_undefined(results)
 
@@ -468,7 +532,7 @@ class AnalysisService:
         
         return summary
 
-    def _analyze_repeated(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None):
+    def _analyze_repeated(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None, suggestions=None):
         # Handle Splitting (Must be done before id_vars def)
         splitting_param = form_data.get('splitting_param')
         
@@ -477,51 +541,62 @@ class AnalysisService:
         test_key = tests.get('rm_set', 'none')
 
         if splitting_param and splitting_param in df.columns:
-             # --- FULL SPLIT ANALYSIS (RM) ---
-             # We do NOT add splitting_param to grouping because we filter by it.
-             # grouping stays as the main factors (e.g. Genotype)
-             
-             unique_splits = sorted(df[splitting_param].dropna().unique())
-             split_results_list = []
-             
-             for split_val in unique_splits:
-                 # Filter Data
-                 sub_df = df[df[splitting_param] == split_val].copy()
-                 if sub_df.empty: continue
-                 
-                 # Reshape
-                 id_vars = [subject_id] + grouping
-                 df_long = pd.melt(sub_df, id_vars=[c for c in id_vars if c in sub_df.columns], value_vars=numerical, var_name='_WithinFactorLevel_', value_name='_MeasurementValue_')
+            # --- FULL SPLIT ANALYSIS (RM) ---
+            # We do NOT add splitting_param to grouping because we filter by it.
+            # grouping stays as the main factors (e.g. Genotype)
+            
+            unique_splits = sorted(df[splitting_param].dropna().unique())
+            split_results_list = []
+            
+            for split_val in unique_splits:
+                # Filter Data
+                sub_df = df[df[splitting_param] == split_val].copy()
+                if sub_df.empty: continue
+                
+                # Reshape
+                id_vars = [subject_id] + grouping
+                df_long = pd.melt(sub_df, id_vars=[c for c in id_vars if c in sub_df.columns], value_vars=numerical, var_name='_WithinFactorLevel_', value_name='_MeasurementValue_')
 
-                 # Stats
-                 sub_stats = self.stats_service.execute_test(df_long, test_key, '_MeasurementValue_', grouping, True, subject_id, exclude_outliers)
+                # Stats
+                outlier_method = form_data.get('outlier_method', 'iqr')
+                outlier_threshold = float(form_data.get('outlier_threshold', 1.5))
+                extra_params = {
+                    'outlier_method': outlier_method,
+                    'outlier_threshold': outlier_threshold,
+                    'control_group': form_data.get('control_group_param')
+                }
+                sub_stats = self.stats_service.execute_test(df_long, test_key, '_MeasurementValue_', grouping, True, subject_id, exclude_outliers, extra_params=extra_params)
 
-                 # Plot - Use split-specific ref range if available
-                 split_ref_range = reference_range_summary.get('splits', {}).get(str(split_val)) if reference_range_summary else None
-                 if not split_ref_range and reference_range_summary:
-                     split_ref_range = reference_range_summary.get('global')
+                # Plot - Use split-specific ref range if available
+                split_ref_range = reference_range_summary.get('splits', {}).get(str(split_val)) if reference_range_summary else None
+                if not split_ref_range and reference_range_summary:
+                    split_ref_range = reference_range_summary.get('global')
 
-                 sub_graph, sub_notes = generate_plot(df_long, '_MeasurementValue_', grouping, chosen_graph_type, start_y_zero, True, subject_id, numerical, exclude_outliers=exclude_outliers, stats_results=sub_stats, reference_range_summary=split_ref_range)
+                sub_graph, sub_notes = generate_plot(
+                    df_long, '_MeasurementValue_', grouping, chosen_graph_type, start_y_zero, True, subject_id, numerical, 
+                    exclude_outliers=exclude_outliers, stats_results=sub_stats, reference_range_summary=split_ref_range,
+                    outlier_method=outlier_method, outlier_threshold=outlier_threshold
+                )
 
-                 results['overall_notes'].extend(sub_notes)
-                 
-                 # Summary (Not standard for RM set to have table, but maybe future?)
-                 
-                 split_results_list.append({
-                     'split_label': f"{splitting_param}: {split_val}",
-                     'graph_data': sub_graph,
-                     'statistical_results': sub_stats,
-                     'notes': sub_notes,
-                     'is_rm_set': True,
-                     'test_name': self.stats_service._get_test_name(test_key)
-                 })
-             
-             results['results_by_parameter']['repeated_measures_set'] = {
-                 'is_split_analysis': True,
-                 'splitting_param': splitting_param,
-                 'splits': split_results_list,
-                 'is_rm_set': True
-             }
+                results['overall_notes'].extend(sub_notes)
+                
+                # Summary (Not standard for RM set to have table, but maybe future?)
+                
+                split_results_list.append({
+                    'split_label': f'{splitting_param}: {split_val}',
+                    'graph_data': sub_graph,
+                    'statistical_results': sub_stats,
+                    'notes': sub_notes,
+                    'is_rm_set': True,
+                    'test_name': self.stats_service._get_test_name(test_key)
+                })
+            
+            results['results_by_parameter']['repeated_measures_set'] = {
+                'is_split_analysis': True,
+                'splitting_param': splitting_param,
+                'splits': split_results_list,
+                'is_rm_set': True
+            }
 
         else:
              # Standard (No Split) - Or if Split was originally just a grouping?
@@ -534,11 +609,30 @@ class AnalysisService:
              df_long = pd.melt(df, id_vars=[c for c in id_vars if c in df.columns], value_vars=numerical, var_name='_WithinFactorLevel_', value_name='_MeasurementValue_')
             
              # Stats
-             stats_res = self.stats_service.execute_test(df_long, test_key, '_MeasurementValue_', grouping, True, subject_id, exclude_outliers)
+             outlier_method = form_data.get('outlier_method', 'iqr')
+             outlier_threshold = float(form_data.get('outlier_threshold', 1.5))
+             extra_params = {
+                 'outlier_method': outlier_method,
+                 'outlier_threshold': outlier_threshold,
+                 'control_group': form_data.get('control_group_param')
+             }
+             stats_res = self.stats_service.execute_test(df_long, test_key, '_MeasurementValue_', grouping, True, subject_id, exclude_outliers, extra_params=extra_params)
+             
+             # Inject Rationale
+             if suggestions:
+                 rm_sug = suggestions.get('repeated_measures_test_suggestions', {}).get('possible_tests', [])
+                 for t in rm_sug:
+                     if t['key'] == test_key and t.get('reason'):
+                         stats_res['rationale'] = t['reason']
+                         break
 
              # Plot (Pass stats_res for significance stars)
              global_ref_range = reference_range_summary.get('global') if reference_range_summary else None
-             graph_data, notes = generate_plot(df_long, '_MeasurementValue_', grouping, chosen_graph_type, start_y_zero, True, subject_id, numerical, exclude_outliers=exclude_outliers, stats_results=stats_res, reference_range_summary=global_ref_range)
+             graph_data, notes = generate_plot(
+                 df_long, '_MeasurementValue_', grouping, chosen_graph_type, start_y_zero, True, subject_id, numerical, 
+                 exclude_outliers=exclude_outliers, stats_results=stats_res, reference_range_summary=global_ref_range,
+                 outlier_method=outlier_method, outlier_threshold=outlier_threshold
+             )
 
              results['overall_notes'].extend(notes)
             
@@ -548,8 +642,13 @@ class AnalysisService:
                 'is_rm_set': True,
                 'test_name': self.stats_service._get_test_name(test_key)
              }
+             
+             # Check for Cage Effect (on the long data? or original wide data? Better on long for 1-way?)
+             # Actually, simpler to check on long data (Measurement ~ Cage) ignoring Time, or check per timepoint?
+             # Checking overall cage effect is a good start.
+             self._check_cage_effect(df_long, '_MeasurementValue_', results)
 
-    def _analyze_independent(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None):
+    def _analyze_independent(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None, suggestions=None):
         # Handle Splitting
         splitting_param = form_data.get('splitting_param')
         
@@ -573,11 +672,28 @@ class AnalysisService:
             # Stats (Run first to pass to plot)
             test_key = tests.get(param, 'none')
             
+            # Helper to find rationale
+            rationale = None
+            if suggestions:
+                param_checks = suggestions.get('checks_by_parameter', {}).get(param, {})
+                possible = param_checks.get('possible_tests', [])
+                for t in possible:
+                    if t['key'] == test_key and t.get('reason'):
+                        rationale = t['reason']
+                        break
+            
+            # Check for Cage Effect
+            self._check_cage_effect(df, param, results)
+            
             # Prepare extra params for advanced tests (ANCOVA / Dunnett)
+            outlier_method = form_data.get('outlier_method', 'iqr')
+            outlier_threshold = float(form_data.get('outlier_threshold', 1.5))
             extra_params = {
                 'control_group': form_data.get('control_group_param'),
                 'covariate': form_data.get('covariate_param'),
-                'event_col': form_data.get('survival_event_col')
+                'event_col': form_data.get('survival_event_col'),
+                'outlier_method': outlier_method,
+                'outlier_threshold': outlier_threshold
             }
 
             stats_res = {'p_value': None, 'results_data': None, 'error': None}
@@ -602,7 +718,11 @@ class AnalysisService:
                     if not split_ref_range and reference_range_summary:
                         split_ref_range = reference_range_summary.get('global')
 
-                    sub_graph, sub_notes = generate_plot(sub_df, param, grouping_for_stats, chosen_graph_type, start_y_zero, False, subject_id, None, exclude_outliers=exclude_outliers, stats_results=sub_stats, reference_range_summary=split_ref_range)
+                    sub_graph, sub_notes = generate_plot(
+                        sub_df, param, grouping_for_stats, chosen_graph_type, start_y_zero, False, subject_id, None, 
+                        exclude_outliers=exclude_outliers, stats_results=sub_stats, reference_range_summary=split_ref_range,
+                        outlier_method=outlier_method, outlier_threshold=outlier_threshold
+                    )
 
                     results['overall_notes'].extend(sub_notes)
 
@@ -628,9 +748,14 @@ class AnalysisService:
                 stats_res = self.stats_service.execute_test(
                     df, test_key, param, grouping_for_plots, False, subject_id, exclude_outliers, extra_params=extra_params
                 )
+                if rationale: stats_res['rationale'] = rationale
                 
                 global_ref_range = reference_range_summary.get('global') if reference_range_summary else None
-                graph_data, notes = generate_plot(df, param, grouping_for_plots, chosen_graph_type, start_y_zero, False, subject_id, None, exclude_outliers=exclude_outliers, stats_results=stats_res, reference_range_summary=global_ref_range)
+                graph_data, notes = generate_plot(
+                    df, param, grouping_for_plots, chosen_graph_type, start_y_zero, False, subject_id, None, 
+                    exclude_outliers=exclude_outliers, stats_results=stats_res, reference_range_summary=global_ref_range,
+                    outlier_method=outlier_method, outlier_threshold=outlier_threshold
+                )
 
                 results['overall_notes'].extend(notes)
                 
@@ -672,8 +797,7 @@ class AnalysisService:
                  current_app.logger.warning(f"Correlation matrix failed: {e}")
 
     def _generate_group_summary_table(self, df, grouping_params, numerical_params):
-        """Generate an HTML table summarizing group composition and sample sizes."""
-        import html
+        """Generate structured data for group composition summary table."""
         if not grouping_params:
             return None
 
@@ -689,25 +813,18 @@ class AnalysisService:
             # Count by group
             group_counts = df.groupby(group_col).size().reset_index(name='Count (n)')
 
-            # Format as HTML table
-            html_str = '<table class="table table-sm table-striped table-bordered">'
-            html_str += '<thead class="table-light"><tr>'
-            if len(grouping_params) == 1:
-                html_str += f'<th class="text-center">{html.escape(str(grouping_params[0]))}</th>'
-            else:
-                safe_groups = [html.escape(str(g)) for g in grouping_params]
-                html_str += '<th class="text-center">Group (' + ' / '.join(safe_groups) + ')</th>'
-            html_str += '<th class="text-center">Count (n)</th></tr></thead><tbody>'
-
-            for _, row in group_counts.iterrows():
-                safe_group_val = html.escape(str(row[group_col]))
-                html_str += f'<tr><td class="text-center">{safe_group_val}</td><td class="text-center">{row["Count (n)"]}</td></tr>'
-
-            # Total
-            html_str += f'<tr class="table-info fw-bold"><td class="text-center">Total</td><td class="text-center">{len(df)}</td></tr>'
-            html_str += '</tbody></table>'
-
-            return html_str
+            # Return structured data for template rendering
+            return {
+                'grouping_params': grouping_params,
+                'rows': [
+                    {
+                        'group_value': str(row[group_col]),
+                        'count': int(row['Count (n)'])
+                    }
+                    for _, row in group_counts.iterrows()
+                ],
+                'total': len(df)
+            }
         except Exception as e:
             current_app.logger.warning(f"Could not generate group summary table: {e}")
             return None
@@ -767,3 +884,27 @@ class AnalysisService:
             return None
     
 
+    def _check_cage_effect(self, df, param, results):
+        """Checks for significant cage effects and warns if found."""
+        if 'Cage' not in df.columns or df['Cage'].nunique() < 2:
+            return
+
+        try:
+            # Run simple One-Way ANOVA: Param ~ Cage
+            # use stats_service to reuse robust ANOVA logic
+            cage_res = self.stats_service.execute_test(
+                df, 
+                'anova_oneway', 
+                param, 
+                ['Cage'], 
+                False, # is_repeated
+                'ID', # subject_id (dummy if not RM, but needed for signature)
+                exclude_outliers=False 
+            )
+            
+            p_val = cage_res.get('p_value')
+            if p_val is not None and p_val < 0.05:
+                 results['overall_notes'].append(_l("<strong>Warning: Significant Cage Effect detected for '{param}' (p={p:.3f}).</strong> Data may be non-independent. Consider using Mixed Models with Cage as a random effect.").format(param=param, p=p_val))
+        except Exception as e:
+            # Swallow errors in background check
+            current_app.logger.warning(f"Cage effect check failed: {e}") 

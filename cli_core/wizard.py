@@ -154,13 +154,22 @@ class ConfigWizard:
         self.config['APP_PORT'] = Prompt.ask("Application Port", default=self.config.get('APP_PORT', '8000'))
         
         console.print("\n[cyan]--- Environment Profile ---[/cyan]")
-        console.print("1. Production")
-        console.print("2. Development")
+        console.print("[bold]1. Production[/bold]")
+        console.print("   [dim]Recommended for live deployments.[/dim]")
+        console.print("   - [green]Security:[/green] Strict validations and hardening enabled.")
+        console.print("   - [green]Database:[/green] [bold]Forces MySQL/MariaDB[/bold] (SQLite is forbidden).")
+        console.print("   - [green]Performance:[/green] Optimized assets, no debug overhead.")
+        
+        console.print("\n[bold]2. Development[/bold]")
+        console.print("   [dim]Recommended for local testing and coding.[/dim]")
+        console.print("   - [yellow]Debug:[/yellow] Interactive debugger and hot-reload enabled.")
+        console.print("   - [yellow]Database:[/yellow] SQLite allowed for zero-config setup.")
+        console.print("   - [yellow]Logging:[/yellow] Verbose DEBUG output for troubleshooting.")
         
         is_debug = self.config.get('FLASK_DEBUG') == '1'
         default_choice = "2" if is_debug else "1"
         
-        if Prompt.ask("Choice", choices=["1", "2"], default=default_choice) == "2":
+        if Prompt.ask("\nChoice", choices=["1", "2"], default=default_choice) == "2":
             self.config['FLASK_DEBUG'] = '1'
             self.config['APP_LOG_LEVEL'] = 'DEBUG'
         else:
@@ -240,17 +249,25 @@ class ConfigWizard:
                 self._ask_external_db()
                 if 'mysql' in profiles: profiles.remove('mysql')
         else:
-            console.print("1. SQLite (Easiest for Native)")
-            console.print("2. External/Local MySQL/MariaDB")
+            is_production = self.config.get('FLASK_DEBUG') == '0'
             
-            default_choice = "2" if self.config.get('DB_TYPE') == 'mysql' else "1"
-            
-            c = Prompt.ask("Choice", choices=["1", "2"], default=default_choice)
-            if c == '1':
-                self.config['DB_TYPE'] = 'sqlite'
-                if 'mysql' in profiles: profiles.remove('mysql')
-            else:
+            if is_production:
+                console.print("[warning]Production Profile Detected: SQLite is NOT permitted for production deployments.[/warning]")
+                console.print("Forcing usage of MySQL/MariaDB for data integrity and performance.")
+                self.config['DB_TYPE'] = 'mysql'
                 self._ask_external_db()
+            else:
+                console.print("1. SQLite (Easiest for Native development)")
+                console.print("2. External/Local MySQL/MariaDB")
+                
+                default_choice = "2" if self.config.get('DB_TYPE') == 'mysql' else "1"
+                
+                c = Prompt.ask("Choice", choices=["1", "2"], default=default_choice)
+                if c == '1':
+                    self.config['DB_TYPE'] = 'sqlite'
+                    if 'mysql' in profiles: profiles.remove('mysql')
+                else:
+                    self._ask_external_db()
         
         self.config['COMPOSE_PROFILES'] = ','.join(profiles)
 
@@ -358,6 +375,16 @@ class ConfigWizard:
             self.config['MAIL_DEFAULT_SENDER'] = Prompt.ask("Sender Email", default=self.config.get('MAIL_DEFAULT_SENDER'))
 
     def _save(self):
+        # Final validation
+        is_production = self.config.get('FLASK_DEBUG') == '0'
+        if is_production and self.config.get('DB_TYPE') == 'sqlite':
+            console.print("[bold red]CRITICAL ERROR: Production mode is enabled but Database Type is still set to SQLite.[/bold red]")
+            console.print("[red]The application will fail to start in production with SQLite.[/red]")
+            if Confirm.ask("Go back and fix database configuration?", default=True):
+                self._ask_database()
+            else:
+                console.print("[warning]Proceeding with invalid configuration as requested. Expect application startup failures.[/warning]")
+
         # Check port
         app_port = self.config.get('APP_PORT', '8000')
         console.print(f"[info]Checking port {app_port} availability...[/info]")

@@ -54,12 +54,16 @@
                         <div class="card mb-3">
                             <div class="card-body p-1">
                                 <div id="plotlyChart-{{ cleaned_result_key }}-{{ suffix }}-split-{{ loop.index }}"
-                                    class="plotly-graph-div" style="height:450px;"></div>
+                                    class="plotly-graph-div" 
+                                    data-chart-param="{{ result_key }}" 
+                                    data-chart-split="{{ loop.index }}" 
+                                    style="height:450px;"></div>
                                 <script nonce="{{ csp_nonce }}">
-                                    document.addEventListener('DOMContentLoaded', function () {
-                                        Plots.render('plotlyChart-{{ cleaned_result_key }}-{{ suffix }}-split-{{ loop.index }}', {{ sub_res.graph_data | tojson | safe }});
-                                        });
+                                    document.addEventListener('DOMContentLoaded', function() {
+                                        Plots.render('plotlyChart-{{ cleaned_result_key }}-{{ suffix }}-split-{{ loop.index }}', {{ sub_res.graph_data | safe }});
+                                    });
                                 </script>
+
                             </div>
                         </div>
                         {% endif %}
@@ -80,6 +84,14 @@
                         <div class="card mb-3 border-info">
                             <div class="card-header bg-info text-dark py-1 fw-bold small">
                                 {{ s.test }}
+                                {% if s.rationale %}
+                                <i class="fas fa-info-circle ms-2 text-white" style="cursor: help;"
+                                   data-bs-toggle="popover" 
+                                   data-bs-trigger="hover focus" 
+                                   data-bs-placement="top" 
+                                   title="{{ _('Why this test?') }}" 
+                                   data-bs-content="{{ s.rationale }}"></i>
+                                {% endif %}
                                 {% if s.p_value is not none %}
                                 - p = {{ "%.4f"|format(s.p_value) }}
                                 {% if s.p_value <= 0.05 %}<i class="fas fa-check-circle text-success ms-1"></i>{% endif
@@ -95,7 +107,17 @@
                                 {% endif %}
 
                                 {% if s.posthoc_data %}
-                                <h6 class="mt-2 fw-bold">{{ s.posthoc_data.title }}</h6>
+                                <h6 class="mt-2 fw-bold">
+                                    {{ s.posthoc_data.title }}
+                                    {% if s.posthoc_data.rationale %}
+                                    <i class="fas fa-info-circle ms-2 text-primary" style="cursor: help;"
+                                       data-bs-toggle="popover" 
+                                       data-bs-trigger="hover focus" 
+                                       data-bs-placement="top" 
+                                       title="{{ _('Why this post-hoc?') }}" 
+                                       data-bs-content="{{ s.posthoc_data.rationale }}"></i>
+                                    {% endif %}
+                                </h6>
                                 {{ macros.render_stats_table(s.posthoc_data) }}
                                 {% endif %}
 
@@ -129,6 +151,14 @@
                 <div class="card mb-3 border-info">
                     <div class="card-header bg-info text-dark py-1 fw-bold small">
                         {{ s.test }}
+                        {% if s.rationale %}
+                        <i class="fas fa-info-circle ms-2 text-white" style="cursor: help;"
+                           data-bs-toggle="popover" 
+                           data-bs-trigger="hover focus" 
+                           data-bs-placement="top" 
+                           title="{{ _('Why this test?') }}" 
+                           data-bs-content="{{ s.rationale }}"></i>
+                        {% endif %}
                         {% if s.p_value is not none %}
                         - p = {{ "%.4f"|format(s.p_value) }}
                         {% if s.p_value <= 0.05 %}<i class="fas fa-check-circle text-success ms-1"></i>{% endif %}
@@ -143,7 +173,17 @@
                         {% endif %}
 
                         {% if s.posthoc_data %}
-                        <h6 class="mt-2 fw-bold">{{ s.posthoc_data.title }}</h6>
+                        <h6 class="mt-2 fw-bold">
+                            {{ s.posthoc_data.title }}
+                            {% if s.posthoc_data.rationale %}
+                            <i class="fas fa-info-circle ms-2 text-primary" style="cursor: help;"
+                               data-bs-toggle="popover" 
+                               data-bs-trigger="hover focus" 
+                               data-bs-placement="top" 
+                               title="{{ _('Why this post-hoc?') }}" 
+                               data-bs-content="{{ s.posthoc_data.rationale }}"></i>
+                            {% endif %}
+                        </h6>
                         {{ macros.render_stats_table(s.posthoc_data) }}
                         {% endif %}
 
@@ -159,13 +199,16 @@
                 {% if results_data.graph_data %}
                 <div class="card">
                     <div class="card-body p-1">
-                        <div id="plotlyChart-{{ cleaned_result_key }}-{{ suffix }}" class="plotly-graph-div"
+                        <div id="plotlyChart-{{ cleaned_result_key }}-{{ suffix }}" 
+                            class="plotly-graph-div"
+                            data-chart-param="{{ result_key }}"
                             style="height:450px;"></div>
                         <script nonce="{{ csp_nonce }}">
-                            document.addEventListener('DOMContentLoaded', function () {
-                                Plots.render('plotlyChart-{{ cleaned_result_key }}-{{ suffix }}', {{ results_data.graph_data | tojson | safe }});
-                                });
+                            document.addEventListener('DOMContentLoaded', function() {
+                                Plots.render('plotlyChart-{{ cleaned_result_key }}-{{ suffix }}', {{ results_data.graph_data | safe }});
+                            });
                         </script>
+
                     </div>
                 </div>
                 {% endif %}

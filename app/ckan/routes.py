@@ -169,6 +169,11 @@ def upload_resource(project_slug, datatable_id):
             df[col_name] = value
     # --- End Housing Conditions ---
 
+    # Sanitize DataFrame for CSV injection protection
+    from app.utils.files import _sanitize_for_excel
+    for col in df.select_dtypes(include=['object']).columns:
+        df[col] = df[col].apply(_sanitize_for_excel)
+    
     csv_buffer = StringIO()
     df.to_csv(csv_buffer, index=False)
     csv_content = csv_buffer.getvalue().encode('utf-8')

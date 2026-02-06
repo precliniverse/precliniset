@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from sqlalchemy.pool import StaticPool
 
 # Load environment variables from .env file first
-load_dotenv()
+# Using override=True to ensure values in .env take precedence over existing environment variables
+load_dotenv(override=True)
 
 class Config:
     """Base configuration."""
@@ -159,6 +160,15 @@ class Config:
 
             if missing:
                 raise ValueError(f"CRITICAL: The following environment variables are missing in production configuration: {', '.join(missing)}")
+            
+            # Enforce MySQL/MariaDB in production
+            db_type = os.environ.get('DB_TYPE', 'sqlite')
+            if db_type == 'sqlite':
+                raise ValueError(
+                    "CRITICAL: Production deployments must use MySQL/MariaDB. "
+                    "SQLite is only allowed in development mode (FLASK_DEBUG=True). "
+                    "Please set DB_TYPE=mysql and configure DB_USER, DB_PASSWORD, DB_HOST, and DB_NAME."
+                )
 
 
 class TestingConfig(Config):

@@ -7,6 +7,18 @@
         </div>
         <div class="card-body">
 
+            {# --- Overall Suggestions & Feedback --- #}
+            {% if analysis_results.overall_suggestion_notes %}
+            <div class="alert alert-light border-info mb-4 py-2 small">
+                <h6 class="fw-bold mb-1 text-info small"><i class="fas fa-comment-alt me-2"></i>{{ _('Scientific Rationale') }}</h6>
+                <ul class="mb-0 ps-3">
+                    {% for note in analysis_results.overall_suggestion_notes %}
+                    <li>{{ note }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
             {# --- Data Checks & Warnings --- #}
             {% if analysis_results.checks_by_parameter %}
             <div class="mb-4">
@@ -36,11 +48,20 @@
                                         "%.3f"|format(checks.shapiro_p) if checks.shapiro_p else 'N/A' }})</li>
                                     <li><strong>Variance:</strong> {{ checks.homogeneity }} (p={{
                                         "%.3f"|format(checks.levene_p) if checks.levene_p else 'N/A' }})</li>
-                                    {% if checks.error %}<li class="text-danger fw-bold">{{ checks.error }}</li>{% endif
-                                    %}
-                                    {% if checks.warning %}<li class="text-warning fw-bold">{{ checks.warning }}</li>{%
-                                    endif %}
+                                    {% if checks.error %}<li class="text-danger fw-bold">{{ checks.error }}</li>{% endif %}
+                                    {% if checks.warning %}<li class="text-warning fw-bold">{{ checks.warning }}</li>{% endif %}
                                 </ul>
+                                
+                                {% if checks.overall_suggestion_notes %}
+                                <div class="mt-2 bg-white p-2 border rounded border-info-subtle">
+                                    <div class="x-small fw-bold text-info mb-1"><i class="fas fa-info-circle me-1"></i>{{ _('Rationale / Notes:') }}</div>
+                                    <ul class="mb-0 ps-3 x-small">
+                                        {% for note in checks.overall_suggestion_notes %}
+                                        <li>{{ note|safe }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>

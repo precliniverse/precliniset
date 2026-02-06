@@ -10,6 +10,14 @@ const UI = {
         this.initAdvancedOptions();
         this.initReferenceRangeSelect();
         this.initTooltips();
+        this.initPopovers();
+    },
+
+    initPopovers: function () {
+        var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+        var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl)
+        })
     },
 
     initReferenceRangeSelect: function () {
@@ -185,6 +193,7 @@ const UI = {
     },
 
     // --- Numerical Parameters (Analyte Checkbox Grid) ---
+    // NOW INCLUDES CATEGORICAL for categorical analysis support
     initNumericalCheckboxes: function () {
         const container = document.getElementById('numerical-params-checkboxes');
         const hiddenSelect = document.getElementById('numerical_params');
@@ -194,8 +203,16 @@ const UI = {
         container.innerHTML = '';
         const currentSelected = CONFIG.formData.numerical_params || [];
 
-        // CONFIG.numericalColumns is already sorted by Protocol Order from backend (Per plan)
-        CONFIG.numericalColumns.forEach((param, index) => {
+        // Combine numerical and categorical columns for unified selection
+        // Numerical columns come first, then categorical
+        const allSelectableParams = [
+            ...CONFIG.numericalColumns.map(col => ({name: col, type: 'numerical'})),
+            ...CONFIG.categoricalColumns.map(col => ({name: col, type: 'categorical'}))
+        ];
+
+        allSelectableParams.forEach((paramObj, index) => {
+            const param = paramObj.name;
+            const paramType = paramObj.type;
             const isSelected = currentSelected.includes(param);
 
             // Add to hidden select
@@ -215,6 +232,19 @@ const UI = {
             checkbox.id = `numParam_${index}`;
             checkbox.value = param;
             checkbox.checked = isSelected;
+            checkbox.dataset.paramType = paramType;  // Store type for later use
+
+            // Add icon based on type
+            const icon = document.createElement('span');
+            icon.className = 'me-1';
+            icon.style.fontSize = '0.9em';
+            if (paramType === 'numerical') {
+                icon.textContent = '📊';  // Chart icon for numerical
+                icon.title = 'Numerical variable';
+            } else {
+                icon.textContent = '🔤';  // Text icon for categorical
+                icon.title = 'Categorical variable';
+            }
 
             const label = document.createElement('label');
             label.className = 'form-check-label small text-break cursor-pointer stretched-link';
@@ -228,6 +258,7 @@ const UI = {
             }
 
             checkDiv.appendChild(checkbox);
+            checkDiv.appendChild(icon);
             checkDiv.appendChild(label);
             colDiv.appendChild(checkDiv);
             container.appendChild(colDiv);
@@ -290,6 +321,27 @@ const UI = {
             // Init and Listen
             updateRmVisuals();
             rmCheck.addEventListener('change', updateRmVisuals);
+        }
+
+        // Outlier Method Toggle
+        const excludeCheck = document.getElementById('exclude_outliers');
+        const methodContainer = document.getElementById('outlier_method_container');
+        const methodSelect = document.getElementById('outlier_method');
+        const thresholdInput = document.getElementById('outlier_threshold');
+
+        if (excludeCheck && methodContainer) {
+            excludeCheck.addEventListener('change', () => {
+                methodContainer.style.display = excludeCheck.checked ? 'block' : 'none';
+            });
+        }
+        
+        if (methodSelect && thresholdInput) {
+             methodSelect.addEventListener('change', () => {
+                 // Set reasonable defaults for threshold based on method
+                 if (methodSelect.value === 'iqr') thresholdInput.value = 1.5;
+                 else if (methodSelect.value === 'std') thresholdInput.value = 3.0;
+                 else if (methodSelect.value === 'grubbs') thresholdInput.value = 0.05; // alpha
+             });
         }
 
         // Populate Dropdowns (Covariate, Survival Cols)

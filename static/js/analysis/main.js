@@ -46,24 +46,9 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // --- Render Plots if Results are present ---
-    // Plots are embedded in the accordion. Check for divs starting with 'plotlyChart-'
+    // Plots are now rendered via inline scripts in the accordion/results partials
+    // to properly handle the data injection from Jinja.
     if (CONFIG.analysisStage === 'show_results') {
-        const graphs = document.querySelectorAll('.plotly-graph-div');
-        graphs.forEach(div => {
-            // We need the data. In the monolithic design, data was injected via JS block per item.
-            // But in my partial `_results_accordion.html`, I didn't inject the JSON into a global var.
-            // I need to find the data. 
-            // BETTER APPROACH: The `_results_accordion.html` should probably render a <script> block next to the div
-            // calling `Plots.render(...)`.
-            // HOWEVER, executing scripts in partials is efficient.
-            // Let's adhere to the pattern: The data is in the template.
-            // I will instruct the template to output a script tag.
-            // See `_results_accordion.html` update in next step? 
-            // Or, I can parse it from a data attribute.
-        });
-
-        // Wait! The `_results_accordion.html` generated in Step 95 creates the div. 
-        // It does NOT inject the script to render it. I missed that.
-        // I need to update `_results_accordion.html` to include the script block.
+        console.log("Analysis results displayed. Graphs rendered via inline fragments.");
     }
 });

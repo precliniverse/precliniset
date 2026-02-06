@@ -52,7 +52,7 @@ def get_custom_ordered_columns(animal_keys, protocol_keys):
     return final_order_unique
 
 
-def generate_plot(df, numerical_param_or_dv, grouping_params, graph_type, start_y_at_zero, is_repeated, subject_id_col='ID', numerical_params_selected=None, exclude_outliers=False, reference_range_summary=None, stats_results=None):
+def generate_plot(df, numerical_param_or_dv, grouping_params, graph_type, start_y_at_zero, is_repeated, subject_id_col='ID', numerical_params_selected=None, exclude_outliers=False, reference_range_summary=None, stats_results=None, outlier_method='iqr', outlier_threshold=1.5):
     """
     Generates Plotly figure data (JSON). Handles both independent and RM plots.
     """
@@ -68,7 +68,7 @@ def generate_plot(df, numerical_param_or_dv, grouping_params, graph_type, start_
         if param_to_check_for_outliers in df_plot.columns and pd.api.types.is_numeric_dtype(df_plot[param_to_check_for_outliers]):
             try:
                 from .analysis_utils import detect_outliers
-                outliers_mask = detect_outliers(df_plot[param_to_check_for_outliers])
+                outliers_mask, _ = detect_outliers(df_plot[param_to_check_for_outliers], method=outlier_method, threshold=outlier_threshold)
                 n_outliers_plot = outliers_mask.sum()
                 if n_outliers_plot > 0:
                     excluded_param_name_for_message = ""

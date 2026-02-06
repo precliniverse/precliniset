@@ -235,18 +235,31 @@ def download_inventory(storage_id):
         ) \
         .all()
 
-    # Prepare data for CSV
-    csv_data = "Sample ID,Creation Date,Reference,Project,Sample Type,Organ,Collection Conditions\n"
+    # Prepare data for Excel (using DataFrame for CSV injection protection)
+    import pandas as pd
+    from app.utils.files import dataframe_to_excel_bytes
+    from flask import send_file
+    
+    data_rows = []
     for sample in samples_in_storage:
         organ_name = sample.organ.name if sample.organ else 'N/A'
         conditions = ', '.join([cond.name for cond in sample.collection_conditions]) if sample.collection_conditions else 'N/A'
-        csv_data += f"{sample.id},{sample.collection_date},{sample.experimental_group.project.name if sample.experimental_group and sample.experimental_group.project else 'N/A'},{sample.sample_type},{organ_name},{conditions}\n"
+        data_rows.append({
+            'Sample ID': sample.id,
+            'Creation Date': sample.collection_date,
+            'Reference': sample.experimental_group.project.name if sample.experimental_group and sample.experimental_group.project else 'N/A',
+            'Project': sample.experimental_group.project.name if sample.experimental_group and sample.experimental_group.project else 'N/A',
+            'Sample Type': sample.sample_type.value if hasattr(sample.sample_type, 'value') else str(sample.sample_type),
+            'Organ': organ_name,
+            'Collection Conditions': conditions
+        })
+    
+    df = pd.DataFrame(data_rows)
+    output = dataframe_to_excel_bytes(df, sheet_name='Inventory')
 
-    # Create a response with the CSV data
-    response = current_app.response_class(
-        csv_data,
-        mimetype='text/csv'
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'storage_{storage.id}_inventory.xlsx'
     )
-    response.headers['Content-Disposition'] = f'attachment; filename=storage_{storage.id}_inventory.csv'
-
-    return response

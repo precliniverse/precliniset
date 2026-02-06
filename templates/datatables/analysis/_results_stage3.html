@@ -60,12 +60,13 @@
             {% else %}
             <div class="row">
                 <div class="col-lg-8">
-                    <div id="plotlyChart-survival" class="plotly-graph-div" style="height:450px; width:100%;"></div>
+                    <div id="plotlyChart-survival" class="plotly-graph-div" data-chart-type="survival" style="height:450px; width:100%;"></div>
                     <script nonce="{{ csp_nonce }}">
-                        document.addEventListener('DOMContentLoaded', function () {
-                            Plots.renderSurvival('plotlyChart-survival', {{ analysis_results.survival_results.graph_data | tojson | safe }});
+                        document.addEventListener('DOMContentLoaded', function() {
+                            Plots.renderSurvival('plotlyChart-survival', {{ analysis_results.survival_results.graph_data | safe }});
                         });
                     </script>
+
                 </div>
                 <div class="col-lg-4">
                     <div class="card h-100 bg-light">
@@ -97,7 +98,32 @@
             <i class="fas fa-users me-2"></i>{{ _('Group Composition Summary') }}
         </div>
         <div class="card-body p-0" style="overflow-x: auto;">
-            {{ analysis_results.group_summary_html|safe }}
+            <table class="table table-sm table-striped table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">
+                            {% if analysis_results.group_summary_html.grouping_params|length == 1 %}
+                                {{ analysis_results.group_summary_html.grouping_params[0] }}
+                            {% else %}
+                                Group ({{ analysis_results.group_summary_html.grouping_params|join(' / ') }})
+                            {% endif %}
+                        </th>
+                        <th class="text-center">Count (n)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in analysis_results.group_summary_html.rows %}
+                    <tr>
+                        <td class="text-center">{{ row.group_value }}</td>
+                        <td class="text-center">{{ row.count }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="table-info fw-bold">
+                        <td class="text-center">Total</td>
+                        <td class="text-center">{{ analysis_results.group_summary_html.total }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
     {% endif %}

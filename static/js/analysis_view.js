@@ -9,13 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!configEl) return;
     const CONFIG = JSON.parse(configEl.textContent);
 
-    // --- Helper: Match Python's ID cleaning logic ---
-    function cleanParamName(name) {
-        if (!name) return "";
-        let cleaned = name.replace(/[^\w-]/g, '-');
-        cleaned = cleaned.replace(/-+/g, '-');
-        return cleaned.replace(/^-+|-+$/g, '');
-    }
+
 
     // --- DOM Elements ---
     const analysisForm = document.getElementById('analysis-form');
@@ -302,48 +296,52 @@ document.addEventListener('DOMContentLoaded', function () {
     if (CONFIG.analysisStage === 'show_results' && CONFIG.analysisResults) {
         const results = CONFIG.analysisResults;
 
-        document.querySelectorAll('.plotly-graph-div').forEach(div => {
-            const divId = div.id;
+        // Render Parameter Charts
+        document.querySelectorAll('.plotly-graph-div[data-chart-param]').forEach(div => {
+            const param = div.dataset.chartParam;
+            const splitIndex = div.dataset.chartSplit; // Optional, for split analysis
             let graphData = null;
 
-            if (results.results_by_split && Object.keys(results.results_by_split).length > 0) {
-                for (const [splitVal, splitData] of Object.entries(results.results_by_split)) {
-                    const cleanSplit = cleanParamName(splitVal);
-                    if (divId.includes(cleanSplit)) {
-                        for (const [paramKey, paramData] of Object.entries(splitData.results_by_parameter)) {
-                            const cleanParam = cleanParamName(paramKey);
-                            const expectedId = `plotlyChart-${cleanSplit}-${cleanParam}`;
-                            if (divId === expectedId) {
-                                graphData = paramData.graph_data;
-                                break;
-                            }
-                        }
-                    }
-                    if (graphData) break;
-                }
-            } else if (results.results_by_parameter) {
-                for (const [paramKey, paramData] of Object.entries(results.results_by_parameter)) {
-                    const cleanParam = cleanParamName(paramKey);
-                    const expectedId = `plotlyChart-${cleanParam}`;
-                    if (divId === expectedId) {
-                        graphData = paramData.graph_data;
-                        break;
-                    }
-                }
+            if (results.results_by_split && splitIndex) {
+                 // Convert splitIndex (1-based from loop) to 0-based array index
+                 const splitKeys = Object.keys(results.results_by_split);
+                 const splitKey = splitKeys[parseInt(splitIndex) - 1];
+                 
+                 if (splitKey && results.results_by_split[splitKey]) {
+                     const splitData = results.results_by_split[splitKey];
+                     if (splitData.results_by_parameter && splitData.results_by_parameter[param]) {
+                         graphData = splitData.results_by_parameter[param].graph_data;
+                     }
+                 }
+            } else if (results.results_by_parameter && results.results_by_parameter[param]) {
+                graphData = results.results_by_parameter[param].graph_data;
             }
 
-            if (graphData) {
-                try {
-                    const plotData = typeof graphData === 'string' ? JSON.parse(graphData) : graphData;
-                    Plotly.newPlot(div, plotData.data, plotData.layout, { responsive: true });
-                } catch (e) {
-                    console.error("Plotly Render Error:", e);
-                    div.innerHTML = `<div class="alert alert-danger small">Error rendering graph: ${e.message}</div>`;
-                }
-            } else {
-                div.innerHTML = `<div class="text-muted small p-3 text-center">No graph data available.</div>`;
-            }
+            renderPlotlyChart(div, graphData);
         });
+
+        // Render Survival Chart (Special Case)
+        const survivalDiv = document.querySelector('.plotly-graph-div[data-chart-type="survival"]');
+        if (survivalDiv && results.survival_results) {
+             renderPlotlyChart(survivalDiv, results.survival_results.graph_data);
+        }
+    }
+
+    function renderPlotlyChart(div, graphData) {
+        if (graphData) {
+            try {
+                const plotData = typeof graphData === 'string' ? JSON.parse(graphData) : graphData;
+                Plotly.newPlot(div, plotData.data, plotData.layout, { responsive: true });
+            } catch (e) {
+                console.error("Plotly Render Error:", e);
+                div.innerHTML = `<div class="alert alert-danger small">Error rendering graph: ${e.message}</div>`;
+            }
+        } else {
+            // Only show empty message if it's not a survival chart handled elsewhere or truly empty
+             if (!div.dataset.chartType) {
+                 div.innerHTML = `<div class="text-muted small p-3 text-center">No graph data available.</div>`;
+             }
+        }
     }
 
     // --- 5. Reference Range Modal Logic ---

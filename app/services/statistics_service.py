@@ -38,8 +38,12 @@ class StatisticsService:
 
         try:
             # 1. Prepare Data
+            outlier_method = extra_params.get('outlier_method', 'iqr') if extra_params else 'iqr'
+            outlier_threshold = extra_params.get('outlier_threshold', 1.5) if extra_params else 1.5
+            
             df_test, outliers_count = self._prepare_data_for_test(
-                df, test_key, dv_col, grouping_cols, is_repeated, subject_id_col, exclude_outliers
+                df, test_key, dv_col, grouping_cols, is_repeated, subject_id_col, 
+                exclude_outliers, outlier_method, outlier_threshold
             )
             if outliers_count > 0:
                 result['outliers_excluded_for_test'] = outliers_count
@@ -80,14 +84,14 @@ class StatisticsService:
         
         return result
 
-    def _prepare_data_for_test(self, df, test_key, dv_col, grouping_cols, is_repeated, subject_id_col, exclude_outliers):
+    def _prepare_data_for_test(self, df, test_key, dv_col, grouping_cols, is_repeated, subject_id_col, exclude_outliers, outlier_method='iqr', outlier_threshold=1.5):
         df_test = df.copy()
         cols_to_numeric = []
         
         if test_key == 'manova': 
             cols_to_numeric = dv_col if isinstance(dv_col, list) else [dv_col]
-        elif test_key == 'correlation':
-            cols_to_numeric = [] # Correlation handles its own numeric selection/cleaning logic
+        elif test_key in ['correlation', 'chi_square']:
+            cols_to_numeric = [] # Skip numeric coercion for these tests
         elif is_repeated: 
             cols_to_numeric = ['_MeasurementValue_']
         else: 
@@ -98,13 +102,13 @@ class StatisticsService:
                 df_test[col] = pd.to_numeric(df_test[col], errors='coerce')
         
         outliers_count = 0
-        if exclude_outliers:
+        if exclude_outliers and test_key != 'chi_square':
             if is_repeated and '_MeasurementValue_' in df_test.columns:
-                mask = detect_outliers(df_test['_MeasurementValue_'])
+                mask, _ = detect_outliers(df_test['_MeasurementValue_'], method=outlier_method, threshold=outlier_threshold)
                 outliers_count = int(mask.sum())
                 df_test = df_test[~mask]
             elif test_key != 'manova' and dv_col in df_test.columns:
-                mask = detect_outliers(df_test[dv_col])
+                mask, _ = detect_outliers(df_test[dv_col], method=outlier_method, threshold=outlier_threshold)
                 outliers_count = int(mask.sum())
                 df_test = df_test[~mask]
 
@@ -144,7 +148,7 @@ class StatisticsService:
         stat, p_val = wilcoxon(df_wide[cols[0]], df_wide[cols[1]])
         res.update({'statistic': stat, 'p_value': p_val, 'n_pairs': len(df_wide)})
 
-    def _run_kruskalwallis(self, df, dv, groups, subject_id, res):
+    def _run_kruskalwallis(self, df, dv, groups, subject_id, res, extra_params=None):
         group_col = self._get_single_group_col(df, groups)
         groups_data = [g[dv].dropna() for name, g in df.groupby(group_col) if not g[dv].dropna().empty]
         if len(groups_data) < 2: raise ValueError(_l("Kruskal-Wallis requires at least 2 groups."))
@@ -153,11 +157,25 @@ class StatisticsService:
         
         if p_val <= 0.05:
             try:
-                dunn = pg.pairwise_tests(data=df, dv=dv, between=group_col, padjust='bonf', parametric=False)
+                # Use Pingouin for robust non-parametric pairwise tests
+                # padjust='holm' is generally better than bonf while still being safe
+                dunn = pg.pairwise_tests(data=df, dv=dv, between=group_col, padjust='holm', parametric=False)
+                
+                control_group = extra_params.get('control_group') if extra_params else None
+                if control_group and control_group in df[group_col].unique():
+                    # Filter for comparisons vs control (A or B matches control)
+                    dunn = dunn[(dunn['A'] == control_group) | (dunn['B'] == control_group)]
+                    title = _l(f"Post-Hoc (Non-parametric vs Control: {control_group})")
+                    res['notes'].append(_l("Non-parametric pairwise comparisons performed (Comparing vs Control)."))
+                else:
+                    title = _l("Post-Hoc (Non-parametric All-Pairs: Dunn equivalent)")
+                    res['notes'].append(_l("Non-parametric pairwise comparisons performed (All-pairs)."))
+
                 res['posthoc_data'] = {
-                    'title': _l("Post-Hoc (Dunn's Test)"),
+                    'title': title,
                     'columns': dunn.columns.tolist(),
-                    'rows': dunn.to_dict('records')
+                    'rows': dunn.to_dict('records'),
+                    'rationale': _l("Non-parametric pairwise tests (using Mann-Whitney U with Holm correction) were selected because the data distribution either violated normality or variance homogeneity assumptions.")
                 }
             except Exception as e:
                 res['notes'].append(f"Post-hoc failed: {e}")
@@ -169,7 +187,7 @@ class StatisticsService:
         stat, p_val = friedmanchisquare(*data_arrays)
         res.update({'statistic': stat, 'p_value': p_val, 'n_subjects': len(df_wide)})
 
-    def _run_anova_oneway(self, df, dv, groups, subject_id, res):
+    def _run_anova_oneway(self, df, dv, groups, subject_id, res, extra_params=None):
         group_col = self._get_single_group_col(df, groups)
         df_clean = df.copy()
         mapping = sanitize_df_columns_for_patsy(df_clean, [dv, group_col])
@@ -188,18 +206,64 @@ class StatisticsService:
         res['statistic'] = anova_tbl['F'][0]
         
         if res['p_value'] <= 0.05:
-            try:
-                m_comp = multi.pairwise_tukeyhsd(endog=df_clean[safe_dv], groups=df_clean[safe_group], alpha=0.05)
-                df_posthoc = pd.DataFrame(data=m_comp._results_table.data[1:], columns=m_comp._results_table.data[0])
-                res['posthoc_data'] = {
-                    'title': _l('Post-Hoc (Tukey HSD)'),
-                    'columns': df_posthoc.columns.tolist(),
-                    'rows': df_posthoc.to_dict('records')
-                }
-            except Exception as e:
-                res['notes'].append(f"Tukey HSD failed: {e}")
+            # Check for Dunnett's (Control Group)
+            control_group = extra_params.get('control_group') if extra_params else None
+            
+            if control_group and control_group in df_clean[safe_group].values:
+                try:
+                    # Dunnett's Test using scipy.stats.dunnett (requires Scipy 1.11+)
+                    if hasattr(stats, 'dunnett'):
+                        # Important: scipy.stats.dunnett results correspond to samples in Order of appearance 
+                        # or specific list. We must ensure mapping is correct.
+                        unique_groups = [g for g in df_clean[safe_group].unique() if g != control_group]
+                        samples = [df_clean[df_clean[safe_group] == g][safe_dv].values for g in unique_groups]
+                        control_sample = df_clean[df_clean[safe_group] == control_group][safe_dv].values
+                        
+                        dunnett_res = stats.dunnett(*samples, control=control_sample)
+                        
+                        rows = []
+                        for i, group in enumerate(unique_groups):
+                            rows.append({
+                                'Group A': control_group, 
+                                'Group B': group, 
+                                'Statistic': float(dunnett_res.statistic[i]), 
+                                'p-value': float(dunnett_res.pvalue[i])
+                            })
+                            
+                        res['posthoc_data'] = {
+                            'title': _l(f"Post-Hoc (Dunnett's Test vs Control: {control_group})"),
+                            'columns': ['Group A', 'Group B', 'Statistic', 'p-value'],
+                            'rows': rows,
+                            'rationale': _l("Dunnett's test was selected to maximize statistical power for comparing multiple treatments against a single control, while maintaining control over the family-wise error rate.")
+                        }
+                        res['notes'].append(_l("Dunnett's test applied (Comparing all groups against Control)."))
+                    else:
+                        # Fallback for older Scipy or error
+                        m_comp = multi.pairwise_tukeyhsd(endog=df_clean[safe_dv], groups=df_clean[safe_group], alpha=0.05)
+                        df_posthoc = pd.DataFrame(data=m_comp._results_table.data[1:], columns=m_comp._results_table.data[0])
+                        res['posthoc_data'] = {
+                            'title': _l('Post-Hoc (Tukey HSD)'),
+                            'columns': df_posthoc.columns.tolist(),
+                            'rows': df_posthoc.to_dict('records')
+                        }
+                except Exception as e:
+                     res['notes'].append(f"Dunnett's failed: {e}")
+            else:
+                try:
+                    # All-pairs comparison using Tukey HSD
+                    m_comp = multi.pairwise_tukeyhsd(endog=df_clean[safe_dv], groups=df_clean[safe_group], alpha=0.05)
+                    df_posthoc = pd.DataFrame(data=m_comp._results_table.data[1:], columns=m_comp._results_table.data[0])
+                    res['posthoc_data'] = {
+                        'title': _l('Post-Hoc (Tukey HSD)'),
+                        'columns': df_posthoc.columns.tolist(),
+                        'rows': df_posthoc.to_dict('records'),
+                        'rationale': _l("Tukey HSD was selected for all-pairs comparison as it provides an optimal balance of power and error-rate control when no specific control group is prioritized.")
+                    }
+                    res['notes'].append(_l("Tukey HSD applied (All-pairs comparison)."))
+                except Exception as e:
+                    res['notes'].append(f"Tukey HSD failed: {e}")
 
-    def _run_anova_twoway(self, df, dv, groups, subject_id, res):
+    def _run_anova_twoway(self, df, dv, groups, subject_id, res, extra_params=None):
         if len(groups) != 2: raise ValueError("Two-Way ANOVA requires 2 factors.")
         df_clean = df.copy()
         sanitize_df_columns_for_patsy(df_clean, [dv] + groups)
@@ -213,10 +277,62 @@ class StatisticsService:
             'rows': anova_tbl.reset_index().rename(columns={'index': 'Source'}).to_dict('records')
         }
         
-        if any(anova_tbl['PR(>F)'].dropna() <= 0.05):
-             res['notes'].append(_l('Significant effects found. Post-hoc analysis recommended.'))
+        # Automated Post-Hoc Analysis
+        try:
+            interaction_term = f"C({quote_name(groups[0])}):C({quote_name(groups[1])})"
+            p_interaction = anova_tbl.loc[interaction_term, 'PR(>F)'] if interaction_term in anova_tbl.index else 1.0
+            
+            p_main0 = anova_tbl.loc[f"C({quote_name(groups[0])})", 'PR(>F)'] if f"C({quote_name(groups[0])})" in anova_tbl.index else 1.0
+            p_main1 = anova_tbl.loc[f"C({quote_name(groups[1])})", 'PR(>F)'] if f"C({quote_name(groups[1])})" in anova_tbl.index else 1.0
 
-    def _run_anova_nway(self, df, dv, groups, subject_id, res):
+            control_group = extra_params.get('control_group') if extra_params else None
+
+            if p_interaction <= 0.05:
+                # Significant interaction -> Simple Effects Analysis
+                ph = pg.pairwise_tests(data=df_clean, dv=dv, between=groups[0], within=groups[1], padjust='holm')
+                
+                # If control group is across BOTH factors or specific, we might filter. 
+                # But simple effects usually show the landscape.
+                res['posthoc_data'] = {
+                    'title': _l("Post-Hoc: Simple Effects (Group Interaction)"),
+                    'columns': ph.columns.tolist(),
+                    'rows': ph.to_dict('records'),
+                    'rationale': _l("Simple Effects analysis was performed because a significant interaction was found. This avoids misleading results by testing comparisons separately at each level of the interacting factors.")
+                }
+                res['notes'].append(_l("Significant interaction found. Simple effects (pairwise comparisons within each factor level) performed."))
+            elif p_main0 <= 0.05 or p_main1 <= 0.05:
+                # Significant main effects (no interaction) -> Pairwise on main factors
+                ph_list = []
+                if p_main0 <= 0.05:
+                    ph0 = pg.pairwise_tests(data=df_clean, dv=dv, between=groups[0], padjust='holm')
+                    if control_group and control_group in df_clean[groups[0]].unique():
+                        ph0 = ph0[(ph0['A'] == control_group) | (ph0['B'] == control_group)]
+                    ph0['Factor'] = groups[0]
+                    ph_list.append(ph0)
+                if p_main1 <= 0.05:
+                    ph1 = pg.pairwise_tests(data=df_clean, dv=dv, between=groups[1], padjust='holm')
+                    if control_group and control_group in df_clean[groups[1]].unique():
+                        ph1 = ph1[(ph1['A'] == control_group) | (ph1['B'] == control_group)]
+                    ph1['Factor'] = groups[1]
+                    ph_list.append(ph1)
+                
+                if ph_list:
+                    ph_combined = pd.concat(ph_list)
+                    res['posthoc_data'] = {
+                        'title': _l("Post-Hoc: Pairwise Comparisons (Main Effects)"),
+                        'columns': ph_combined.columns.tolist(),
+                        'rows': ph_combined.to_dict('records'),
+                        'rationale': _l("Pairwise comparisons were performed for significant main effects to identify specific group differences, using Holm correction for robust error control.")
+                    }
+                    if control_group:
+                        res['notes'].append(_l("Significant main effects found. Pairwise comparisons performed (vs Control where applicable)."))
+                    else:
+                        res['notes'].append(_l("Significant main effects found. Pairwise comparisons performed."))
+        except Exception as e:
+            res['notes'].append(f"Automated post-hoc failed: {e}")
+            current_app.logger.warning(f"Post-hoc failed for Two-Way ANOVA: {e}")
+
+    def _run_anova_nway(self, df, dv, groups, subject_id, res, extra_params=None):
         if not groups: raise ValueError("N-Way ANOVA requires grouping factors.")
         df_clean = df.copy()
         sanitize_df_columns_for_patsy(df_clean, [dv] + groups)
@@ -232,6 +348,33 @@ class StatisticsService:
                 'columns': ['Source', 'sum_sq', 'df', 'F', 'PR(>F)'],
                 'rows': anova_tbl.reset_index().rename(columns={'index': 'Source'}).to_dict('records')
             }
+            
+            # --- Automated Post-Hoc for N-Way (Main Effects) ---
+            try:
+                control_group = extra_params.get('control_group') if extra_params else None
+                ph_list = []
+                for factor in groups:
+                    term = f"C({quote_name(factor)})"
+                    if term in anova_tbl.index:
+                        p_val = anova_tbl.loc[term, 'PR(>F)']
+                        if p_val <= 0.05:
+                            ph = pg.pairwise_tests(data=df_clean, dv=dv, between=factor, padjust='holm')
+                            if control_group and control_group in df_clean[factor].unique():
+                                ph = ph[(ph['A'] == control_group) | (ph['B'] == control_group)]
+                            ph['Factor'] = factor
+                            ph_list.append(ph)
+                
+                if ph_list:
+                    ph_combined = pd.concat(ph_list)
+                    res['posthoc_data'] = {
+                        'title': _l("Post-Hoc: Pairwise Comparisons (Main Effects)"),
+                        'columns': ph_combined.columns.tolist(),
+                        'rows': ph_combined.to_dict('records'),
+                        'rationale': _l("Pairwise comparisons were performed for significant main effects to identify specific group differences, using Holm correction for robust error control.")
+                    }
+                    res['notes'].append(_l("Significant main effects found. Pairwise comparisons performed (vs Control where applicable)."))
+            except Exception as ph_e:
+                current_app.logger.warning(f"Post-hoc failed for N-Way ANOVA: {ph_e}")
         except Exception as e:
             msg = str(e)
             if "constraint matrix" in msg.lower() or "singular matrix" in msg.lower():
@@ -239,7 +382,7 @@ class StatisticsService:
             else:
                 res['error'] = f"ANOVA failed: {msg}"
 
-    def _run_manova(self, df, dv, groups, subject_id, res):
+    def _run_manova(self, df, dv, groups, subject_id, res, extra_params=None):
         if not isinstance(dv, list) or len(dv) < 2:
             raise ValueError(_l("MANOVA requires at least 2 dependent variables."))
         
@@ -270,6 +413,14 @@ class StatisticsService:
         }
 
     def _run_ancova(self, df, dv, groups, subject_id, res, extra_params=None):
+        """
+        Robust ANCOVA with Homogeneity of Slopes Assumption Checking.
+        
+        Strategy:
+        1. Test interaction model: dv ~ group * covariate
+        2. If interaction p > 0.05: assumption met → run standard ANCOVA
+        3. If interaction p ≤ 0.05: assumption violated → return interaction model
+        """
         covar = extra_params.get('covariate') if extra_params else None
         if not covar:
             res['error'] = "Covariate not specified for ANCOVA."
@@ -278,35 +429,158 @@ class StatisticsService:
         if covar not in df.columns:
             res['error'] = f"Covariate '{covar}' not found in data."
             return
-
+ 
         group_col = self._get_single_group_col(df, groups)
         
         # Ensure covariate is numeric
-        df[covar] = pd.to_numeric(df[covar], errors='coerce')
-        df_clean = df.dropna(subset=[dv, group_col, covar])
+        df_work = df.copy()
+        df_work[covar] = pd.to_numeric(df_work[covar], errors='coerce')
+        df_clean = df_work.dropna(subset=[dv, group_col, covar])
+        
+        if df_clean.empty:
+            res['error'] = "No valid data after removing missing values."
+            return
 
         try:
-            ancova = pg.ancova(data=df_clean, dv=dv, between=group_col, covar=covar)
-            res['results_data'] = {
-                'columns': ancova.columns.tolist(),
-                'rows': ancova.to_dict('records')
-            }
-            # Extract main effect of Group
-            group_row = ancova[ancova['Source'] == group_col]
-            if not group_row.empty:
-                res['p_value'] = group_row['p-unc'].iloc[0]
-                res['statistic'] = group_row['F'].iloc[0]
+            # Step A: Run OLS interaction model to test homogeneity of slopes
+            df_test = df_clean.copy()
+            mapping = sanitize_df_columns_for_patsy(df_test, [dv, group_col, covar])
+            safe_dv = mapping.get(dv, dv)
+            safe_group = mapping.get(group_col, group_col)
+            safe_covar = mapping.get(covar, covar)
+            
+            interaction_formula = f"{quote_name(safe_dv)} ~ C({quote_name(safe_group)}) * {quote_name(safe_covar)}"
+            model_interaction = smf.ols(interaction_formula, data=df_test).fit()
+            anova_interaction = sm.stats.anova_lm(model_interaction, typ=2)
+            
+            # Step B: Extract p-value for interaction term
+            # The interaction term is labeled as "C(group):covariate" in the ANOVA table
+            interaction_term = None
+            for idx in anova_interaction.index:
+                if ':' in str(idx):  # Interaction terms contain ':'
+                    interaction_term = idx
+                    break
+            
+            if interaction_term is None:
+                # Fallback: couldn't find interaction term, proceed with standard ANCOVA
+                res['notes'].append(_l("Warning: Could not detect interaction term. Proceeding with standard ANCOVA."))
+                assumption_met = True
+                p_interaction = None
+            else:
+                p_interaction = anova_interaction.loc[interaction_term, 'PR(>F)']
+                assumption_met = p_interaction > 0.05
+            
+            # Step C or D: Choose appropriate analysis based on assumption
+            if assumption_met:
+                # Step C: Assumption met → Run standard ANCOVA
+                try:
+                    ancova = pg.ancova(data=df_clean, dv=dv, between=group_col, covar=covar)
+                    res['results_data'] = {
+                        'title': _l('ANCOVA Results'),
+                        'columns': ancova.columns.tolist(),
+                        'rows': ancova.to_dict('records')
+                    }
+                    # Extract main effect of Group
+                    group_row = ancova[ancova['Source'] == group_col]
+                    if not group_row.empty:
+                        res['p_value'] = group_row['p-unc'].iloc[0]
+                        res['statistic'] = group_row['F'].iloc[0]
+                    
+                    if p_interaction is not None:
+                        res['notes'].append(
+                            _l("Homogeneity of slopes assumption met (interaction p={p:.3f}). Standard ANCOVA applied.").format(p=p_interaction)
+                        )
+                except Exception as e:
+                    # If Pingouin ANCOVA fails, fall back to interaction model
+                    res['notes'].append(_l("Standard ANCOVA failed, using interaction model: {e}").format(e=str(e)))
+                    assumption_met = False
+            
+            if not assumption_met:
+                # Step D: Assumption violated → Return OLS interaction model
+                res['test'] = _l('Linear Regression with Interaction')
+                res['results_data'] = {
+                    'title': _l('Linear Regression with Interaction (Non-parallel slopes)'),
+                    'columns': ['Source', 'sum_sq', 'df', 'F', 'PR(>F)'],
+                    'rows': anova_interaction.reset_index().rename(columns={'index': 'Source'}).to_dict('records')
+                }
+                
+                # Extract interaction effect as the primary result
+                if interaction_term:
+                    res['p_value'] = p_interaction
+                    res['statistic'] = anova_interaction.loc[interaction_term, 'F']
+                
+                if p_interaction is not None:
+                    res['notes'].append(
+                        _l("Assumption of homogeneity of regression slopes violated (interaction p={p:.3f}). "
+                           "The effect of the covariate differs by group. Reporting Linear Regression with "
+                           "Interaction to model these differences.").format(p=p_interaction)
+                    )
+                else:
+                    res['notes'].append(
+                        _l("Assumption of homogeneity of regression slopes violated. "
+                           "Reporting Linear Regression with Interaction to model group-specific covariate effects.")
+                    )
+                
         except Exception as e:
-            res['error'] = f"ANCOVA failed: {e}"
+            res['error'] = f"ANCOVA analysis failed: {e}"
+            current_app.logger.error(f"ANCOVA error: {e}", exc_info=True)
 
-    def _run_ttest_paired(self, df, dv, groups, subject_id, res):
+    def _run_ttest_paired(self, df, dv, groups, subject_id, res, extra_params=None):
         df_wide = df.pivot(index=subject_id, columns='_WithinFactorLevel_', values='_MeasurementValue_').dropna()
         if df_wide.shape[1] != 2: raise ValueError(_l("Paired T-test requires exactly 2 time points/conditions."))
         cols = df_wide.columns
         t_stat, p_val = ttest_rel(df_wide[cols[0]], df_wide[cols[1]])
         res.update({'statistic': t_stat, 'p_value': p_val, 'n_pairs': len(df_wide)})
 
-    def _run_anova_rm_oneway(self, df, dv, groups, subject_id, res):
+    def _run_anova_rm_oneway(self, df, dv, groups, subject_id, res, extra_params=None):
+        """
+        One-Way Repeated Measures ANOVA with automatic LMM fallback for missing data.
+        """
+        # 1. Check for Missing Data (NaNs) in the repeated measures
+        has_missing = df['_MeasurementValue_'].isna().any()
+        
+        if has_missing:
+            # Automatically switch to LMM for robustness
+            res['notes'].append(_l("Missing values detected. Switching to Linear Mixed Model (LMM) for robustness."))
+            try:
+                # LMM Implementation using Pingouin
+                # Formula: _MeasurementValue_ ~ _WithinFactorLevel_
+                # Random effects: subject (random intercepts)
+                lmm = pg.mixed_linear_model(
+                    data=df, 
+                    dv='_MeasurementValue_', 
+                    subject=subject_id, 
+                    formula="_MeasurementValue_ ~ C(_WithinFactorLevel_)"
+                )
+                
+                res['test'] = _l('Linear Mixed Model (Repeated Measures)')
+                res['results_data'] = {
+                    'title': _l('Linear Mixed Model Results (Robust to Missing Data)'),
+                    'columns': lmm.columns.tolist(),
+                    'rows': lmm.to_dict('records')
+                }
+                
+                # Extract p-value for the within-factor effect
+                # LMM table has multiple rows for different effects
+                within_effect = lmm[lmm['Term'].str.contains('_WithinFactorLevel_', na=False)]
+                if not within_effect.empty and 'pval' in within_effect.columns:
+                    res['p_value'] = within_effect['pval'].iloc[0]
+                
+                return  # Exit early as LMM structure differs
+                
+            except Exception as e:
+                res['notes'].append(_l("LMM failed ({e}). Attempting standard RM ANOVA with list-wise deletion.").format(e=str(e)))
+                # Continue to standard RM ANOVA below
+              
+        # 2. Standard RM ANOVA (no missing data or LMM failed)
+        # Check Sphericity
+        try:
+            spher, _, chisq, dof, p_spher = pg.sphericity(df, dv='_MeasurementValue_', subject=subject_id, within='_WithinFactorLevel_')
+            if not spher:
+                 res['notes'].append(_l("Sphericity assumption violated (p={p:.3f}). Applying Greenhouse-Geisser correction.").format(p=p_spher))
+        except Exception:
+            pass # Sphericity test can fail if insufficient data/variance
+
         aov = pg.rm_anova(data=df, dv='_MeasurementValue_', within='_WithinFactorLevel_', subject=subject_id, correction='auto')
         
         res['results_data'] = {
@@ -314,7 +588,9 @@ class StatisticsService:
             'rows': aov.to_dict('records')
         }
         if not aov.empty:
-            res['p_value'] = aov['p-unc'].iloc[0]
+            # Pingouin puts 'p-GG-corr' or 'p-unc' depending on correction
+            p_col = 'p-GG-corr' if 'p-GG-corr' in aov.columns else 'p-unc'
+            res['p_value'] = aov[p_col].iloc[0]
             res['statistic'] = aov['F'].iloc[0]
             
             if res['p_value'] <= 0.05:
@@ -328,12 +604,45 @@ class StatisticsService:
                 except Exception as e:
                     res['notes'].append(f"Post-hoc failed: {e}")
 
-    def _run_pingouin_mixed_anova(self, df, dv, groups, subject_id, res):
+    def _run_pingouin_mixed_anova(self, df, dv, groups, subject_id, res, extra_params=None):
         if not groups:
             raise ValueError(_l("Mixed ANOVA requires at least one between-subject grouping factor."))
         
         group_col = self._get_single_group_col(df, groups)
         
+        # 1. Missing Data Logic
+        if df['_MeasurementValue_'].isna().any():
+            res['notes'].append(_l("Missing values detected. Switching to Linear Mixed Model (LMM) engine for robustness."))
+            try:
+                # LMM Implementation using formula
+                # formula: _MeasurementValue_ ~ _WithinFactorLevel_ * group_col
+                # re_formula: ~ 1 | subject_id (random intercepts)
+                lmm = pg.mixed_linear_model(
+                    data=df, 
+                    dv='_MeasurementValue_', 
+                    subject=subject_id, 
+                    formula=f"_MeasurementValue_ ~ C(_WithinFactorLevel_) * C({quote_name(group_col)})"
+                )
+                 # LMM returns fixed effects table
+                res['results_data'] = {
+                    'title': _l('Linear Mixed Model Test Results (Robust to Missing Data)'),
+                    'columns': lmm.columns.tolist(),
+                    'rows': lmm.to_dict('records')
+                }
+                # P-value extraction is tricky from LMM table as there are multiple effects.
+                # Usually we return the table and let user see.
+                return # Exit early as structure differs for LMM
+            except Exception as e:
+                res['notes'].append(f"LMM failed ({str(e)}). Falling back to standard Mixed ANOVA (list-wise deletion).")
+
+        # 2. Sphericity Logic
+        try:
+             spher, _, _, _, p_spher = pg.sphericity(data=df, dv='_MeasurementValue_', subject=subject_id, within='_WithinFactorLevel_')
+             if not spher:
+                  res['notes'].append(_l("Sphericity violated (p={p:.3f}). GG correction applied.").format(p=p_spher))
+        except:
+             pass
+
         aov = pg.mixed_anova(
             data=df, 
             dv='_MeasurementValue_', 
@@ -348,34 +657,24 @@ class StatisticsService:
             'rows': aov.to_dict('records')
         }
         
-        # Check for significant effects (Interaction or Main Effects)
-        # We usually prioritize Interaction. If Interaction is significant, we look at simple main effects.
-        # If not, we look at main effects.
-        # Simplification: Run pairwise tests if any p < 0.05 in the table?
-        # Or specifically check Interaction.
-        
         interaction_row = aov[aov['Source'] == 'Interaction']
         significant = False
         if not interaction_row.empty:
-            p_int = interaction_row['p-unc'].iloc[0]
+            p_col = 'p-GG-corr' if 'p-GG-corr' in interaction_row else 'p-unc'
+            p_int = interaction_row[p_col].iloc[0]
             res['p_value'] = p_int
             res['statistic'] = interaction_row['F'].iloc[0]
             res['notes'].append(_l("P-value shown is for the Interaction effect."))
             if p_int <= 0.05: significant = True
         
-        # Also check main effects if interaction is not significant? 
-        # For now, let's trigger post-hoc if *any* effect is significant or just Interaction?
-        # A common approach in automated tools is to run the pairwise breakdown if interaction is significant.
-        
         if significant:
              try:
-                # Pairwise tests for mixed design
-                # This returns tests for within-factor at each level of between-factor, AND between-factor at each level of within-factor (if interaction=True? No, pingouin pairwise_tests handles this).
                 ph = pg.pairwise_tests(data=df, dv='_MeasurementValue_', within='_WithinFactorLevel_', between=group_col, subject=subject_id, padjust='bonf')
                 res['posthoc_data'] = {
                     'title': _l("Post-Hoc (Pairwise Tests, Bonferroni)"),
                     'columns': ph.columns.tolist(),
-                    'rows': ph.to_dict('records')
+                    'rows': ph.to_dict('records'),
+                    'rationale': _l("For this Mixed-ANOVA, pairwise comparisons were performed to decompose the observed interaction between 'Between' and 'Within' factors.")
                 }
              except Exception as e:
                  res['notes'].append(f"Post-hoc failed: {e}")
@@ -444,6 +743,119 @@ class StatisticsService:
                 'columns': ['Parameter'] + corr.columns.tolist(),
                 'rows': corr.reset_index().rename(columns={'index': 'Parameter'}).to_dict('records')
             }
+
+    def _run_chi_square(self, df, dv, groups, subject_id, res, extra_params=None):
+        """
+        Chi-Square Test of Independence for categorical variables.
+        Automatically switches to Fisher's Exact Test if expected frequencies < 5.
+        """
+        if not groups or len(groups) == 0:
+            res['error'] = "Chi-Square requires at least one grouping variable."
+            return
+        
+        # Create grouping column (combine multiple grouping variables if needed)
+        if len(groups) == 1:
+            group_col = groups[0]
+        else:
+            # Combine multiple grouping columns
+            df['_CombinedGroup_'] = df[groups].astype(str).agg(' / '.join, axis=1)
+            group_col = '_CombinedGroup_'
+        
+        # Remove missing values
+        df_clean = df[[dv, group_col]].dropna()
+        
+        if df_clean.empty:
+            res['error'] = "No valid data after removing missing values."
+            return
+        
+        try:
+            # Create contingency table
+            contingency_table = pd.crosstab(df_clean[group_col], df_clean[dv])
+            
+            # Check if we have enough data
+            if contingency_table.size == 0:
+                res['error'] = "Contingency table is empty."
+                return
+            
+            # Perform Chi-Square test
+            chi2, p_value, dof, expected_freq = stats.chi2_contingency(contingency_table)
+            
+            # Check if expected frequencies are too low (< 5)
+            min_expected = expected_freq.min()
+            use_fisher = min_expected < 5
+            
+            if use_fisher and contingency_table.shape == (2, 2):
+                # Use Fisher's Exact Test for 2x2 tables with low expected frequencies
+                oddsratio, p_value_fisher = stats.fisher_exact(contingency_table)
+                
+                res['test'] = _l("Fisher's Exact Test")
+                res['p_value'] = p_value_fisher
+                res['statistic'] = oddsratio
+                res['notes'].append(
+                    _l("Fisher's Exact Test used because expected frequencies were below 5 (min={min:.2f}).").format(min=min_expected)
+                )
+                
+                # Display contingency table
+                res['results_data'] = {
+                    'title': _l('Contingency Table'),
+                    'columns': ['Group'] + list(contingency_table.columns),
+                    'rows': contingency_table.reset_index().to_dict('records')
+                }
+                
+                # Add test results
+                res['test_results'] = {
+                    'title': _l("Fisher's Exact Test Results"),
+                    'columns': ['Statistic', 'Value'],
+                    'rows': [
+                        {'Statistic': 'Odds Ratio', 'Value': f'{oddsratio:.4f}'},
+                        {'Statistic': 'p-value', 'Value': f'{p_value_fisher:.4f}'}
+                    ]
+                }
+            else:
+                # Use Chi-Square
+                res['test'] = _l('Chi-Square Test of Independence')
+                res['p_value'] = p_value
+                res['statistic'] = chi2
+                
+                if min_expected < 5:
+                    res['notes'].append(
+                        _l("Warning: Some expected frequencies are below 5 (min={min:.2f}). Results may be unreliable. "
+                           "Consider Fisher's Exact Test for 2x2 tables or combining categories.").format(min=min_expected)
+                    )
+                
+                # Display contingency table
+                res['results_data'] = {
+                    'title': _l('Contingency Table'),
+                    'columns': ['Group'] + list(contingency_table.columns),
+                    'rows': contingency_table.reset_index().to_dict('records')
+                }
+                
+                # Add test results
+                res['test_results'] = {
+                    'title': _l('Chi-Square Test Results'),
+                    'columns': ['Statistic', 'Value'],
+                    'rows': [
+                        {'Statistic': 'Chi-Square', 'Value': f'{chi2:.4f}'},
+                        {'Statistic': 'Degrees of Freedom', 'Value': str(dof)},
+                        {'Statistic': 'p-value', 'Value': f'{p_value:.4f}'}
+                    ]
+                }
+                
+                # Add expected frequencies table
+                expected_df = pd.DataFrame(
+                    expected_freq,
+                    index=contingency_table.index,
+                    columns=contingency_table.columns
+                )
+                res['expected_frequencies'] = {
+                    'title': _l('Expected Frequencies'),
+                    'columns': ['Group'] + list(expected_df.columns),
+                    'rows': expected_df.reset_index().to_dict('records')
+                }
+                
+        except Exception as e:
+            res['error'] = f"Chi-Square test failed: {e}"
+            current_app.logger.error(f"Chi-Square error: {e}", exc_info=True)
 
     def _handle_special_keys(self, key, res):
         if key == 'error': res['error'] = _l("Data check error.")

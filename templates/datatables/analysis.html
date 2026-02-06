@@ -49,9 +49,7 @@
         {# Partials #}
         {% include "datatables/analysis/_form_stage1.html" %}
 
-        <div id="propose-workflow-stage" {% if analysis_stage !='propose_workflow' %}style="display: none;" {% endif %}>
-            {% include "datatables/analysis/_form_stage2.html" %}
-        </div>
+        {% include "datatables/analysis/_form_stage2.html" %}
 
         {% include "datatables/analysis/_results_stage3.html" %}
     </form>
@@ -64,6 +62,7 @@
         analysisStage: '{{ analysis_stage }}',
         categoricalColumns: {{ categorical_columns | tojson }},
         numericalColumns: {{ numerical_columns | tojson }},
+        columnTypes: {{ column_types | tojson }},
         formData: {{ form_data | tojson }},
         urls: {
             performAnalysisTask: "{{ url_for('datatables.analyze_datatable', datatable_id=data_table.id) if data_table else url_for('datatables.analyze_selected_datatables') }}",

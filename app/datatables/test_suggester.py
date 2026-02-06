@@ -2,8 +2,15 @@
 from flask_babel import lazy_gettext as _l
 
 
-def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, is_repeated, param_checks_by_param, subject_id_col, subject_id_col_present, available_numerical_cols, extra_context=None):
+def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, is_repeated, param_checks_by_param, subject_id_col, subject_id_col_present, available_numerical_cols, extra_context=None, column_types=None):
+    """
+    Suggest appropriate statistical tests based on data characteristics.
+    
+    Args:
+        column_types: Optional dict mapping column names to 'numerical' or 'categorical'
+    """
     if extra_context is None: extra_context = {}
+    if column_types is None: column_types = {}
     has_covariate = extra_context.get('has_covariate', False)
     has_control_group = extra_context.get('has_control_group', False)
 
@@ -52,6 +59,7 @@ def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, i
 )
         assumptions_met_for_parametric_rm = not any_param_check_error and not any_group_not_normal_across_params and not any_variance_issue_across_params
         rm_suggestions['overall_suggestion_notes'].append(_l("RM tests (ANOVA) also assume Sphericity for within-subject factors with >2 levels. Pingouin's Mixed ANOVA includes sphericity correction ('auto'). Statsmodels AnovaRM may require manual checks/corrections."))
+        rm_suggestions['overall_suggestion_notes'].append(_l("<b>Robustness Note:</b> If Precliniset detects missing data points during RM ANOVA execution, it will automatically switch to a <b>Linear Mixed Model (LMM)</b> using REML to ensure valid results despite incomplete data."))
 
         if num_between_factors == 0:
             if num_within_levels == 2:
@@ -101,6 +109,57 @@ def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, i
                 checks['possible_tests'] = param_suggestions_list
                 checks['overall_suggestion_notes'].append(_l("Statistical tests cannot be suggested due to errors during data checks for this parameter."))
                 continue
+            
+            # --- General Scientific Transparency Notes ---
+            if extra_context.get('exclude_outliers'):
+                method = extra_context.get('outlier_method', 'iqr')
+                if method == 'grubbs':
+                    checks['overall_suggestion_notes'].append(_l("<b>Grubbs' Test</b> is selected for outlier detection. This is ideal for identifying a single most extreme outlier in normally distributed groups."))
+                elif method == 'std':
+                    checks['overall_suggestion_notes'].append(_l("<b>Standard Deviation (3x)</b> is selected for outlier detection. This assumes a relatively normal distribution of your data."))
+                else:
+                    checks['overall_suggestion_notes'].append(_l("<b>IQR (1.5x)</b> outlier detection is active. This is a conservative, non-parametric method to identify potential outliers."))
+            
+            # NEW: Check if this parameter is categorical
+            param_is_categorical = column_types.get(param_name) == 'categorical'
+            
+            if param_is_categorical:
+                # Categorical outcome variable detected
+                # Suggest frequency-based tests (Chi-Square, Fisher's Exact)
+                checks['overall_suggestion_notes'].append(
+                    _l("'{param}' is a categorical variable. Frequency-based tests are appropriate.").format(param=param_name)
+                )
+                
+                if num_group_params >= 1:
+                    # We have grouping variables - suggest Chi-Square
+                    add_test(
+                        param_suggestions_list, 
+                        'chi_square', 
+                        _l('Chi-Square Test of Independence'),
+                        _l('Suggested because both outcome and grouping variables are categorical. Tests association between categorical variables.'),
+                        suggested=True
+                    )
+                    checks['overall_suggestion_notes'].append(
+                        _l("Chi-Square Test suggested. Fisher's Exact Test will be used automatically if expected frequencies are low (<5).")
+                    )
+                else:
+                    # No grouping - just descriptive
+                    checks['overall_suggestion_notes'].append(
+                        _l("No grouping parameters selected. Only frequency distribution will be shown.")
+                    )
+                    add_test(
+                        param_suggestions_list,
+                        'summary_only',
+                        _l('Frequency Distribution'),
+                        _l('Show frequency counts and percentages.'),
+                        suggested=True
+                    )
+                
+                add_test(param_suggestions_list, 'none', _l('Do Not Test'), _l('Skip statistical test.'))
+                checks['possible_tests'] = param_suggestions_list
+                continue  # Skip numerical test suggestions for categorical variables
+            
+            # Continue with numerical variable logic
             num_groups = checks.get('group_details', {}).get('count', 0)
             all_groups_normal = checks.get('all_groups_normal', False)
             equal_variance = checks.get('equal_variance', False)
@@ -130,11 +189,19 @@ def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, i
                  suggested_parametric = False
                  if normality_could_be_checked and all_groups_normal:
                      if variance_could_be_checked:
-                         if equal_variance: add_test(param_suggestions_list, 'ttest_ind_equal_var', _l('Independent T-test'), _l('Parametric test for two groups, assumes normality and equal variance.'), suggested=True); suggested_parametric = True
-                         else: add_test(param_suggestions_list, 'ttest_ind_unequal_var', _l("Welch's T-test"), _l('Parametric test for two groups, assumes normality but NOT equal variance.'), suggested=True); suggested_parametric = True
-                     else: add_test(param_suggestions_list, 'ttest_ind_unequal_var', _l("Welch's T-test"), _l('Parametric test for two groups (variance homogeneity not checked).'), suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("Variance homogeneity could not be checked due to insufficient data/groups. Welch's t-test suggested as it does not assume equal variance."))
+                         if equal_variance: 
+                             p_var = checks['variance_results'].get('p_value', 0)
+                             reason = _l('Suggested because data is normal and variances are equal (Levene p={p:.3f} > 0.05).').format(p=p_var)
+                             add_test(param_suggestions_list, 'ttest_ind_equal_var', _l('Independent T-test'), reason, suggested=True); suggested_parametric = True
+                         else: 
+                             p_var = checks['variance_results'].get('p_value', 0)
+                             reason = _l("Suggested because data is normal but variances are unequal (Levene p={p:.3f} < 0.05).").format(p=p_var)
+                             add_test(param_suggestions_list, 'ttest_ind_unequal_var', _l("Welch's T-test"), reason, suggested=True); suggested_parametric = True
+                     else: 
+                         add_test(param_suggestions_list, 'ttest_ind_unequal_var', _l("Welch's T-test"), _l('Suggested because data is normal. Variance could not be checked, so robust Welch\'s test is safer.'), suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("Variance homogeneity could not be checked due to insufficient data/groups. Welch's t-test suggested."))
+                 
                  if not suggested_parametric:
-                      add_test(param_suggestions_list, 'mannwhitneyu', _l('Mann-Whitney U Test'), _l('Non-parametric test for two independent groups.'), suggested=True)
+                      add_test(param_suggestions_list, 'mannwhitneyu', _l('Mann-Whitney U Test'), _l('Suggested because normality assumption was not met (p < 0.05 in one or more groups).'), suggested=True)
                       if not (normality_could_be_checked and all_groups_normal):
                            checks['overall_suggestion_notes'].append(_l("Normality assumption not met or could not be checked. Non-parametric Mann-Whitney U test suggested."))
                  if not any(t['key'] == 'ttest_ind_equal_var' and t.get('suggested') for t in param_suggestions_list): add_test(param_suggestions_list, 'ttest_ind_equal_var', _l('Independent T-test'), _l('Parametric, 2 groups, assumes normality & equal variance.'))
@@ -144,13 +211,21 @@ def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, i
             elif num_groups > 2:
                  suggested_parametric = False
                  if normality_could_be_checked and all_groups_normal and variance_could_be_checked and equal_variance:
-                      if num_group_params == 1: add_test(param_suggestions_list, 'anova_oneway', _l('One-Way ANOVA'), _l('Parametric test for >2 groups (1 factor), assumes normality and equal variance.'), suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("If One-Way ANOVA is significant, follow up with post-hoc tests (e.g., Tukey HSD) for pairwise comparisons. This tool will automatically perform Tukey HSD if the result is significant."))
-                      elif num_group_params == 2: add_test(param_suggestions_list, 'anova_twoway', _l('Two-Way ANOVA'), _l('Parametric test for 2 independent grouping factors, assumes normality and equal variance.'), suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("If Two-Way ANOVA is significant, follow up with post-hoc tests for pairwise comparisons of main effects or interactions. This tool will attempt basic post-hoc tests using Pingouin if significant."))
-                      elif num_group_params > 2: add_test(param_suggestions_list, 'anova_nway', _l('N-Way ANOVA'), _l('Parametric test for >2 independent grouping factors, assumes normality and equal variance.'), suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("If N-Way ANOVA is significant, follow up with post-hoc tests for pairwise comparisons of main effects or interactions. This tool will attempt basic post-hoc tests using Pingouin if significant."))
+                      p_var = checks['variance_results'].get('p_value', 0)
+                      reason_base = _l('Suggested because data is normal and variances are equal (Levene p={p:.3f}).').format(p=p_var)
+                      
+                      if num_group_params == 1: 
+                          add_test(param_suggestions_list, 'anova_oneway', _l('One-Way ANOVA'), reason_base, suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("One-Way ANOVA suggested. Post-hoc (Tukey) will run if significant."))
+                      elif num_group_params == 2: 
+                          add_test(param_suggestions_list, 'anova_twoway', _l('Two-Way ANOVA'), reason_base, suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("Two-Way ANOVA suggested."))
+                      elif num_group_params > 2: 
+                          add_test(param_suggestions_list, 'anova_nway', _l('N-Way ANOVA'), reason_base, suggested=True); suggested_parametric = True; checks['overall_suggestion_notes'].append(_l("N-Way ANOVA suggested."))
+                 
                  if not suggested_parametric:
-                     add_test(param_suggestions_list, 'kruskalwallis', _l('Kruskal-Wallis H Test'), _l('Non-parametric test for >2 independent groups.'), suggested=True)
-                     checks['overall_suggestion_notes'].append(_l("Normality or variance assumptions for ANOVA not met, or complex design. Non-parametric Kruskal-Wallis suggested."))
-                     if num_groups > 2: checks['overall_suggestion_notes'].append(_l("If Kruskal-Wallis is significant, follow up with non-parametric post-hoc tests (e.g., Dunn's Test). This tool will automatically perform Dunn's test using Pingouin if the result is significant."))
+                     add_test(param_suggestions_list, 'kruskalwallis', _l('Kruskal-Wallis H Test'), _l('Suggested because normality or variance assumptions were not met.'), suggested=True)
+                     checks['overall_suggestion_notes'].append(_l("Normality/Variance tests failed. Deducting Non-Parametric test (Kruskal-Wallis)."))
+                     if num_groups > 2: checks['overall_suggestion_notes'].append(_l("Post-hoc (Dunn's) will run if significant."))
+                 
                  if num_group_params == 1 and not any(t['key'] == 'anova_oneway' and t.get('suggested') for t in param_suggestions_list): add_test(param_suggestions_list, 'anova_oneway', _l('One-Way ANOVA'), _l('Parametric, >2 groups (1 factor), assumes normality & equal variance.'))
                  elif num_group_params == 2 and not any(t['key'] == 'anova_twoway' and t.get('suggested') for t in param_suggestions_list): add_test(param_suggestions_list, 'anova_twoway', _l('Two-Way ANOVA'), _l('Parametric, 2 independent grouping factors, assumes normality & equal variance.'))
                  elif num_group_params > 2 and not any(t['key'] == 'anova_nway' and t.get('suggested') for t in param_suggestions_list): add_test(param_suggestions_list, 'anova_nway', _l('N-Way ANOVA'), _l('Parametric, >2 independent grouping factors, assumes normality & equal variance.'))

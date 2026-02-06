@@ -221,6 +221,7 @@ class NativeDeployer:
         # Set debug env
         if debug:
             os.environ['DEBUG'] = '1'
+            os.environ['FLASK_DEBUG'] = '1'
         
         # venv setup
         venv_dir = ".venv" if os.path.exists(".venv") else "venv"
@@ -240,6 +241,13 @@ class NativeDeployer:
         # Dependencies
         console.print("[info]Installing dependencies...[/info]")
         run_command(f'"{pip_exec}" install -r requirements.txt')
+        
+        if IS_WINDOWS:
+            console.print("[info]Applying libmagic Windows workaround...[/info]")
+            # This specific sequence is required to correctly initialize libmagic on Windows
+            run_command(f'"{pip_exec}" install python-magic', check=False)
+            run_command(f'"{pip_exec}" uninstall python-magic-bin -y', check=False)
+            run_command(f'"{pip_exec}" install python-magic-bin', check=False)
 
         # Build Documentation
         console.print("[info]Building documentation...[/info]")
@@ -261,6 +269,8 @@ class NativeDeployer:
              # Using app:create_app() ensures the factory is found even without manage.py pivot behavior
              env = os.environ.copy()
              env['FLASK_APP'] = 'app:create_app()'
+             if debug:
+                 env['FLASK_DEBUG'] = '1'
              
              # Clean up any partial migration folder
              if os.path.exists("migrations") and not os.path.exists(migrations_env):
@@ -289,12 +299,16 @@ class NativeDeployer:
         # Run upgrade
         env = os.environ.copy()
         env['FLASK_APP'] = 'app:create_app()'
+        if debug:
+            env['FLASK_DEBUG'] = '1'
         run_command(f'"{python_exec}" -m flask db upgrade', check=False, env=env)
         
         # Precliniset specific custom setup commands
-        console.print("[info]Running application setup/seed...[/info]")
-        run_command(f'"{python_exec}" -m flask setup init-admin', check=False)
-        run_command(f'"{python_exec}" -m flask setup static-resources', check=False)
+        setup_env = os.environ.copy()
+        if debug:
+            setup_env['FLASK_DEBUG'] = '1'
+        run_command(f'"{python_exec}" -m flask setup init-admin', check=False, env=setup_env)
+        run_command(f'"{python_exec}" -m flask setup static-resources', check=False, env=setup_env)
         
         config = ConfigManager.load_env()
         if config.get('DEMO_DATA', '').lower() == 'true':

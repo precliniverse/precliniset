@@ -646,6 +646,47 @@
         </div>
     </div>
 
+    <!-- Template for Animal Row -->
+    <template id="animal-row-template">
+        <tr class="animal-row">
+            <!-- Actions Cell (will be populated in JS) -->
+            <td class="action-cell">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary duplicate-row-btn" title="{{ _('Duplicate') }}">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-danger remove-row-btn" title="{{ _('Delete') }}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+            
+            <!-- Randomization Cells placeholders (if applicable) -->
+            <td class="blinded-cell d-none">
+                <span class="badge bg-info blinded-value"></span>
+            </td>
+            <td class="treatment-cell d-none">
+                <span class="treatment-value"></span>
+            </td>
+
+            <!-- Age Cell -->
+            <td class="text-center bg-light age-cell">
+                <span class="age-display">-</span>
+            </td>
+
+            <!-- Dynamic Fields will be appended here -->
+        </tr>
+    </template>
+
+    <!-- Template for Animal Measurement Cell -->
+    <template id="animal-cell-template">
+        <td class="measurement-cell">
+            <input type="text" class="form-control form-control-sm measurement-input">
+            <!-- Datalist placeholder -->
+            <div class="death-info-container"></div>
+        </td>
+    </template>
+
     <!-- Template for treatment group row -->
     <template id="treatment-group-template">
         <div class="row g-2 mb-2 align-items-center treatment-group-row">
@@ -841,7 +882,8 @@
 </script>
 
 <!-- Load the external JS file -->
-<script src="{{ url_for('static', filename='js/groups_edit.js') }}" nonce="{{ csp_nonce }}"></script>
+<!-- Load the external JS file -->
+<script type="module" src="{{ url_for('static', filename='js/groups/main.js') }}" nonce="{{ csp_nonce }}"></script>
 
 <!-- DEBUG: Pass read-only status for testing -->
 <script id="page-status-data" type="application/json">

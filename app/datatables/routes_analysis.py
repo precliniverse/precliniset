@@ -187,7 +187,7 @@ def analyze_selected_datatables():
         flash(_("No data available to analyze after merging."), "danger")
         return redirect(request.referrer or url_for('datatables.create_data_table'))
     
-    subject_id_col = 'ID'
+    subject_id_col = 'uid'
     subject_id_col_present = subject_id_col in df_combined.columns
     
     numerical_cols = []

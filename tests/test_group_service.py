@@ -16,8 +16,8 @@ def test_create_group_refactored(db_session, init_database):
     # (Though current implementation might be permissive, good to be explicit)
     
     animals_input = [
-        {'ID': 'A1', 'Date of Birth': '2023-01-01', 'sex': 'Male', 'Weight': 20.5, 'Comment': 'Healthy'},
-        {'ID': 'A2', 'Date of Birth': '2023-01-02', 'sex': 'Female', 'Weight': 18.2, 'Comment': 'Small'}
+        {'uid': 'A1', 'date_of_birth': '2023-01-01', 'sex': 'Male', 'Weight': 20.5, 'Comment': 'Healthy'},
+        {'uid': 'A2', 'date_of_birth': '2023-01-02', 'sex': 'Female', 'Weight': 18.2, 'Comment': 'Small'}
     ]
     
     # Action: Create Group
@@ -52,7 +52,7 @@ def test_create_group_refactored(db_session, init_database):
     # Assertions: Serialization Check
     output_data = [a.to_dict() for a in sorted(group.animals, key=lambda x: x.id)]
     assert len(output_data) == 2
-    assert output_data[0]['ID'] == 'A1'
+    assert output_data[0]['uid'] == 'A1'
     assert output_data[0]['Weight'] == 20.5
     assert output_data[0]['sex'] == 'Male'
 
@@ -64,7 +64,7 @@ def test_save_group_data_updates_animals(db_session, init_database):
     owner = init_database['team1_admin']
     
     # Initial Create
-    animals_input = [{'ID': 'B1', 'Date of Birth': '2023-01-01', 'sex': 'Male', 'Val': 10}]
+    animals_input = [{'uid': 'B1', 'date_of_birth': '2023-01-01', 'sex': 'Male', 'Val': 10}]
     group = service.create_group("Update Test Group", project.id, project.team_id, owner.id, model.id, animals_input)
     
     # Verify Initial State
@@ -72,7 +72,7 @@ def test_save_group_data_updates_animals(db_session, init_database):
     assert animal.measurements['Val'] == 10
     
     # Update Data
-    updated_data = [{'ID': 'B1', 'Date of Birth': '2023-01-01', 'sex': 'Male', 'Val': 99, 'NewField': 'Added'}]
+    updated_data = [{'uid': 'B1', 'date_of_birth': '2023-01-01', 'sex': 'Male', 'Val': 99, 'NewField': 'Added'}]
     
     # Action: Save Group Data
     service.save_group_data(group, updated_data)
@@ -88,14 +88,14 @@ def test_sanitization(db_session, init_database):
     from app.schemas.animal import AnimalSchema
     
     # Test valid
-    a = AnimalSchema(ID=' A1 ', **{'Date of Birth': '2023-01-01'}, sex='Male')
-    assert a.animal_id == 'A1' # Stripped
+    a = AnimalSchema(uid=' A1 ', display_id='A1', **{'date_of_birth': '2023-01-01'}, sex='Male')
+    assert a.uid == 'A1' # Stripped
     
     # Test Sanitization
     bad_input = "<script>alert(1)</script>"
-    a = AnimalSchema(ID=bad_input, **{'Date of Birth': '2023-01-01'}, sex=bad_input)
+    a = AnimalSchema(uid=bad_input, display_id=bad_input, **{'date_of_birth': '2023-01-01'}, sex=bad_input)
     
     import html
     expected = html.escape(bad_input)
-    assert a.animal_id == expected
+    assert a.uid == expected
     assert a.sex == expected

@@ -21,92 +21,45 @@ class AnalysisService:
     def prepare_dataframe(self, data_table):
         """Convert DataTable to DataFrame using Animal model (V2 refactored).
         
-        Queries the Animal table directly instead of parsing JSON,
-        providing better performance and type safety.
-        
-        Args:
-            data_table: DataTable instance
-            
-        Returns:
-            Tuple of (DataFrame, numerical_columns, categorical_columns)
+        Queries the Animal table directly using JSON extraction for better performance.
         """
         from app.models import Animal
         
-        # 1. Determine fields to extract
-        # Core columns in the Animal model that we already query explicitly
-        core_cols = {'sex', 'status', 'date_of_birth', 'id', 'uid'}
+        # 1. Get all animals for the group
+        animals = data_table.group.animals
+        if not animals:
+            return None, [], []
+            
+        # 2. Get all ExperimentDataRows for the data_table
+        exp_rows = ExperimentDataRow.query.filter_by(data_table_id=data_table.id).all()
+        exp_rows_by_animal_id = {row.animal_id: row.row_data for row in exp_rows}
         
-        json_fields = []
-        if data_table.group and data_table.group.model:
-            json_fields.extend([
-                a.name for a in data_table.group.model.analytes 
-                if a.name and a.name.lower() not in core_cols
-            ])
-        
-        # 2. Build optimized SQL query
-        # We select core columns + specific JSON keys
-        query = db.session.query(
-            Animal.uid.label('ID'),
-            Animal.date_of_birth,
-            Animal.sex,
-            Animal.status,
-            *[func.json_extract(Animal.measurements, f'$.{field}').label(field) for field in json_fields]
-        ).filter_by(group_id=data_table.group_id).order_by(Animal.id)
-        
-        try:
-             # Execute SQL query directly into a list of dictionaries
-             results = query.all()
-             
-             # Convert Row objects to dicts
-             animal_data = []
-             for row in results:
-                 row_dict = {
-                     'ID': row.ID,
-                     'date_of_birth': row.date_of_birth.isoformat() if row.date_of_birth else None,
-                     'Date of Birth': row.date_of_birth.isoformat() if row.date_of_birth else None, # Compatibility
-                     'sex': row.sex,
-                     'Sex': row.sex, # Compatibility
-                     'status': row.status,
-                     'Status': row.status, # Compatibility
-                 }
-                 # Add extracted JSON fields
-                 for field in json_fields:
-                     row_dict[field] = getattr(row, field, None)
-                 animal_data.append(row_dict)
-
-        except Exception as e:
-            current_app.logger.warning(f"Optimized SQL JSON query failed: {e}")
-            # Fallback: legacy object loading
-            animals = Animal.query.filter_by(group_id=data_table.group_id).order_by(Animal.id).all()
-            animal_data = []
-            for animal in animals:
-                animal_data.append(animal.to_dict())
-
-        if not animal_data:
-             return None, [], []
-                
-        # 3. Merge with protocol data from ExperimentDataRow
-        rows_query = data_table.experiment_rows.order_by(ExperimentDataRow.row_index)
-        existing_data_rows_dict = {row.row_index: row.row_data for row in rows_query.all()}
-        
-        # Match animals by index (assuming same order)
-        for i, row in enumerate(animal_data):
-            if i in existing_data_rows_dict:
-                row.update(existing_data_rows_dict[i])
-        
+        # 3. Merge data
+        animal_data = []
+        for animal in animals:
+            animal_dict = animal.to_dict()
+            if animal.id in exp_rows_by_animal_id:
+                animal_dict.update(exp_rows_by_animal_id[animal.id])
+            animal_data.append(animal_dict)
+            
         # 4. Calculate Age (Days)
+        dt_date = None
+        if data_table.date:
+            try:
+                dt_date = datetime.strptime(data_table.date, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                pass
+
         for row in animal_data:
             age_in_days = None
-            date_of_birth_str = row.get('Date of Birth') or row.get('date_of_birth')
-            if date_of_birth_str and data_table.date:
+            dob_str = row.get('date_of_birth')
+            if dob_str and dt_date:
                 try:
-                    dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
-                    dt_date_obj = datetime.strptime(data_table.date, '%Y-%m-%d').date()
-                    delta = dt_date_obj - dob
-                    age_in_days = delta.days
+                    dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+                    age_in_days = (dt_date - dob).days
                 except (ValueError, TypeError):
-                    age_in_days = None
-            row['Age (Days)'] = age_in_days
+                    pass
+            row['age_days'] = age_in_days
         
         # 5. Create DataFrame
         df = pd.DataFrame(animal_data)
@@ -126,19 +79,66 @@ class AnalysisService:
                 if field_name in df.columns and field_type in ['int', 'float']:
                     df[field_name] = pd.to_numeric(df[field_name], errors='coerce')
         
-        if 'Age (Days)' in df.columns:
-            df['Age (Days)'] = pd.to_numeric(df['Age (Days)'], errors='coerce')
+        if 'age_days' in df.columns:
+            df['age_days'] = pd.to_numeric(df['age_days'], errors='coerce')
         
-        # 7. Identify Column Types
+        # 7. Identify Column Types (Clean deduplication)
         numerical_columns = []
         categorical_columns = []
+        seen = set()
         for col in df.columns:
+            low_col = col.lower()
+            if low_col in seen: continue
+            seen.add(low_col)
+
             if pd.api.types.is_numeric_dtype(df[col]):
                 numerical_columns.append(col)
             else:
                 categorical_columns.append(col)
         
         return df, numerical_columns, categorical_columns
+
+    def _get_flattened_animal_data(self, group_ids, json_fields):
+        """Helper to fetch animal data in bulk with JSON extraction.
+        
+        Returns:
+            Dict mapping group_id to list of animal dicts (pre-sorted by id)
+        """
+        from app.models import Animal
+        
+        # Ensure json_fields are unique and filtered
+        json_fields = sorted(list(set(json_fields)))
+        
+        query = db.session.query(
+            Animal.group_id,
+            Animal.uid,
+            Animal.date_of_birth,
+            Animal.sex,
+            Animal.status,
+            *[func.json_extract(Animal.measurements, f'$.{field}').label(field) for field in json_fields]
+        ).filter(Animal.group_id.in_(group_ids)).order_by(Animal.group_id, Animal.id)
+        
+        results = query.all()
+        
+        data_by_group = {}
+        for row in results:
+            if row.group_id not in data_by_group:
+                data_by_group[row.group_id] = []
+            
+            row_dict = {
+                'uid': row.uid,
+                'group_id': row.group_id,
+                'date_of_birth': row.date_of_birth.isoformat() if row.date_of_birth else None,
+                'sex': row.sex,
+                'status': row.status,
+            }
+            # Add extracted JSON fields
+            for field in json_fields:
+                row_dict[field] = getattr(row, field, None)
+            
+            data_by_group[row.group_id].append(row_dict)
+            
+        return data_by_group
 
     def get_datatable_metadata(self, data_table):
         """
@@ -151,39 +151,55 @@ class AnalysisService:
         """
         numerical_columns = []
         categorical_columns = []
-        column_types = {}  # New: maps column name to type
+        column_types = {} 
         
-        # 1. Animal Model Fields
+        # 1. Deduplication Gatekeeper
+        # We explicitly skip fields that are handled as core columns or internal metadata
+        seen_lower = {
+            'id', 'uid', 'animal_id', 'date_of_birth', 'date of birth', 
+            'sex', 'status', 'created_at', 'updated_at', 'group_id',
+            'age_days', 'age (days)', 'blinded group', 'treatment group'
+        }
+        
+        # 2. Animal Model Fields (Custom measurements)
         if data_table.group and data_table.group.model:
-            # We skip internal IDs and raw date fields (Age is provided separately)
-            # sex and status are biological factors and must be available for grouping.
-            skip_fields = {'id', 'uid', 'animal_id', 'date_of_birth', 'date of birth'}
             for analyte in data_table.group.model.analytes:
-                if not analyte.name or analyte.name.lower() in skip_fields:
+                if not analyte.name: continue
+                
+                low_name = analyte.name.lower()
+                if low_name in seen_lower:
+                    # This analyte overlaps with a core field (e.g. legacy model has 'Sex')
                     continue
                 
-                # Use Title Case for these core factors for better UI display
-                # while keeping compatibility with prepare_dataframe keys
-                display_name = analyte.name
-                if display_name.lower() == 'sex': display_name = 'Sex'
-                if display_name.lower() == 'status': display_name = 'Status'
+                seen_lower.add(low_name)
 
                 if analyte.data_type.value in ['int', 'float']:
-                    numerical_columns.append(display_name)
-                    column_types[display_name] = 'numerical'
+                    numerical_columns.append(analyte.name)
+                    column_types[analyte.name] = 'numerical'
                 else:
-                    categorical_columns.append(display_name)
-                    column_types[display_name] = 'categorical'
+                    categorical_columns.append(analyte.name)
+                    column_types[analyte.name] = 'categorical'
         
-        # 2. Protocol Fields
+        # 3. Add core factors explicitly if they are available for analysis
+        # Best practice: sex and status are always useful categorical factors.
+        for core_f in ['sex', 'status']:
+            numerical_columns.append(core_f) if False else categorical_columns.append(core_f)
+            column_types[core_f] = 'categorical'
+            seen_lower.add(core_f)
+
+        # 4. Protocol Fields
         if data_table.protocol:
-             # Sort analytes by ProtocolAnalyteAssociation.order
              sorted_analytes = sorted(
                  data_table.protocol.analyte_associations,
                  key=lambda assoc: assoc.order
              )
              for assoc in sorted_analytes:
                  analyte = assoc.analyte
+                 low_name = analyte.name.lower()
+                 if low_name in seen_lower:
+                     continue
+                 seen_lower.add(low_name)
+
                  if analyte.data_type.value in ['int', 'float']:
                      numerical_columns.append(analyte.name)
                      column_types[analyte.name] = 'numerical'
@@ -191,39 +207,40 @@ class AnalysisService:
                      categorical_columns.append(analyte.name)
                      column_types[analyte.name] = 'categorical'
         
-        # 3. Calculated Age
-        # We assume if 'Date of Birth' is in the model (or implicitly available) and we have a Date, we have Age.
-        # But wait, prepare_dataframe calculates it if 'Date of Birth' is in the data.
-        # Let's check the Animal Model for 'Date of Birth'.
-        has_dob = False
-        if data_table.group and data_table.group.model:
-            dob_names = {'date of birth', 'date_of_birth'}
-            if any(a.name and a.name.lower() in dob_names for a in data_table.group.model.analytes):
-                has_dob = True
-        
-        # If not in model, it might still be in data... but this is FAST PATH.
-        # We'll assume strict Model adherence for fast path.
-        if has_dob and data_table.date:
-             numerical_columns.append('Age (Days)')
-             column_types['Age (Days)'] = 'numerical'
-             
-        # Also ensure ID is not in either list (usually handled by UI exclusion, but good to be safe)
-        
+        # 5. Calculated Age
+        # No legacy DOB/age check, just add age_days if it can be calculated
+        if 'age_days' not in seen_lower and data_table.date:
+             numerical_columns.append('age_days')
+             column_types['age_days'] = 'numerical'
+             seen_lower.add('age_days')
+                 
         return numerical_columns, categorical_columns, column_types
 
     def aggregate_datatables(self, selected_datatable_ids, user_id=None):
         """
-        Merges multiple DataTables into one DataFrame.
+        Merges multiple DataTables into one DataFrame. Optimized for performance and V2 refactoring.
         """
         if not selected_datatable_ids:
             return None, [_l("No datatables were selected.")], []
 
+        # 1. Batch Load DataTables with joined relationships
         datatables_to_process = []
         errors = []
         source_identifiers = []
         
+        from sqlalchemy.orm import joinedload
+        datatables_query = DataTable.query.filter(DataTable.id.in_(selected_datatable_ids))\
+            .options(
+                joinedload(DataTable.group),
+                joinedload(DataTable.protocol),
+                joinedload(DataTable.group).joinedload(ExperimentalGroup.animals)
+            )
+        
+        found_dts = {dt.id: dt for dt in datatables_query.all()}
+        
+        # Maintain order and check permissions
         for dt_id in selected_datatable_ids:
-            dt = db.session.get(DataTable, dt_id)
+            dt = found_dts.get(int(dt_id))
             if not dt or not dt.group:
                 errors.append(_l("DataTable with ID {dt_id} not found or group missing.").format(dt_id=dt_id))
                 continue
@@ -236,37 +253,43 @@ class AnalysisService:
         if not datatables_to_process:
             return None, errors, source_identifiers
 
+        # 2. Batch Load ExperimentDataRows
+        all_dt_ids = [dt.id for dt in datatables_to_process]
+        all_rows = ExperimentDataRow.query.filter(ExperimentDataRow.data_table_id.in_(all_dt_ids)).all()
+        rows_by_dt_and_animal = {} # dt_id -> {animal_id: row_data}
+        for r in all_rows:
+            if r.data_table_id not in rows_by_dt_and_animal:
+                rows_by_dt_and_animal[r.data_table_id] = {}
+            rows_by_dt_and_animal[r.data_table_id][r.animal_id] = r.row_data
+
+        # 3. Process Data In-Memory
         all_long_data = []
-        animal_model_fields = set()
+        all_animals = []
+        seen_animal_uids = set()
 
         for dt in datatables_to_process:
-            # Load experiment rows for this datatable
-            from app.models import ExperimentDataRow
-            exp_rows_dict = {row.row_index: row.row_data for row in dt.experiment_rows.all()}
-            
-            # Use animals relationship instead of animal_data
-            animals = sorted(dt.group.animals, key=lambda a: a.id)
-            for i, animal in enumerate(animals):
-                animal_info = animal.to_dict()
-                animal_id = animal_info.get('uid')
+            exp_rows_dict = rows_by_dt_and_animal.get(dt.id, {})
+            for animal in dt.group.animals:
+                if animal.uid not in seen_animal_uids:
+                    all_animals.append(animal.to_dict())
+                    seen_animal_uids.add(animal.uid)
+
+                animal_id = animal.id
                 if not animal_id: continue
 
-                merged_data = {**animal_info, **exp_rows_dict.get(i, {})}
+                merged_data = {**animal.to_dict(), **exp_rows_dict.get(animal_id, {})}
                 
                 if dt.protocol and dt.protocol.analytes:
                     for analyte in dt.protocol.analytes:
                         if analyte.name in merged_data:
                             all_long_data.append({
-                                'ID': animal_id,
+                                'uid': animal.uid,
                                 'analyte_name': analyte.name,
                                 'analyte_value': merged_data[analyte.name],
                                 'protocol_name': dt.protocol.name,
                                 'datatable_date': dt.date,
-                                # Meta info for tracking
                                 '_source_datatable_id': dt.id,
                                 '_source_experimental_group_name': dt.group.name,
-                                '_source_protocol_name': dt.protocol.name,
-                                '_source_datatable_date': dt.date
                             })
 
         if not all_long_data:
@@ -275,38 +298,26 @@ class AnalysisService:
         long_df = pd.DataFrame(all_long_data)
 
         # Filter to analytes present in all datatables
+        dt_count = len(datatables_to_process)
         analyte_counts = long_df.groupby('analyte_name')['_source_datatable_id'].nunique()
-        common_analytes = analyte_counts[analyte_counts == len(datatables_to_process)].index
+        common_analytes = analyte_counts[analyte_counts == dt_count].index
         long_df = long_df[long_df['analyte_name'].isin(common_analytes)]
 
         if long_df.empty:
             return pd.DataFrame(), [_l("No common analytes found across all selected datatables.")], source_identifiers
         
-        # Create unique column names for measurements
-        # MODIFIED: Use analyte_name only to align data across datatables (pooling/comparison)
-        # instead of separating by date/protocol which creates disjoint variables.
         long_df['measurement_label'] = long_df['analyte_name']
         
-        # Base animal data
-        all_animal_data_df = []
-        seen_animal_ids = set()
-        for dt in datatables_to_process:
-            for animal in dt.group.animals:
-                animal_info = animal.to_dict()
-                animal_id = animal_info.get('uid')
-                if animal_id and animal_id not in seen_animal_ids:
-                    all_animal_data_df.append(animal_info)
-                    seen_animal_ids.add(animal_id)
+        # Base animal data (unique animals)
+        animal_df = pd.DataFrame(all_animals)
+        if 'uid' not in animal_df.columns:
+            return pd.DataFrame(), [_l("Could not find 'uid' column in animal data.")], source_identifiers
         
-        animal_df = pd.DataFrame(all_animal_data_df)
-        if 'ID' not in animal_df.columns:
-            return pd.DataFrame(), [_l("Could not find 'ID' column in animal data.")], source_identifiers
-        
-        animal_df = animal_df.drop_duplicates(subset=['ID']).set_index('ID')
+        animal_df = animal_df.drop_duplicates(subset=['uid']).set_index('uid')
         
         # Pivot measurements
         pivoted_df = long_df.pivot_table(
-            index='ID',
+            index='uid',
             columns='measurement_label',
             values='analyte_value',
             aggfunc='first'
@@ -315,14 +326,7 @@ class AnalysisService:
         # Join
         final_df = animal_df.join(pivoted_df, how='left')
         
-        # Reorder columns
-        animal_cols_ordered = sorted([col for col in final_df.columns if col in animal_model_fields and col != 'ID'])
-        measurement_cols_ordered = sorted([col for col in final_df.columns if col not in animal_model_fields])
-        final_column_order = animal_cols_ordered + measurement_cols_ordered
-        
-        final_df = final_df[final_column_order].reset_index()
-
-        return final_df, errors, source_identifiers
+        return final_df.reset_index(), errors, source_identifiers
 
     def perform_analysis(self, df, form_data, subject_id_col, subject_id_col_present, available_numerical, available_categorical):
         """
@@ -408,23 +412,7 @@ class AnalysisService:
         time_col = form_data.get('survival_time_col')
         event_col = form_data.get('survival_event_col')
         
-        # Calculate duration if time_col is a Date (simplistic check, better to do in prep)
-        # However, for this version, we assume `prepare_dataframe` logic (which we need to add) or that it is already a duration.
-        # Actually, let's implement the duration calc in `_analyze_survival` or rely on prep.
-        # Given `prepare_dataframe` returns a DF, we can do it here if we have reference dates.
-        # BUT `prepare_dataframe` is better for global logic.
-        # Let's assume `time_col` IS the duration or we calculate it here if needed?
-        # The user said "animals have a date of death". We have `Age (Days)`.
-        # Better: Use `prepare_dataframe` to calculate `_SurvivalDuration_` if dates provided.
-        # For now, let's assume `time_col` holds the numerical duration OR we attempt to convert.
-        
-        # Simple Robust Check: Is time_col numeric?
         if not pd.api.types.is_numeric_dtype(df[time_col]):
-             # Attempt to convert to date and diff against start? 
-             # We lack 'Start Date' easily here unless we pass it.
-             # Assumption: parameters passed in UI are ALREADY durations or ready-to-use numbers.
-             # If user selects "Date of Death", we need to convert it.
-             # See Step 3 of plan: "Data Prep: Handle Date of Death".
              results['survival_results'] = {'error': _l("Survival Analysis requires a numeric Duration column. Please ensure 'Date of Death' is converted to duration (Age) or select 'Age (Days)'.")}
              return
 
@@ -432,8 +420,6 @@ class AnalysisService:
         try:
              stats_res = self.stats_service.execute_test(df, 'logrank', time_col, grouping, False, None, exclude_outliers=False, extra_params={'event_col': event_col})
              
-             # Generate Plot Data (Kaplan-Meier)
-             # We use `plot_utils` which we need to update.
              from app.datatables.plot_utils import generate_survival_plot
              graph_data, notes = generate_survival_plot(df, time_col, event_col, grouping)
              results['overall_notes'].extend(notes)
@@ -450,52 +436,61 @@ class AnalysisService:
 
 
     def _calculate_reference_range_summary(self, range_id, splitting_param=None):
-        """Fetches and calculates descriptive statistics for a reference range."""
-        from app.models import ReferenceRange, ExperimentalGroup, DataTable, ExperimentDataRow
+        """Fetches and calculates descriptive statistics for a reference range. Optimized Batch Version."""
+        from app.models import ReferenceRange, ExperimentalGroup, DataTable, ExperimentDataRow, Animal
         from collections import defaultdict
+        from sqlalchemy.orm import joinedload
         
         ref_range = db.session.get(ReferenceRange, range_id)
         if not ref_range or not ref_range.included_animals:
             return None
 
         # Collect measurement values:
-        # 1. Global (for all animals)
-        # 2. Split (if splitting_param provided)
         values_global = defaultdict(list)
         values_split = defaultdict(lambda: defaultdict(list)) # [SplitVal][Param]
         
         group_ids = [gid for gid in ref_range.included_animals.keys()]
+        
+        # Batch Load Groups and DataTables
         experimental_groups = ExperimentalGroup.query.filter(ExperimentalGroup.id.in_(group_ids)).all()
         group_map = {g.id: g for g in experimental_groups}
         
+        animal_fields = set()
+        if splitting_param:
+            animal_fields.add(splitting_param)
+            
+        animal_data_by_group = self._get_flattened_animal_data(group_ids, list(animal_fields))
+
         data_tables = DataTable.query.filter(
             DataTable.group_id.in_(group_ids),
             DataTable.protocol_id == ref_range.protocol_id
         ).all()
         dt_ids = [dt.id for dt in data_tables]
         
+        # Batch Load rows
         rows = ExperimentDataRow.query.filter(ExperimentDataRow.data_table_id.in_(dt_ids)).all()
         rows_by_dt = defaultdict(dict)
         for r in rows:
-            rows_by_dt[r.data_table_id][r.row_index] = r.row_data
+            rows_by_dt[r.data_table_id][r.animal_id] = r.row_data
 
-        for group_id_str, animal_indices in ref_range.included_animals.items():
-            gid = group_id_str
-            group = group_map.get(gid)
+        for group_id, animal_indices in ref_range.included_animals.items():
+            group = group_map.get(group_id)
             if not group: continue
             
-            animals = sorted(group.animals, key=lambda a: a.id)
-            relevant_dts = [dt for dt in data_tables if dt.group_id == gid]
+            animals_list = animal_data_by_group.get(group_id, [])
+            relevant_dts = [dt for dt in data_tables if dt.group_id == group_id]
             
             for dt in relevant_dts:
                 dt_rows = rows_by_dt.get(dt.id, {})
-                for idx in animal_indices:
-                    row_meas = dt_rows.get(idx, {})
+                for animal in group.animals:
+                    if animal.id not in animal_indices:
+                        continue
+                    
+                    row_meas = dt_rows.get(animal.id, {})
                     if not row_meas: continue
                     
                     # Fetch split value for this animal if requested
-                    animal = animals[idx] if idx < len(animals) else None
-                    animal_info = animal.to_dict() if animal else {}
+                    animal_info = animal.to_dict()
                     split_val = str(animal_info.get(splitting_param)) if splitting_param and animal_info.get(splitting_param) is not None else None
                     
                     for param, val in row_meas.items():
@@ -520,17 +515,14 @@ class AnalysisService:
                     'max': float(s.max()),
                     'n': int(len(s))
                 }
-                # Mapping for RM
                 if ref_range.analyte and param == ref_range.analyte.name:
                     stats['_MeasurementValue_'] = stats[param]
             return stats
 
-        summary = {
+        return {
             'global': calc_stats(values_global),
             'splits': {val: calc_stats(p_dict) for val, p_dict in values_split.items()}
         }
-        
-        return summary
 
     def _analyze_repeated(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None, suggestions=None):
         # Handle Splitting (Must be done before id_vars def)
@@ -884,27 +876,65 @@ class AnalysisService:
             return None
     
 
-    def _check_cage_effect(self, df, param, results):
-        """Checks for significant cage effects and warns if found."""
-        if 'Cage' not in df.columns or df['Cage'].nunique() < 2:
-            return
-
-        try:
-            # Run simple One-Way ANOVA: Param ~ Cage
-            # use stats_service to reuse robust ANOVA logic
-            cage_res = self.stats_service.execute_test(
-                df, 
-                'anova_oneway', 
-                param, 
-                ['Cage'], 
-                False, # is_repeated
-                'ID', # subject_id (dummy if not RM, but needed for signature)
-                exclude_outliers=False 
-            )
+    def get_longitudinal_weight_data(self, group_id):
+        """Get longitudinal weight data for a group.
+        
+        Returns a wide-format DataFrame: Rows = Animals, Cols = Dates, Values = Weight.
+        Uses Animal.measurements['last_weight'] for the most recent weight.
+        """
+        from app.models import Animal, DataTable, ExperimentDataRow
+        
+        # Get the group and its animals
+        animals = Animal.query.filter_by(group_id=group_id).all()
+        if not animals:
+            return None, []
+        
+        # Get all datatables for this group, ordered by date
+        datatables = DataTable.query.filter_by(group_id=group_id).order_by(DataTable.date).all()
+        if not datatables:
+            return None, []
+        
+        # Collect weight data from all datatables
+        weight_data = {}
+        dates = []
+        
+        for dt in datatables:
+            dt_date = dt.date
+            dates.append(dt_date)
             
-            p_val = cage_res.get('p_value')
-            if p_val is not None and p_val < 0.05:
-                 results['overall_notes'].append(_l("<strong>Warning: Significant Cage Effect detected for '{param}' (p={p:.3f}).</strong> Data may be non-independent. Consider using Mixed Models with Cage as a random effect.").format(param=param, p=p_val))
-        except Exception as e:
-            # Swallow errors in background check
-            current_app.logger.warning(f"Cage effect check failed: {e}") 
+            # Get experiment rows for this datatable
+            exp_rows = {row.animal_id: row.row_data for row in dt.experiment_rows.all()}
+            
+            for animal in animals:
+                animal_id = animal.uid
+                if animal_id not in weight_data:
+                    weight_data[animal_id] = {}
+                
+                # Check for weight in the experiment row data
+                weight_value = None
+                for weight_key in ['weight', 'Weight', 'WEIGHT', 'body weight', 'Body Weight']:
+                    if weight_key in exp_rows.get(animal.id, {}):
+                        weight_value = exp_rows[animal.id][weight_key]
+                        break
+                
+                # If not found in experiment data, use last_weight from measurements
+                if weight_value is None:
+                    weight_value = animal.measurements.get('last_weight') if animal.measurements else None
+                
+                if weight_value is not None:
+                    try:
+                        # Convert to float for consistency
+                        weight_data[animal_id][dt_date] = float(weight_value)
+                    except (ValueError, TypeError):
+                        pass
+        
+        if not weight_data:
+            return None, []
+        
+        # Create DataFrame
+        df = pd.DataFrame.from_dict(weight_data, orient='index')
+        df.index.name = 'Animal_ID'
+        df.columns = pd.to_datetime(df.columns)  # Convert dates to datetime
+        df = df.sort_index(axis=1)  # Sort columns by date
+        
+        return df, dates

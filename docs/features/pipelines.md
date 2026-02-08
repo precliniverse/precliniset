@@ -46,7 +46,7 @@ def parse(file_path):
     Returns:
        list[dict]: A list of dictionaries. 
                    Keys MUST match Analyte names exactly.
-                   One key MUST be 'ID' (for Animal ID).
+                   One key MUST be 'uid' (for Animal identifier).
     """
     
     # Custom parsing logic here
@@ -88,11 +88,11 @@ def parse(file_path):
     # Assuming 'Reading 1' and 'Reading 2' should be averaged into 'Tumor OD'
     df['Tumor OD'] = (df[' Reading 1'] + df[' Reading 2']) / 2
     
-    # 4. Rename 'ID' to ensure it's exactly what the system expects
-    df = df.rename(columns={'ID': 'ID'})
+    # 4. Rename 'ID' to ensure it's exactly what the system expects (canonical 'uid')
+    df = df.rename(columns={'ID': 'uid'})
     
     # 5. Filter only the columns we want to import
-    result = df[['ID', 'Tumor OD']]
+    result = df[['uid', 'Tumor OD']]
     
     return result.to_dict(orient='records')
 ```
@@ -103,8 +103,8 @@ The script returns this structure to Precliniset:
 
 ```json
 [
-  {"ID": "A-101", "Tumor OD": 0.455},
-  {"ID": "A-102", "Tumor OD": 0.900}
+  {"uid": "A-101", "Tumor OD": 0.455},
+  {"uid": "A-102", "Tumor OD": 0.900}
 ]
 ```
 
@@ -125,7 +125,7 @@ Forbidden operations (e.g., `os`, `sys`, file writing, network access) will caus
 3.  **Select File**: Upload your raw file.
 4.  **Run**: Click **Next**.
     *   The system executes the script.
-    *   It verifies that an `'ID'` column exists in the output.
+    *   It verifies that a `'uid'` column exists in the output.
     *   It **skips Step 2 (Mapping)** completely.
 5.  **Validation**: You are taken directly to Step 3 (Validation) to confirm recognized animals.
 6.  **Import**: Finalize the import.

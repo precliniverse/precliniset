@@ -227,6 +227,19 @@ textarea::placeholder {
     font-weight: bolder;
 }
 
+/* Visual styling for weight trends */
+.negative-weight-trend {
+    color: var(--bs-danger-text-emphasis);
+    background-color: var(--bs-danger-bg-subtle);
+    font-weight: bold;
+}
+
+.positive-weight-trend {
+    color: var(--bs-success-text-emphasis);
+    background-color: var(--bs-success-bg-subtle);
+    font-weight: bold;
+}
+
 .unlink-btn {
     font-size: 0.8em;
     /* Smaller font for the 'x' */

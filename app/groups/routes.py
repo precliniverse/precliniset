@@ -35,12 +35,12 @@ from ..forms import GroupForm
 from ..helpers import (generate_unique_name, generate_xlsx_template,
                        get_ordered_analytes_for_model, replace_undefined,
                        sort_analytes_list_by_name,
-                       update_associated_data_tables, validate_and_convert)
+                       validate_and_convert)
 from app.utils.files import dataframe_to_excel_bytes
 from ..models import (Analyte, AnalyteDataType, AnimalModel, DataTable,
                       DataTableMoleculeUsage, ControlledMolecule,
                       EthicalApproval, ExperimentalGroup, ExperimentDataRow,
-                      Project, Team, TeamMembership, User, Workplan)
+                      Project, Team, TeamMembership, User, UserTeamRoleLink, Workplan)
 # Import blueprint, extensions, models, forms
 from . import groups_bp
 
@@ -103,6 +103,84 @@ def search_groups_ajax():
         'total_count': total_count,
         'pagination': {'more': (page * per_page) < total_count}
     })
+
+@groups_bp.route('/<string:group_id>/assignable_users', methods=['GET'])
+@login_required
+def get_assignable_users_ajax(group_id):
+    """
+    Returns a list of users who can be assigned to a DataTable for this group.
+    Includes members of the project's owning team and members of teams with shared permissions.
+    """
+    from app.models import ProjectTeamShare, ProjectUserShare
+    group = db.session.get(ExperimentalGroup, group_id)
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+        
+    if not check_group_permission(group, 'read'):
+        return jsonify({'error': 'Permission denied'}), 403
+        
+    project = group.project
+    assignable_users = {}
+    
+    # 1. Members of the owning team
+    if project.team:
+        for membership in project.team.memberships:
+            if membership.user:
+                assignable_users[membership.user.id] = {
+                    'id': membership.user.id,
+                    'email': membership.user.email
+                }
+        for link in project.team.user_roles:
+            if link.user:
+                assignable_users[link.user.id] = {
+                    'id': link.user.id,
+                    'email': link.user.email
+                }
+                
+    # 2. Members of shared teams who have 'create_datatables' or 'edit_datatables' perms
+    shared_permissions = ProjectTeamShare.query.filter(
+        ProjectTeamShare.project_id == project.id,
+        or_(
+            ProjectTeamShare.can_create_datatables == True,
+            ProjectTeamShare.can_edit_datatables == True
+        )
+    ).all()
+    
+    for perm in shared_permissions:
+        if perm.team:
+            for membership in perm.team.memberships:
+                if membership.user:
+                    assignable_users[membership.user.id] = {
+                        'id': membership.user.id,
+                        'email': membership.user.email
+                    }
+            for link in perm.team.user_roles:
+                if link.user:
+                    assignable_users[link.user.id] = {
+                        'id': link.user.id,
+                        'email': link.user.email
+                    }
+                    
+    # 3. Direct user shares
+    shared_users = ProjectUserShare.query.filter(
+        ProjectUserShare.project_id == project.id,
+        or_(
+            ProjectUserShare.can_create_datatables == True,
+            ProjectUserShare.can_edit_datatables == True
+        )
+    ).all()
+    
+    for share in shared_users:
+        if share.user:
+            assignable_users[share.user.id] = {
+                'id': share.user.id,
+                'email': share.user.email
+            }
+            
+    # Sort by email
+    results = sorted(assignable_users.values(), key=lambda x: x['email'])
+    
+    return jsonify(results)
 
 @groups_bp.route('/', methods=['GET'])
 @login_required
@@ -361,11 +439,12 @@ def edit_group(id: Optional[str] = None):
             p = db.session.get(Project, pid)
             if p: team_id_for_eas = p.team_id
         
-    form = GroupForm(obj=group, team_id_for_eas=team_id_for_eas, formdata=request.form if request.method == 'POST' else None)
-    
-    if prefilled_project and request.method == 'GET':
-        form.project.data = prefilled_project.id
-        form.project.choices = [('', _l('Select Project...')), (prefilled_project.id, prefilled_project.name)]
+    form = GroupForm(
+        obj=group, 
+        team_id_for_eas=team_id_for_eas, 
+        prefilled_project=prefilled_project,
+        formdata=request.form if request.method == 'POST' else None
+    )
 
     if request.method == 'POST':
         if not form.validate():
@@ -451,7 +530,16 @@ def edit_group(id: Optional[str] = None):
 
     # Prepare datasets for frontend JSON serialization
     animals_dataset = [a.to_dict() for a in group.animals] if group else []
-    model_analytes_dataset = [a.to_dict() for a in group.model.analytes] if group and group.model else []
+    
+    # Handle model analytes - to_dict is now a method (was @property)
+    if group and group.model:
+        model_analytes = group.model.analytes
+        if model_analytes and len(model_analytes) > 0:
+            model_analytes_dataset = [a.to_dict() for a in model_analytes]
+        else:
+            model_analytes_dataset = []
+    else:
+        model_analytes_dataset = []
 
     return render_template(
         'groups/edit_group.html',
@@ -588,14 +676,15 @@ def download_template(model_id):
         associations = AnimalModelAnalyteAssociation.query.filter_by(animal_model_id=model.id).order_by(AnimalModelAnalyteAssociation.order).all()
         ordered_animal_model_analytes = [assoc.analyte for assoc in associations]
 
-        final_field_names_set = set(["ID", "Date of Birth"])
-        final_field_names = ["ID", "Date of Birth"]
+        # Use canonical names
+        final_field_names_set = {'uid', 'date_of_birth'}
+        final_field_names = ['uid', 'date_of_birth']
         
-        excluded_fields = {'Age (Days)', 'Blinded Group', 'Treatment Group', 'status'}
+        excluded_fields = {'age_days', 'blinded_group', 'treatment_group', 'status'}
         for analyte in ordered_animal_model_analytes:
-            if analyte.name not in final_field_names_set and analyte.name not in excluded_fields:
+            if analyte.name.lower() not in final_field_names_set and analyte.name not in excluded_fields:
                 final_field_names.append(analyte.name)
-                final_field_names_set.add(analyte.name)
+                final_field_names_set.add(analyte.name.lower())
 
         excel_file = generate_xlsx_template(ordered_animal_model_analytes, base_fields=final_field_names)
         download_filename = f"{_safe_filename(model.name)}_upload_template.xlsx"
@@ -640,8 +729,8 @@ def download_group_data(group_id):
         final_ordered_field_names_set = set()
         final_ordered_field_names = []
 
-        # Add standard fields (ID and DOB are mandatory)
-        standard_fields = ["ID", "Date of Birth"]
+        # Add standard fields (uid and date_of_birth are mandatory)
+        standard_fields = ["uid", "date_of_birth"]
 
         for key in standard_fields:
             if key not in final_ordered_field_names_set:
@@ -649,15 +738,16 @@ def download_group_data(group_id):
                 final_ordered_field_names_set.add(key)
 
         # Add model analytes (excluding system-calculated/mock fields)
-        excluded_fields = {'Age (Days)', 'Blinded Group', 'Treatment Group', 'status'}
+        excluded_fields = {'age_days', 'blinded_group', 'treatment_group', 'status'}
         for analyte in ordered_animal_model_analytes:
-            if analyte.name not in final_ordered_field_names_set and analyte.name not in excluded_fields:
+            low_name = analyte.name.lower()
+            if low_name not in final_ordered_field_names_set and analyte.name not in excluded_fields:
                 final_ordered_field_names.append(analyte.name)
-                final_ordered_field_names_set.add(analyte.name)
+                final_ordered_field_names_set.add(low_name)
         
-        if 'Death Date' not in final_ordered_field_names_set:
-            final_ordered_field_names.append('Death Date')
-            final_ordered_field_names_set.add('Death Date')
+        if 'death_date' not in final_ordered_field_names_set:
+            final_ordered_field_names.append('death_date')
+            final_ordered_field_names_set.add('death_date')
 
         # Prepare data first to handle renames
         animal_data = [a.to_dict() for a in sorted(group.animals, key=lambda a: a.id)]
@@ -665,25 +755,12 @@ def download_group_data(group_id):
         today = date.today()
         for animal in animal_data:
             processed_animal = animal.copy()
-            if 'death_date' in processed_animal:
-                processed_animal['Death Date'] = processed_animal.pop('death_date')
-            if 'euthanasia_reason' in processed_animal:
-                processed_animal['Euthanasia Reason'] = processed_animal.pop('euthanasia_reason')
-            if 'severity' in processed_animal:
-                processed_animal['Severity'] = processed_animal.pop('severity')
-            
-            # Map standard fields
-            if 'date_of_birth' in processed_animal:
-                processed_animal['Date of Birth'] = processed_animal.get('date_of_birth')
-            if 'uid' in processed_animal:
-                processed_animal['ID'] = processed_animal.get('uid')
-            
             # Calculate Age
-            dob_str = processed_animal.get('Date of Birth')
+            dob_str = processed_animal.get('date_of_birth')
             if dob_str:
                 try:
                     dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
-                    processed_animal['Age (Days)'] = (today - dob).days
+                    processed_animal['age_days'] = (today - dob).days
                 except:
                     pass
                     
@@ -697,13 +774,13 @@ def download_group_data(group_id):
         is_blinded = group.randomization_details.get('use_blinding', False) if group.randomization_details else False
         can_unblind = can_view_unblinded_data(group)
 
-        standard_fields = ["ID", "Date of Birth", "Age (Days)"]
+        standard_fields = ["uid", "date_of_birth", "age_days"]
         if is_blinded:
-            standard_fields.append("Blinded Group")
+            standard_fields.append("blinded_group")
             if can_unblind:
-                standard_fields.append("Treatment Group")
+                standard_fields.append("treatment_group")
         else:
-            standard_fields.append("Treatment Group")
+            standard_fields.append("treatment_group")
 
         for key in standard_fields:
             if key not in final_ordered_field_names_set:
@@ -712,13 +789,13 @@ def download_group_data(group_id):
 
         # Add model analytes
         for analyte in ordered_animal_model_analytes:
-            if analyte.name not in final_ordered_field_names_set:
+            if analyte.name.lower() not in final_ordered_field_names_set:
                 final_ordered_field_names.append(analyte.name)
-                final_ordered_field_names_set.add(analyte.name)
+                final_ordered_field_names_set.add(analyte.name.lower())
 
-        if 'Death Date' not in final_ordered_field_names_set:
-            final_ordered_field_names.append('Death Date')
-            final_ordered_field_names_set.add('Death Date')
+        if 'death_date' not in final_ordered_field_names_set:
+            final_ordered_field_names.append('death_date')
+            final_ordered_field_names_set.add('death_date')
 
         # Add dynamic fields from processed data
         for animal in processed_animal_data:
@@ -1257,13 +1334,13 @@ def randomize_group(group_id):
             animal = sorted_animals[index]
             measurements = animal.measurements.copy() if animal.measurements else {}
             
-            # ALWAYS set Treatment Group
-            measurements["Treatment Group"] = info['actual']
+            # ALWAYS set treatment_group
+            measurements["treatment_group"] = info['actual']
             if use_blinding:
-                measurements["Blinded Group"] = info['blinded']
-            elif "Blinded Group" in measurements:
+                measurements["blinded_group"] = info['blinded']
+            elif "blinded_group" in measurements:
                 # Clean up if we re-randomized without blinding
-                del measurements["Blinded Group"]
+                del measurements["blinded_group"]
             
             animal.measurements = measurements
             db.session.add(animal)
@@ -1310,7 +1387,7 @@ def delete_randomization(group_id):
         return jsonify({'success': False, 'message': 'Group has not been randomized.'}), 400
 
     use_blinding = group.randomization_details.get('use_blinding', True)
-    assignment_analyte_name = "Blinded Group" if use_blinding else "Treatment Group"
+    assignment_analyte_name = "blinded_group" if use_blinding else "treatment_group"
 
     for animal in group.animals:
         measurements = animal.measurements.copy() if animal.measurements else {}
@@ -1351,7 +1428,7 @@ def unblind_group(group_id):
         return redirect(url_for('groups.edit_group', id=group.id))
 
     try:
-        treatment_analyte_name = "Treatment Group"
+        treatment_analyte_name = "treatment_group"
         treatment_analyte = Analyte.query.filter_by(name=treatment_analyte_name).first()
         if not treatment_analyte:
             treatment_analyte = Analyte(
@@ -1368,7 +1445,7 @@ def unblind_group(group_id):
         blinding_key = group.randomization_details['blinding_key']
         for animal in group.animals:
             measurements = animal.measurements.copy() if animal.measurements else {}
-            blinded_value = measurements.get("Blinded Group")
+            blinded_value = measurements.get("blinded_group")
             if blinded_value in blinding_key:
                 measurements[treatment_analyte_name] = blinding_key[blinded_value]
                 animal.measurements = measurements
@@ -1401,7 +1478,7 @@ def get_randomization_summary(group_id):
     summary_data = group.randomization_details.copy()
 
     # Calculate actual group sizes
-    assignment_analyte_name = "Blinded Group" if group.randomization_details.get('use_blinding') else "Treatment Group"
+    assignment_analyte_name = "blinded_group" if group.randomization_details.get('use_blinding') else "treatment_group"
     actual_assignments = defaultdict(int)
     for animal in group.animals:
         assignment = animal.measurements.get(assignment_analyte_name) if animal.measurements else None
@@ -1565,7 +1642,7 @@ def group_molecule_usage_summary(group_id):
         animals.append({
             'id': animal_uid,
             'status': animal_obj.status,
-            'treatment_group': animal_dict.get('Treatment Group') or animal_dict.get('Blinded Group'),
+            'treatment_group': animal_dict.get('treatment_group') or animal_dict.get('blinded_group'),
             'usages': animal_usage.get(str(animal_uid), []), # Molecule usage uses UID as animal_id string?
             'metadata': animal_metadata
         })
@@ -1628,11 +1705,11 @@ def export_molecule_usage_summary(group_id):
         base_info = {
             'Animal ID': a_id,
             'Status': animal_obj.status,
-            'Group/Blinding': animal_dict.get('Treatment Group') or animal_dict.get('Blinded Group')
+            'Group/Blinding': animal_dict.get('treatment_group') or animal_dict.get('blinded_group')
         }
         # Add animal metadata from animal_dict
         for key, val in animal_dict.items():
-            if key not in ['id', 'uid', 'group_id', 'status', 'Treatment Group', 'Blinded Group', 'measurements', 'created_at', 'updated_at', 'date_of_birth', 'sex']:
+            if key not in ['id', 'uid', 'group_id', 'status', 'treatment_group', 'blinded_group', 'measurements', 'created_at', 'updated_at', 'date_of_birth', 'sex']:
                 base_info[key] = val
                 
         animal_usages = animal_usage.get(str(a_id), [])

@@ -1,15 +1,19 @@
 # app/services/datatable_service.py
 from datetime import datetime, timedelta, timezone
 import pandas as pd
-from flask_babel import lazy_gettext as _l
+from flask_babel import lazy_gettext as _l, gettext as _
 
 from sqlalchemy import or_
 
 from app.extensions import db
-from app.models import DataTable, ExperimentalGroup, ProtocolModel, Project
+from app.models import DataTable, ExperimentalGroup, ProtocolModel, Project, Animal, ExperimentDataRow, User, AnimalModel
 from app.services.base import BaseService
 from app.services.calculation_service import CalculationService # Added
-from app.permissions import check_datatable_permission
+from app.permissions import check_datatable_permission, can_create_datatable_for_group
+from app.decorators import transactional
+from app.tasks import declare_tm_practice_task
+from app.services.tm_connector import TrainingManagerConnector
+from app.helpers import validate_and_convert, get_ordered_column_names, get_field_types
 
 class DataTableService(BaseService):
     model = DataTable
@@ -166,7 +170,7 @@ class DataTableService(BaseService):
                     for analyte in dt.protocol.analytes:
                         if analyte.name in merged_data:
                             all_long_data.append({
-                                'ID': animal_id,
+                                'uid': animal_id,
                                 'analyte_name': analyte.name,
                                 'analyte_value': merged_data[analyte.name],
                                 'protocol_name': dt.protocol.name,
@@ -200,7 +204,7 @@ class DataTableService(BaseService):
         animal_df = animal_df.drop_duplicates(subset=['uid']).set_index('uid')
         
         pivoted_df = long_df.pivot_table(
-            index='ID',
+            index='uid',
             columns='measurement_label',
             values='analyte_value',
             aggfunc='first'
@@ -212,7 +216,7 @@ class DataTableService(BaseService):
         measurement_cols_ordered = sorted([col for col in final_df.columns if col not in animal_model_fields])
         final_column_order = animal_cols_ordered + measurement_cols_ordered
         
-        final_df = final_df[final_column_order].reset_index().rename(columns={'uid': 'ID'}) # Rename back for frontend
+        final_df = final_df[final_column_order].reset_index()
 
         return final_df, errors, source_identifiers
 
@@ -300,7 +304,7 @@ class DataTableService(BaseService):
         
         Args:
             datatable_id: ID of the DataTable
-            updates: Dict of {row_index: {col_name: value}}
+            updates: Dict of {animal.id: {col_name: value}}
             protocol_field_names: List of protocol field names to save to ExperimentDataRow
         """
         data_table = db.session.get(DataTable, datatable_id)
@@ -313,15 +317,14 @@ class DataTableService(BaseService):
 
         # 1. Update ExperimentDataRows
         existing_rows = data_table.experiment_rows.all()
-        rows_by_index = {r.row_index: r for r in existing_rows}
+        rows_by_animal_id = {r.animal_id: r for r in existing_rows}
         
         # Prepare for Animal Sync
         group = data_table.group
-        animals_by_uid = {}
+        animals_by_id = {}
         if group:
-            from app.models import Animal
             animals_query = Animal.query.filter_by(group_id=group.id).all()
-            animals_by_uid = {a.uid: a for a in animals_query}
+            animals_by_id = {a.id: a for a in animals_query}
             
             # Identify fields that belong to the Animal Model (to sync)
             animal_model_fields = set()
@@ -329,18 +332,16 @@ class DataTableService(BaseService):
                 animal_model_fields = {a.name for a in group.model.analytes}
 
         try:
-            for r_idx, new_vals in updates.items():
-                r_idx = int(r_idx)
+            for animal_id, new_vals in updates.items():
+                animal_id = int(animal_id)
                 
                 # A. Update ExperimentDataRow (Protocol Data)
                 # Fetch existing data to merge
-                exp_row = rows_by_index.get(r_idx)
+                exp_row = rows_by_animal_id.get(animal_id)
                 current_data = exp_row.row_data.copy() if exp_row and exp_row.row_data else {}
                 
                 # Include Animal Data in context for calculations (like Body Weight)
-                # Use name-resilient lookup for ID
-                animal_uid = current_data.get('ID') or current_data.get('id') or current_data.get('uid')
-                animal = next((a for a in group.animals if a.uid == animal_uid), None)
+                animal = animals_by_id.get(animal_id)
                 if animal:
                     current_data.update(animal.to_dict())
                 
@@ -358,14 +359,13 @@ class DataTableService(BaseService):
                     if exp_row.row_data != protocol_data:
                         exp_row.row_data = protocol_data
                 else:
-                    exp_row = ExperimentDataRow(data_table_id=data_table.id, row_index=r_idx, row_data=protocol_data)
-                    rows_by_index[r_idx] = exp_row # Cache for next loop
+                    exp_row = ExperimentDataRow(data_table_id=data_table.id, animal_id=animal_id, row_data=protocol_data)
+                    rows_by_animal_id[animal_id] = exp_row # Cache for next loop
                     db.session.add(exp_row)
                 
                 # B. Sync to Animal Table (V2 Logic)
                 # We sync updated values (including calculated ones!) if they belong to Animal Model
-                if animal_uid and animal_uid in animals_by_uid:
-                    animal = animals_by_uid[animal_uid]
+                if animal:
                     measurements = animal.measurements or {}
                     modified = False
                     
@@ -402,6 +402,12 @@ class DataTableService(BaseService):
                             if measurements.get(actual_col) != val:
                                 measurements[actual_col] = val
                                 modified = True
+                        
+                        # 3. Longitudinal Weight Sync: Save weight to measurements['last_weight']
+                        elif col_lower in ['weight', 'body weight', 'bodyweight']:
+                            if measurements.get('last_weight') != val:
+                                measurements['last_weight'] = val
+                                modified = True
                     
                     if modified:
                         animal.measurements = measurements
@@ -416,7 +422,7 @@ class DataTableService(BaseService):
             current_app.logger.error(f"Error saving datatable edits for {datatable_id}: {e}")
             raise
 
-    def process_upload(self, datatable_id, df, protocol_field_names, id_col_name='ID'):
+    def process_upload(self, datatable_id, df, protocol_field_names, id_col_name='uid'):
         """
         Process Excel upload, update ExperimentDataRows, and sync to Animal table.
         """
@@ -425,33 +431,275 @@ class DataTableService(BaseService):
             raise ValueError(_l("DataTable not found"))
 
         group = data_table.group
-        # Map Animal IDs to Row Indices
-        animal_id_to_row_index = {}
-        for i, animal in enumerate(sorted(group.animals, key=lambda a: a.id)):
-            animal_id = animal.uid
-            if animal_id is not None:
-                animal_id_to_row_index[str(animal_id).strip()] = i
+        # Map Animal UIDs to Animal IDs
+        animal_uid_to_id = {a.uid: a.id for a in group.animals}
         
-        updates_by_row = {} # row_index -> {col: val}
+        updates_by_row = {} # animal.id -> {col: val}
         
         for _, row in df.iterrows():
-            animal_id_raw = row.get(id_col_name)
-            if pd.isna(animal_id_raw): continue
+            animal_uid_raw = row.get(id_col_name)
+            if pd.isna(animal_uid_raw): continue
             
-            animal_id = str(animal_id_raw).strip()
-            row_index = animal_id_to_row_index.get(animal_id)
+            animal_uid = str(animal_uid_raw).strip()
+            animal_id = animal_uid_to_id.get(animal_uid)
             
-            if row_index is not None:
-                if row_index not in updates_by_row: updates_by_row[row_index] = {}
+            if animal_id is not None:
+                if animal_id not in updates_by_row: updates_by_row[animal_id] = {}
                 
                 for col, val in row.items():
                     if col == id_col_name: continue
                     # Basic cleaning (NaN -> None) handled by caller or here
                     if pd.isna(val): continue
-                    updates_by_row[row_index][col] = val
+                    updates_by_row[animal_id][col] = val
 
         # Reuse single-row save logic effectively
         if updates_by_row:
             self.save_manual_edits(datatable_id, updates_by_row, protocol_field_names)
         
         return len(updates_by_row)
+
+    @transactional
+    def update_datatable_from_grid(self, datatable_id: int, form_data: dict) -> tuple[bool, bool, list[str]]:
+        """
+        Processes grid submission from the frontend.
+        Returns (data_changed, validation_errors_occurred, error_messages)
+        """
+        data_table = db.session.get(DataTable, datatable_id)
+        if not data_table:
+            raise ValueError(_l("DataTable not found"))
+
+        column_names = get_ordered_column_names(data_table)
+        protocol_analytes_ordered = []
+        if data_table.protocol:
+            from app.models import ProtocolAnalyteAssociation
+            protocol_associations = ProtocolAnalyteAssociation.query.filter_by(
+                protocol_model_id=data_table.protocol.id
+            ).order_by(ProtocolAnalyteAssociation.order).all()
+            protocol_analytes_ordered = [assoc.analyte for assoc in protocol_associations]
+
+        protocol_analytes_map = {a.name: a for a in protocol_analytes_ordered} if protocol_analytes_ordered else {}
+        protocol_field_names = [a.name for a in protocol_analytes_ordered] if protocol_analytes_ordered else []
+        
+        num_expected_rows = len(data_table.group.animals) if data_table.group else 0
+        animals = sorted(data_table.group.animals, key=lambda a: a.id)
+        animal_map = {i: animal for i, animal in enumerate(animals)}
+
+        existing_rows_query = data_table.experiment_rows
+        existing_data_rows_dict = {r.animal_id: r.row_data for r in existing_rows_query.all()}
+
+        validation_errors, data_changed = False, False
+        error_messages = []
+        updates = {} # this will be keyed by animal.id now
+
+        for k, v_form in form_data.items():
+            if k in ['csrf_token', 'submit_grid'] or not k.startswith('cell_'):
+                continue
+            parts = k.split('_')
+            if len(parts) == 3:
+                try:
+                    r_idx, c_idx = int(parts[1]), int(parts[2])
+                    animal = animal_map.get(r_idx)
+                    if not animal:
+                        continue
+
+                    if 0 <= r_idx < num_expected_rows and 0 <= c_idx < len(column_names):
+                        col_name_manual = column_names[c_idx]
+                        
+                        if col_name_manual in protocol_field_names:
+                            analyte_obj_manual = protocol_analytes_map.get(col_name_manual)
+                            if analyte_obj_manual:
+                                try:
+                                    converted_value = validate_and_convert(v_form, analyte_obj_manual, col_name_manual, r_idx)
+                                    current_row_data = existing_data_rows_dict.get(animal.id, {})
+                                    existing_value = current_row_data.get(col_name_manual)
+                                    
+                                    is_different = False
+                                    if existing_value is None and converted_value is not None: is_different = True
+                                    elif existing_value is not None and converted_value is None: is_different = True
+                                    elif str(existing_value) != str(converted_value): is_different = True
+                                    
+                                    if is_different:
+                                        if animal.id not in updates: updates[animal.id] = {}
+                                        updates[animal.id][col_name_manual] = converted_value
+                                        data_changed = True
+                                except ValueError as e:
+                                    error_messages.append(f"Row {r_idx+1} Col '{col_name_manual}': {str(e)}")
+                                    validation_errors = True
+                except Exception as e:
+                    from flask import current_app
+                    current_app.logger.error(f"Error parsing grid cell {k}: {e}")
+
+        if data_changed and not validation_errors:
+            self.save_manual_edits(data_table.id, updates, protocol_field_names)
+        
+        return data_changed, validation_errors, error_messages
+
+    def create_datatable_from_form(self, form, current_user):
+        """Create a datatable from form data using service logic."""
+        group_id = form.group.data
+        group = db.session.get(ExperimentalGroup, group_id)
+        if not group:
+            raise ValueError(_l("Invalid experimental group selected."))
+
+        if not can_create_datatable_for_group(group):
+            raise ValueError(_l("You do not have permission to create DataTables for this group."))
+
+        protocol_model_id = form.protocol.data
+        protocol_model = db.session.get(ProtocolModel, protocol_model_id)
+        if not protocol_model:
+            raise ValueError(_l("Invalid protocol model selected."))
+
+        date_str = form.date.data.strip()
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError(_l("Invalid date format. Please use YYYY-MM-DD."))
+
+        # --- SEVERITY AND DATE CHECK ---
+        ethical_approval = group.ethical_approval
+        protocol_severity = protocol_model.severity
+        datatable_date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        if ethical_approval:
+            ea_severity = ethical_approval.overall_severity
+            if protocol_severity > ea_severity:
+                raise ValueError(_("Protocol Severity Mismatch: The selected protocol ('%(protocol_name)s' - Severity: %(protocol_severity)s) has a higher severity than the group's ethical approval ('%(ea_ref)s' - Max Severity: %(ea_severity)s). DataTable cannot be created.",
+                                  protocol_name=protocol_model.name,
+                                  protocol_severity=protocol_severity.value,
+                                  ea_ref=ethical_approval.reference_number,
+                                  ea_severity=ea_severity.value))
+
+            ea_start_date = ethical_approval.start_date
+            ea_end_date = ethical_approval.end_date
+            if (ea_start_date and datatable_date_obj < ea_start_date) or \
+               (ea_end_date and datatable_date_obj > ea_end_date):
+                raise ValueError(_("Date Out of Range: The DataTable date (%(dt_date)s) is outside the ethical approval's effective period (%(start)s to %(end)s).",
+                                  dt_date=datatable_date_obj.strftime('%Y-%m-%d'),
+                                  start=ea_start_date.strftime('%Y-%m-%d') if ea_start_date else 'N/A',
+                                  end=ea_end_date.strftime('%Y-%m-%d') if ea_end_date else 'N/A'))
+
+        data_table = DataTable(
+            group_id=group.id, 
+            protocol_id=protocol_model.id, 
+            date=date_str,
+            creator_id=current_user.id,
+            assigned_to_id=form.assigned_to_id.data
+        )
+
+        # Skill Validation Integration
+        if protocol_model.external_skill_ids and data_table.assigned_to_id:
+            user = db.session.get(User, data_table.assigned_to_id)
+            if user:
+                try:
+                    connector = TrainingManagerConnector()
+                    # external_skill_ids is already a list of ints in the JSON field
+                    skill_ids = protocol_model.external_skill_ids 
+                    if skill_ids:
+                        result = connector.check_competency([user.email], skill_ids)
+                        if result and user.email in result:
+                            user_result = result[user.email]
+                            if not user_result.get('valid', True):
+                                details = user_result.get('details', [])
+                                msg = _("Warning: The assigned user '%(email)s' may not be qualified for this protocol. Issues: %(issues)s", email=user.email, issues=", ".join(details))
+                                # Store warning for later display
+                                data_table._validation_warning = msg
+                except Exception as e:
+                    current_app.logger.error(f"Error validating skills with Training Manager: {e}")
+        
+        data_table.housing_condition_set_id = form.housing_condition_set_id.data if form.housing_condition_set_id.data else None
+
+        db.session.add(data_table)
+        db.session.flush() 
+
+        animals = sorted(group.animals, key=lambda a: a.id)
+        if animals:
+            ordered_cols_for_new_dt = get_ordered_column_names(data_table)
+
+            protocol_defaults = {}
+            if protocol_model.analyte_associations:
+                for assoc in protocol_model.analyte_associations:
+                    if assoc.default_value is not None and str(assoc.default_value).strip() != '':
+                        protocol_defaults[assoc.analyte.name] = assoc.default_value
+
+            animal_model_defaults = {}
+            if group.model and group.model.analyte_associations:
+                for assoc in group.model.analyte_associations:
+                    if assoc.analyte.default_value is not None and str(assoc.analyte.default_value).strip() != '':
+                        animal_model_defaults[assoc.analyte.name] = assoc.analyte.default_value
+            
+            combined_defaults_ordered = {}
+            for col_name in ordered_cols_for_new_dt:
+                if col_name in protocol_defaults:
+                    combined_defaults_ordered[col_name] = protocol_defaults[col_name]
+                elif col_name in animal_model_defaults:
+                    combined_defaults_ordered[col_name] = animal_model_defaults[col_name]
+
+            for i, animal in enumerate(animals):
+                animal_info_ordered = {}
+                current_animal_dict = animal.to_dict()
+                for col_name in ordered_cols_for_new_dt:
+                    if col_name in current_animal_dict:
+                        animal_info_ordered[col_name] = current_animal_dict[col_name]
+
+                row_data = {**combined_defaults_ordered, **animal_info_ordered}
+                exp_row = ExperimentDataRow(data_table_id=data_table.id, animal_id=animal.id, row_data=row_data)
+                db.session.add(exp_row)
+
+        db.session.commit()
+
+        # Declare practice if protocol has required skills
+        if protocol_model.external_skill_ids and data_table.assigned_to_id:
+            user = db.session.get(User, data_table.assigned_to_id)
+            if user:
+                declare_tm_practice_task.delay(user.email, protocol_model.external_skill_ids, data_table.date, 'DataTable creation')
+
+        return data_table
+
+    def get_recent_datatables_for_form(self, current_user, project_id, include_archived, group_id_prefill_str):
+        """Get recent datatables for the form display."""
+        base_query = db.session.query(DataTable) \
+            .join(ExperimentalGroup, DataTable.group_id == ExperimentalGroup.id) \
+            .join(Project, ExperimentalGroup.project_id == Project.id)
+
+        if project_id:
+            if not include_archived:
+                base_query = base_query.filter(ExperimentalGroup.project_id == project_id)
+                base_query = base_query.filter(ExperimentalGroup.is_archived == False)
+        else:
+            if not include_archived:
+                base_query = base_query.filter(ExperimentalGroup.is_archived == False)
+                base_query = base_query.filter(Project.is_archived == False)
+        
+        if group_id_prefill_str:
+            base_query = base_query.filter(ExperimentalGroup.id == group_id_prefill_str)
+
+        all_data_tables_query_results = base_query.options(
+            db.joinedload(DataTable.group).joinedload(ExperimentalGroup.team),
+            db.joinedload(DataTable.group).joinedload(ExperimentalGroup.project), 
+            db.joinedload(DataTable.protocol)
+        ).order_by(DataTable.date.desc(), DataTable.id.desc()).limit(50).all()
+        
+        # Batch-fetch permissions
+        from app.services.permission_service import PermissionService
+        perm_service = PermissionService()
+        unique_projects = {dt.group.project for dt in all_data_tables_query_results if dt.group and dt.group.project}
+        project_permissions = perm_service.get_bulk_project_permissions(current_user, unique_projects)
+        
+        processed_data_tables = []
+        for dt in all_data_tables_query_results:
+            # Check permission using pre-computed dict
+            has_permission = False
+            if dt.group and dt.group.project:
+                perms = project_permissions.get(dt.group.project.id, {})
+                has_permission = perms.get('can_view_datatables', False)
+                
+            if has_permission:
+                if dt.group:
+                    animals = sorted(dt.group.animals, key=lambda a: a.id)
+                    total_animals = len(animals)
+                    animals_alive = sum(1 for animal in animals if animal.status != 'dead')
+                    dt.total_animals = total_animals
+                    dt.animals_alive = animals_alive
+                    processed_data_tables.append(dt)
+        
+        return processed_data_tables

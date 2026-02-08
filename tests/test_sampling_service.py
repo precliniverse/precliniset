@@ -19,8 +19,8 @@ def test_log_batch_samples(db_session, init_database):
     
     # Ensure group has animal entities for the indices we will use
     from app.models import Animal
-    db_session.add(Animal(uid='Mouse-1', group_id=group.id, status='alive'))
-    db_session.add(Animal(uid='Mouse-2', group_id=group.id, status='alive'))
+    db_session.add(Animal(uid='Mouse-1', display_id='Mouse 1', group_id=group.id, status='alive'))
+    db_session.add(Animal(uid='Mouse-2', display_id='Mouse 2', group_id=group.id, status='alive'))
     db_session.commit()
     
     # Mock the form data structure coming from the frontend
@@ -70,8 +70,8 @@ def test_log_batch_samples_terminal(db_session, init_database):
     service = SamplingService()
     group = init_database['group1']
     from app.models import Animal
-    db_session.add(Animal(uid='Mouse-1', group_id=group.id, status='alive'))
-    db_session.add(Animal(uid='Mouse-2', group_id=group.id, status='alive'))
+    db_session.add(Animal(uid='Mouse-1', display_id='Mouse 1', group_id=group.id, status='alive'))
+    db_session.add(Animal(uid='Mouse-2', display_id='Mouse 2', group_id=group.id, status='alive'))
     db_session.commit()
 
     common_details = {

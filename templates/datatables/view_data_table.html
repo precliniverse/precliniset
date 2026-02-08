@@ -178,10 +178,10 @@
                         {% for header in all_table_headers %}
                             {% set cell_value = row_data_dict.get(header, '') %}
                             {% set is_outlier = row_data_dict.get('_outliers', {}).get(header, False) %}
-                            <td class="{{ 'outlier' if is_outlier else '' }} {% if header == 'Age (Days)' and cell_value is number and cell_value < 0 %}negative-age{% endif %} {% if header in metadata_fields %}metadata-col{% endif %}">
+                            <td class="{{ 'outlier' if is_outlier else '' }} {% if header == 'age_days' and cell_value is number and cell_value < 0 %}negative-age{% endif %} {% if header in metadata_fields %}metadata-col{% endif %}">
                                 {% if header == 'Blinded Group' %}
                                     <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ cell_value or '-' }}</span>
-                                {% elif cell_value is number and header not in ['ID', 'Age (Days)'] and cell_value is not none %}
+                                {% elif cell_value is number and header not in ['display_id', 'age_days'] and cell_value is not none %}
                                     {{ "%.3f"|format(cell_value|float) }}
                                 {% else %}
                                     {{ cell_value }}
@@ -403,11 +403,11 @@
                 if (metadataVisibleView) {
                     headers.forEach(th => th.style.display = 'table-cell');
                     cells.forEach(td => td.style.display = 'table-cell');
-                    toggleButtonView.textContent = {{ _('Hide Metadata')|tojson }};
+                    toggleButtonView.textContent = 'Hide Metadata';
                 } else {
                     headers.forEach(th => th.style.display = 'none');
                     cells.forEach(td => td.style.display = 'none');
-                    toggleButtonView.textContent = {{ _('Show Metadata')|tojson }};
+                    toggleButtonView.textContent = 'Show Metadata';
                 }
             });
         }
@@ -445,7 +445,7 @@
             }
             
             const selectedRange = availableRanges.find(r => r.id == rangeId);
-            {% set first_row_age = all_display_rows[0].get('Age (Days)') if all_display_rows else None %}
+            {% set first_row_age = all_display_rows[0].get('age_days') if all_display_rows else None %}
             const age_in_days = {{ first_row_age|tojson if first_row_age is not none else 'null' }};
 
             if (selectedRange && selectedRange.min_age && selectedRange.max_age && age_in_days && !ignoreAgeCheckbox.checked) {

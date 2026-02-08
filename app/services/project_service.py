@@ -55,14 +55,74 @@ class ProjectService(BaseService):
         return self.update(project, **kwargs)
 
     def search_projects(self, user, search_term=None, show_archived=False, page=1, per_page=10):
+        """
+        Search for projects accessible to the user, including:
+        - Projects owned by teams the user is a member of
+        - Projects shared with the user's teams (ProjectTeamShare)
+        - Projects shared directly with the user (ProjectUserShare)
+        """
+        from sqlalchemy import or_
+        from app.models import ProjectTeamShare, ProjectUserShare
+        
+        # For super admin, return all projects
+        if user.is_super_admin:
+            base_query = self.model.query
+            
+            if not show_archived:
+                base_query = base_query.filter(self.model.is_archived == False)
+            
+            if search_term:
+                search_pattern = f"%{search_term}%"
+                base_query = base_query.filter(
+                    or_(
+                        self.model.name.ilike(search_pattern),
+                        self.model.description.ilike(search_pattern),
+                        self.model.slug.ilike(search_pattern)
+                    )
+                )
+            
+            pagination = base_query.order_by(self.model.name).paginate(page=page, per_page=per_page, error_out=False)
+            return pagination.items, pagination.total
+        
+        # For regular users, get accessible projects
         user_teams = user.get_teams()
         team_ids = [team.id for team in user_teams]
         
-        base_query = self.model.query.filter(self.model.team_id.in_(team_ids))
-
+        # Build subqueries for accessible project IDs
+        # 1. Projects owned by user's teams (with Project:read permission)
+        from app.models import UserTeamRoleLink, Role, role_permissions, Permission
+        
+        has_permission_for_project_team = db.session.query(db.literal(1)).select_from(UserTeamRoleLink).join(Role).join(role_permissions).join(Permission).filter(
+            UserTeamRoleLink.user_id == user.id,
+            Permission.resource == 'Project',
+            Permission.action == 'read',
+            UserTeamRoleLink.team_id == Project.team_id,
+            or_(Role.team_id == Project.team_id, Role.team_id.is_(None))
+        ).exists()
+        
+        owned_project_ids_q = db.session.query(Project.id).filter(has_permission_for_project_team)
+        
+        # 2. Projects shared with user's teams
+        team_shared_project_ids_q = db.session.query(ProjectTeamShare.project_id).filter(
+            ProjectTeamShare.team_id.in_(team_ids) if team_ids else False,
+            ProjectTeamShare.can_view_project == True
+        )
+        
+        # 3. Projects shared directly with user
+        user_shared_project_ids_q = db.session.query(ProjectUserShare.project_id).filter(
+            ProjectUserShare.user_id == user.id,
+            ProjectUserShare.can_view_project == True
+        )
+        
+        # Union all accessible project IDs
+        accessible_project_ids_q = owned_project_ids_q.union(team_shared_project_ids_q).union(user_shared_project_ids_q)
+        
+        # Build the main query
+        base_query = self.model.query.filter(self.model.id.in_(accessible_project_ids_q))
+        
         if not show_archived:
             base_query = base_query.filter(self.model.is_archived == False)
-
+        
         if search_term:
             search_pattern = f"%{search_term}%"
             base_query = base_query.filter(
@@ -73,17 +133,10 @@ class ProjectService(BaseService):
                 )
             )
         
-        if not user.is_super_admin:
-            from app.permissions import check_project_permission
-            all_matching = [p for p in base_query.order_by(self.model.name).all() if check_project_permission(p, 'read')]
-            total = len(all_matching)
-            start = (page - 1) * per_page
-            end = start + per_page
-            items = all_matching[start:end]
-            return items, total
-        else:
-            pagination = base_query.order_by(self.model.name).paginate(page=page, per_page=per_page, error_out=False)
-            return pagination.items, pagination.total
+        # Execute query with pagination
+        # Use flask-sqlalchemy's paginate for cleaner logic
+        pagination = base_query.order_by(self.model.name).paginate(page=page, per_page=per_page, error_out=False)
+        return pagination.items, pagination.total
 
     def update_ethical_approvals(self, project, new_approval_ids):
         current_ids = {assoc.ethical_approval_id for assoc in project.ethical_approval_associations}
@@ -276,29 +329,39 @@ class ProjectService(BaseService):
         
         # For super admin, use a more efficient query
         if user.is_super_admin:
-            # Get teams with project counts, ordered by most active
-            teams_with_projects = db.session.query(Team, func.count(Project.id).label('project_count'))\
-                .outerjoin(Project, Project.team_id == Team.id)\
-                .filter(Project.is_archived == False)\
+            # Get teams with project counts, ordered by name
+            teams_with_projects_info = db.session.query(Team, func.count(Project.id).label('project_count'))\
+                .outerjoin(Project, (Project.team_id == Team.id) & (Project.is_archived == False))\
                 .group_by(Team.id)\
                 .order_by(Team.name)\
                 .limit(50)\
                 .all()
             
-            hierarchy = []
-            for team, count in teams_with_projects:
-                # Get LIMITED projects per team, most recently updated
-                projects = Project.query\
-                    .filter(Project.team_id == team.id, Project.is_archived == False)\
-                    .order_by(Project.updated_at.desc())\
-                    .limit(max_projects_per_team)\
-                    .all()
+            if not teams_with_projects_info:
+                return []
                 
+            team_ids = [t[0].id for t in teams_with_projects_info]
+            
+            # Batch Get projects for these teams
+            # We fetch all (since max 50 per team * 50 teams = 2500, which is manageable)
+            # and slice in Python to implement the 'per team' limit precisely.
+            projects_query = Project.query\
+                .filter(Project.team_id.in_(team_ids), Project.is_archived == False)\
+                .order_by(Project.team_id, Project.updated_at.desc())\
+                .all()
+            
+            projects_by_team = defaultdict(list)
+            for p in projects_query:
+                if len(projects_by_team[p.team_id]) < max_projects_per_team:
+                    projects_by_team[p.team_id].append(p)
+            
+            hierarchy = []
+            for team, count in teams_with_projects_info:
                 hierarchy.append({
                     'id': team.id,
                     'name': team.name,
-                    'projects': projects,
-                    'total_count': count,  # Allow UI to show "and X more..."
+                    'projects': projects_by_team[team.id],
+                    'total_count': count,
                     'has_more': count > max_projects_per_team
                 })
             return hierarchy

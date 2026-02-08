@@ -536,7 +536,7 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                     for geno in ['WT', 'KO']:
                         for _ in range(animals):
                               animal_data.append({
-                                  "id": f"{proj.slug}-G{g_idx}-{counter}",
+                                  "uid": f"{proj.slug}-G{g_idx}-{counter}",
                                   "date_of_birth": (date.today()-timedelta(weeks=12)).isoformat(),
                                   "sex": sex, "genotype": geno, "treatment": "Vehicle",
                                   "cage": f"C{math.ceil(counter/5)}", "status": "alive"
@@ -607,7 +607,7 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                                     if 'Glucose' in key and isinstance(vals[key], (int, float)):
                                         vals[key] = max(vals[key] * adaptation_factor, vals[key] - 20)  # Cap the improvement
 
-                            vals['id'] = anim['id']
+                            vals['uid'] = anim['uid']
                             db.session.add(ExperimentDataRow(data_table_id=dt.id, row_index=r_idx, row_data=vals))
 
     db.session.commit()

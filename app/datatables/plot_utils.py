@@ -15,14 +15,14 @@ def get_custom_ordered_columns(animal_keys, protocol_keys):
     animal_keys_set = set(animal_keys)
     protocol_keys_set = set(protocol_keys)
 
-    # Ensure ID is treated as an animal key if it exists anywhere
-    has_id = 'ID' in animal_keys_set or 'ID' in protocol_keys_set
+    # Ensure uid is treated as an animal key if it exists anywhere
+    has_id = 'uid' in animal_keys_set or 'uid' in protocol_keys_set
     if has_id:
-        animal_keys_set.add('ID')
-        protocol_keys_set.discard('ID') # Remove ID from protocol if it was there
+        animal_keys_set.add('uid')
+        protocol_keys_set.discard('uid') # Remove from protocol if it was there
 
-    # Separate animal keys (excluding ID) and sort them
-    other_animal_keys = sorted(list(animal_keys_set - {'ID'}))
+    # Separate animal keys (excluding uid) and sort them
+    other_animal_keys = sorted(list(animal_keys_set - {'uid'}))
 
     # Sort protocol keys
     # MODIFIED: Respect provided order in protocol_keys if available, otherwise sort
@@ -36,7 +36,7 @@ def get_custom_ordered_columns(animal_keys, protocol_keys):
     # Combine in the desired order
     final_order = []
     if has_id:
-        final_order.append('ID')
+        final_order.append('uid')
     final_order.extend(other_animal_keys)
     final_order.extend(sorted_protocol_keys)
 
@@ -52,7 +52,7 @@ def get_custom_ordered_columns(animal_keys, protocol_keys):
     return final_order_unique
 
 
-def generate_plot(df, numerical_param_or_dv, grouping_params, graph_type, start_y_at_zero, is_repeated, subject_id_col='ID', numerical_params_selected=None, exclude_outliers=False, reference_range_summary=None, stats_results=None, outlier_method='iqr', outlier_threshold=1.5):
+def generate_plot(df, numerical_param_or_dv, grouping_params, graph_type, start_y_at_zero, is_repeated, subject_id_col='uid', numerical_params_selected=None, exclude_outliers=False, reference_range_summary=None, stats_results=None, outlier_method='iqr', outlier_threshold=1.5):
     """
     Generates Plotly figure data (JSON). Handles both independent and RM plots.
     """

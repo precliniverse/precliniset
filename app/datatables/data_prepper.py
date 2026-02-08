@@ -7,7 +7,7 @@ from scipy.stats import levene, shapiro
 from .analysis_utils import detect_outliers
 
 
-def perform_data_checks(df, grouping_params, numerical_params, is_repeated, subject_id_col='ID', exclude_outliers=False):
+def perform_data_checks(df, grouping_params, numerical_params, is_repeated, subject_id_col='uid', exclude_outliers=False):
     results_by_param = {}
     min_shapiro_size = 3
     min_levene_groups = 2

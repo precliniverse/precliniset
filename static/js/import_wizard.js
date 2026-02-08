@@ -297,8 +297,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (pipelineId) {
                 // Pipeline Flow
-                if (!fileData.headers.includes('ID')) {
-                    alert("Pipeline output validation failed: The script must return a list of rows containing an 'ID' column.");
+                if (!fileData.headers.includes('uid')) {
+                    alert("Pipeline output validation failed: The script must return a list of rows containing a 'uid' column.");
                     return;
                 }
 
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
 
-                fileData.animal_id_column = 'ID';
+                fileData.animal_id_column = 'uid';
                 fileData.mapping = autoMapping;
                 fileData.advanced_logic = {};
                 
@@ -370,7 +370,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 opt.textContent = a.name;
 
                 // Auto-select 'ID' if header contains 'id'
-                if (a.name === 'ID' && header.toLowerCase().includes('id')) {
+                // Auto-select 'uid' if header contains 'id' or 'uid'
+                if (a.name === 'uid' && (header.toLowerCase().includes('id') || header.toLowerCase().includes('uid'))) {
                     opt.selected = true;
                 }
         
@@ -429,7 +430,7 @@ document.addEventListener('DOMContentLoaded', function() {
             animalIdCol = fileData.animal_id_column;
         } else {
             // Manual Parsing: Scrape the UI
-            const idAnalyte = analytes.find(a => a.name === 'ID');
+            const idAnalyte = analytes.find(a => a.name === 'uid');
             const idAnalyteId = idAnalyte ? idAnalyte.id : null;
             
             document.querySelectorAll('.analyte-map-select').forEach(sel => {
@@ -454,7 +455,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (!animalIdCol) {
-            alert("Please map one column to 'ID'.");
+            alert("Please map one column to 'uid'.");
             return;
         }
 

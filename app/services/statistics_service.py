@@ -289,7 +289,8 @@ class StatisticsService:
 
             if p_interaction <= 0.05:
                 # Significant interaction -> Simple Effects Analysis
-                ph = pg.pairwise_tests(data=df_clean, dv=dv, between=groups[0], within=groups[1], padjust='holm')
+                # For independent Two-Way ANOVA, both factors are 'between', not 'within'
+                ph = pg.pairwise_tests(data=df_clean, dv=dv, between=groups, padjust='holm')
                 
                 # If control group is across BOTH factors or specific, we might filter. 
                 # But simple effects usually show the landscape.

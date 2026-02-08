@@ -139,20 +139,20 @@ def upload_resource(project_slug, datatable_id):
             row_data.update(animals[row.row_index].to_dict())
         row_data.update(row.row_data)
 
-        # Calculate Age (Days) on the fly for the export
-        age_in_days = None
-        date_of_birth_str = row_data.get('Date of Birth') or row_data.get('date_of_birth')
+        # Calculate age_days on the fly for the export
+        age_days = None
+        date_of_birth_str = row_data.get('date_of_birth')
         if date_of_birth_str and datatable.date:
             try:
                 dob = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
                 dt_date = datetime.strptime(datatable.date, '%Y-%m-%d').date()
                 delta = dt_date - dob
-                age_in_days = delta.days
+                age_days = delta.days
             except (ValueError, TypeError):
                 current_app.logger.warning(
                     f"Could not calculate age for animal index {row.row_index} in datatable {datatable.id} during CKAN upload due to invalid date format."
                 )
-        row_data['Age (Days)'] = age_in_days
+        row_data['age_days'] = age_days
 
         data_for_df.append(row_data)
     

@@ -100,7 +100,7 @@
                     <span class="me-2 text-muted">({{ analyte.unit }})</span>
                     {% endif %}
 
-                    {% if analyte.name not in ['ID', 'Date of Birth'] %}
+                    {% if analyte.name not in ['ID', 'Date of Birth', 'display_id', 'date_of_birth'] %}
                     {% if model_type == 'protocol' %}
                     <div class="input-group input-group-sm me-2" style="width: 150px;">
                         <span class="input-group-text">{{ _('Default') }}</span>
@@ -134,7 +134,7 @@
                         <span class="input-group-text p-0">
                             <button type="button" class="btn btn-link btn-sm text-info p-1" data-bs-toggle="popover"
                                 data-bs-trigger="hover focus" title="{{ _('Formula Help') }}"
-                                data-bs-content="{{ _('Use [#1], [#2] for indices, or [Analyte Name]. Math functions: sqrt, log, log10, exp, abs, round, min, max, pow. Animal context available: [Weight], [Age (Days)], etc.') }}">
+                                data-bs-content="{{ _('Use [#1], [#2] for indices, or [Analyte Name]. Math functions: sqrt, log, log10, exp, abs, round, min, max, pow. Animal context available: [Weight], [age_days], etc.') }}">
                                 <i class="fas fa-question-circle"></i>
                             </button>
                         </span>
@@ -391,8 +391,7 @@
         const searchResults = document.getElementById('analyte_search_results');
         const selectedAnalytesContainer = document.getElementById('selected_analytes');
         const modelType = document.getElementById('editModelForm').baseURI.includes('/animal') ? 'animal' : 'protocol';
-        const allAnalytes = {{ all_analytes_data | tojson
-    }};
+        const allAnalytes = {{ all_analytes_data | tojson | safe }};
 
     searchInput.addEventListener('keyup', function () {
         const query = searchInput.value.toLowerCase();
@@ -492,7 +491,7 @@
                 </div>
                 <div class="input-group input-group-sm me-2" style="width: 200px;">
                     <span class="input-group-text"><i class="fas fa-calculator"></i></span>
-                    <input type="text" name="calculation_formula_${analyteId}" class="form-control" placeholder="{{ _('Formula e.g. ([#1]+[#2])/2') }}" value="${(analyte && analyte.calculation_formula) ? analyte.calculation_formula : ''}">
+                    <input type="text" name="calculation_formula_${analyteId}" class="form-control" placeholder="Formula e.g. ([#1]+[#2])/2" value="${(analyte && analyte.calculation_formula) ? analyte.calculation_formula : ''}">
                     <span class="input-group-text p-0">
                         <button type="button" class="btn btn-link btn-sm text-info p-1" data-bs-toggle="popover" 
                             data-bs-trigger="hover focus" title="{{ _('Formula Help') }}" 

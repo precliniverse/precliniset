@@ -28,8 +28,8 @@ Good for small additions or replacements.
 Good for starting a study (n=10, n=50).
 1.  Click **Import Animals**.
 2.  **Download Template**: Get the pre-formatted Excel file.
-3.  Fill columns (`ID`, `Date of Birth`, `Sex`, etc.).
-4.  **Upload**: The system validates the data (e.g., checks for duplicate IDs).
+3.  Fill columns (`uid`, `date_of_birth`, `sex`, etc.).
+4.  **Upload**: The system validates the data (e.g., checks for duplicate `uid`s).
 
 ---
 

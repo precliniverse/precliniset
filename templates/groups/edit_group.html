@@ -270,6 +270,7 @@
                         <thead>
                             <tr>
                                 {% if not is_read_only %}<th>{{ _('Actions') }}</th>{% endif %}
+                                <th>{{ _('ID') }}</th>
 
                                 <!-- Conditionally add Treatment/Blinded Group Header -->
                                 {% if group and group.randomization_details %}
@@ -283,7 +284,7 @@
                                     {% endif %}
                                 {% endif %}
 
-                                <th title="{{ _('Calculated automatically from Date of Birth') }}">{{ _('Age (Days)') }}</th>
+                                <th title="{{ _('Calculated automatically from Date of Birth') }}" data-field-name="age_days">{{ _('Age (Days)') }}</th>
 
                                 {% if selected_model_analytes %}
                                 {% for analyte in selected_model_analytes %}
@@ -365,18 +366,6 @@
     </div>
 
     {% include 'components/_declare_death_modal.html' %}
-
-    <!-- Data script for Declare Dead modal -->
-    {% if group and group.animals %}
-    <script id="animal-data-{{ group.id }}" type="application/json">
-        {{ animals_dataset | tojson | safe }}
-    </script>
-    {% endif %}
-    {% if group and group.model %}
-    <script id="model-fields-{{ group.id }}" type="application/json">
-        {{ model_analytes_dataset | tojson | safe }}
-    </script>
-    {% endif %}
 
 
     <!-- REFACTORED Randomization Modal -->
@@ -664,21 +653,6 @@
         </div>
     </div>
 
-    <script id="animal-models-data" type="application/json">
-        {{ animal_models_data | tojson | safe }}
-    </script>
-
-    <script id="page-context-data" type="application/json">
-        {
-            "is_editing": {{ (group is not none) | tojson }},
-            "group_has_randomization": {{ (group and group.randomization_details is not none) | tojson }},
-            "group_randomization_blinding": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
-            "can_view_unblinded": {{ can_view_unblinded | tojson }},
-            "existing_animal_data": {{ animals_dataset | tojson }},
-            "group_randomization_blinding_key": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
-            "js_strings": {{ js_strings | tojson }}
-        }
-    </script>
 
     {% if group and not is_read_only %}
     <form method="POST" action="{{ url_for('groups.delete_group', id=group.id) }}" id="deleteGroupForm"
@@ -748,42 +722,44 @@
         </div>
     </div>
 
-<!-- Configuration Object for JS -->
-<script type="application/json" id="group-editor-config">
-{
-    "isEditing": {{ (group is not none) | tojson }},
-    "groupId": {{ (group.id if group else None) | tojson }},
-    "prefilledProjectId": {{ (prefilled_project_id if prefilled_project_id else None) | tojson }},
-    "hasRandomization": {{ (group and group.randomization_details is not none) | tojson }},
-    "isBlinded": {{ (group and group.randomization_details and group.randomization_details.get('use_blinding', false)) | tojson }},
-    "canViewUnblinded": {{ can_view_unblinded | tojson }},
-    "blindingKey": {{ (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get('use_blinding') else {}) | tojson }},
-    "existingAnimalData": {{ animals_dataset | tojson }},
-    "ethicalApprovalId": {{ (group.ethical_approval_id if group else None) | tojson }},
+{% set config_dict = {
+    "isEditing": (group is not none),
+    "groupId": (group.id if group else none),
+    "prefilledProjectId": (prefilled_project_id if prefilled_project_id else none),
+    "hasRandomization": (group and group.randomization_details is not none),
+    "isBlinded": (group and group.randomization_details and group.randomization_details.get("use_blinding", false)),
+    "canViewUnblinded": can_view_unblinded,
+    "blindingKey": (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get("use_blinding") else {}),
+    "existingAnimalData": animals_dataset,
+    "ethicalApprovalId": (group.ethical_approval_id if group else none),
+    "isReadOnly": is_read_only,
+    "modelFields": model_analytes_dataset,
+    "animalModels": animal_models_data,
     "urls": {
-        "downloadTemplate": "{{ url_for('groups.download_template', model_id=0) }}",
-        "downloadGroupData": "{{ url_for('groups.download_group_data', group_id='GROUP_ID_PLACEHOLDER') }}",
-        "getModelFields": "{{ url_for('groups.get_animal_model_fields', model_id=0) }}",
-        "getEthicalApprovalsForProject": "{{ url_for('groups.get_ethical_approvals_for_project', project_id=0) }}",
-        "searchProjects": "{{ url_for('projects.search_projects_ajax') }}",
-        "randomizeGroup": "{{ url_for('groups.randomize_group', group_id=group.id) if group else '#' }}",
-        "getRandomizationSummary": "{{ url_for('groups.get_randomization_summary', group_id=group.id) if group else '#' }}",
-        "getGroupDatatablesForRandomization": "{{ url_for('groups.get_group_datatables_for_randomization', group_id=group.id) if group else '#' }}",
-        "unblindGroup": "{{ url_for('groups.unblind_group', group_id=group.id) if group else '#' }}",
-        "deleteRandomization": "{{ url_for('groups.delete_randomization', group_id=group.id) if group else '#' }}"
+        "downloadTemplate": url_for("groups.download_template", model_id=0),
+        "downloadGroupData": url_for("groups.download_group_data", group_id=group.id if group else "GROUP_ID_PLACEHOLDER"),
+        "getModelFields": url_for("groups.get_animal_model_fields", model_id=0),
+        "getEthicalApprovalsForProject": url_for("groups.get_ethical_approvals_for_project", project_id=0),
+        "searchProjects": url_for("projects.search_projects_ajax"),
+        "randomizeGroup": url_for("groups.randomize_group", group_id=group.id) if group else "#",
+        "getRandomizationSummary": url_for("groups.get_randomization_summary", group_id=group.id) if group else "#",
+        "getGroupDatatablesForRandomization": url_for("groups.get_group_datatables_for_randomization", group_id=group.id) if group else "#",
+        "unblindGroup": url_for("groups.unblind_group", group_id=group.id) if group else "#",
+        "deleteRandomization": url_for("groups.delete_randomization", group_id=group.id) if group else "#"
     },
     "i18n": {
-        "loading": "{{ _('Loading...') }}",
-        "actions": "{{ _('Actions') }}",
-        "addAnimal": "{{ _('Add Animal') }}",
-        "downloadTemplate": "{{ _('Download Template (XLSX)') }}",
-        "downloadCurrent": "{{ _('Download Current Data (XLSX)') }}",
-        "confirmDelete": "{{ _('Are you sure you want to remove this animal?') }}",
-        "deceased": "{{ _('Deceased') }}",
-        "selectProject": "{{ _('Search for a project...') }}"
+        "loading": _("Loading..."),
+        "actions": _("Actions"),
+        "addAnimal": _("Add Animal"),
+        "downloadTemplate": _("Download Template (XLSX)"),
+        "downloadCurrent": _("Download Current Data (XLSX)"),
+        "confirmDelete": _("Are you sure you want to remove this animal?"),
+        "deceased": _("Deceased"),
+        "selectProject": _("Search for a project..."),
+        "deceasedLabel": js_strings.get("deceased_label", "")
     }
-}
-</script>
+} %}
+<script id="group-config" type="application/json" data-config='{{ config_dict | tojson | safe }}'></script>
 
 <!-- Load the external JS file -->
 <!-- Load the external JS file -->

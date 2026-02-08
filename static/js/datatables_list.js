@@ -280,10 +280,39 @@ document.addEventListener('DOMContentLoaded', function () {
         $(this).find('i.fas').toggleClass('fa-chevron-down fa-chevron-up');
     });
 
+    $('#group').on('select2:select', function (e) {
+        const groupId = e.params.data.id;
+        refreshAssignableUsers(groupId);
+    });
+
+    function refreshAssignableUsers(groupId) {
+        const assigneeSelect = $('select[name="assigned_to_id"]');
+        if (!assigneeSelect.length) return;
+
+        // Fetch using the new endpoint
+        const url = CONFIG.urls.getAssignableUsers.replace('__GROUP_ID__', groupId);
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(users => {
+                // Keep the Unassigned option
+                assigneeSelect.empty().append('<option value="">-- Unassigned --</option>');
+                users.forEach(user => {
+                    assigneeSelect.append(new Option(user.email, user.id));
+                });
+                assigneeSelect.trigger('change');
+            })
+            .catch(err => {
+                console.error("Error fetching assignable users:", err);
+            });
+    }
+
     // 4. Auto-open if prefill param exists in URL
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('group_id_prefill')) {
+    const prefillGroupId = urlParams.get('group_id_prefill');
+    if (prefillGroupId) {
         $('#creation-form-container').show();
         $('#toggle-creation-form').find('i.fas').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+        refreshAssignableUsers(prefillGroupId);
     }
 });

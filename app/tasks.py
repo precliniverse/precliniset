@@ -111,7 +111,7 @@ def perform_analysis_task(self, form_data, datatable_id=None, selected_ids=None,
             import pandas as pd
             internal_cols = ['_source_datatable_id', '_source_experimental_group_name', '_source_protocol_name', '_source_datatable_date']
             for col in df.columns:
-                if col in internal_cols or col == 'ID': continue
+                if col in internal_cols or col == 'uid': continue
                 if pd.api.types.is_numeric_dtype(df[col]):
                     numerical_cols.append(col)
                 else:
@@ -121,7 +121,7 @@ def perform_analysis_task(self, form_data, datatable_id=None, selected_ids=None,
             return {'error': 'No data available for analysis.'}
 
         # 2. Run Analysis
-        subject_id_col = 'ID'
+        subject_id_col = 'uid'
         subject_id_col_present = subject_id_col in df.columns
         
         results = service.perform_analysis(

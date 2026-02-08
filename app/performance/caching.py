@@ -34,30 +34,39 @@ def configure_cache(app):
     
     return cache
 
+from flask import current_app, request
+
 def cache_key_with_user(prefix, request):
     """Generate cache key with user context"""
     from flask_login import current_user
     user_id = getattr(current_user, 'id', 'anonymous')
     path = request.path
-    return f"{prefix}_{app.config['CACHE_VERSION']}_{user_id}_{path}"
+    cache_version = current_app.config.get('CACHE_VERSION', 'v1')
+    return f"{prefix}_{cache_version}_{user_id}_{path}"
 
-def cache_for_user(ttl=300, cache_type='default'):
+def cache_for_user(ttl=300):
     """Cache decorator that separates caches by user"""
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
             from flask import request
-            from flask_caching import make_template_fragment_key
+            from app.performance.caching import cache_key_with_user
             
+            # Use current_app.extensions if cache is registered there 
+            # or just use a global cache object if it exists.
+            # In our setup, 'caching' in app/__init__.py is 'app.performance.caching'
+            # which might have initialized a global 'cache' object.
+            
+            cache = current_app.extensions.get('cache')
+            if not cache:
+                return f(*args, **kwargs)
+                
             cache_key = cache_key_with_user(f.__name__, request)
-            
-            # Check cache first
-            cache = args[0].cache if hasattr(args[0], 'cache') else args[0].app.cache
             response = cache.get(cache_key)
             
             if response is None:
                 response = f(*args, **kwargs)
-                cache.set(cache_key, response, ttl=ttl, type=cache_type)
+                cache.set(cache_key, response, timeout=ttl)
             
             return response
         return wrapper
@@ -71,20 +80,18 @@ def invalidate_user_cache(prefix):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
+            from app.performance.caching import cache_key_with_user
             cache_key = cache_key_with_user(prefix, request)
             result = f(*args, **kwargs)
             
             # Invalidate cache
-            if hasattr(args[0], 'cache'):
-                args[0].cache.delete(cache_key)
-            else:
-                args[0].app.cache.delete(cache_key)
+            cache = current_app.extensions.get('cache')
+            if cache:
+                cache.delete(cache_key)
             
             return result
         return wrapper
     return decorator
-
-from flask import request
 
 
 def init_app(app):

@@ -195,19 +195,11 @@ class ImportWizardService:
         # Fetch existing ExperimentDataRow for this data_table
         existing_experiment_rows = db.session.query(ExperimentDataRow).filter_by(data_table_id=data_table.id).all()
         
-        # Map existing rows by animal_id for efficient lookup and find max row_index
+        # Map existing rows by animal_id for efficient lookup
         existing_rows_by_animal_id = {}
-        max_existing_row_index = -1
         for erow in existing_experiment_rows:
-            if erow.row_data:
-                # Name-resilient ID lookup
-                aid = erow.row_data.get('ID') or erow.row_data.get('id') or erow.row_data.get('uid')
-                if aid is not None:
-                    existing_rows_by_animal_id[str(aid)] = erow
-            if erow.row_index > max_existing_row_index:
-                max_existing_row_index = erow.row_index
-
-        next_row_index = max_existing_row_index + 1
+            if erow.animal_id:
+                existing_rows_by_animal_id[str(erow.animal_id)] = erow
 
         # Identify fields that belong to the Animal Model (to sync)
         animal_model_fields = set()
@@ -274,8 +266,8 @@ class ImportWizardService:
         for index, row in df.iterrows():
             animal_id = str(row[animal_id_column])
             
-            # Prepare row_data for the current record, including default ID
-            current_row_data = {'ID': animal_id}
+            # Prepare row_data for the current record, including default uid
+            current_row_data = {'uid': animal_id}
             
             # If mapping is provided (Manual or Auto-Mapped in JS), use it
             if mapping:
@@ -310,12 +302,11 @@ class ImportWizardService:
             else:
                 new_row = ExperimentDataRow(
                     data_table_id=data_table.id,
-                    row_index=next_row_index,
+                    animal_id=animal_id,
                     row_data=current_row_data
                 )
                 db.session.add(new_row)
                 results.append(new_row.row_data)
-                next_row_index += 1
 
             # --- SYNC TO ANIMAL TABLE ---
             if animal_id in animals_by_uid:

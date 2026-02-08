@@ -5,20 +5,19 @@ import { ConcatenationManager } from './concatenation_manager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Parse Config
-    const configEl = document.getElementById('group-editor-config');
+    const configEl = document.getElementById('group-config');
     if (!configEl) {
-        console.error("Group Editor Config not found!");
+        console.error("Group Config element (id='group-config') not found!");
         return;
     }
-    const CONFIG = JSON.parse(configEl.textContent);
+    const CONFIG = JSON.parse(configEl.dataset.config);
 
     console.log("Initializing Group Editor with Config:", CONFIG);
 
     // --- Helper to fetch fields ---
     async function fetchModelFields(projectId, modelId) {
-        const embeddedFields = document.getElementById(`model-fields-${CONFIG.groupId}`);
-        if (embeddedFields && embeddedFields.textContent.trim()) {
-            return JSON.parse(embeddedFields.textContent);
+        if (CONFIG.modelFields && CONFIG.modelFields.length > 0) {
+            return CONFIG.modelFields;
         }
         return []; 
     }
@@ -32,10 +31,106 @@ document.addEventListener('DOMContentLoaded', () => {
     const deathManager = new DeathManager();
     const concatenationManager = new ConcatenationManager(CONFIG);
 
-    // --- 3. Initial Data Load ---
-    const initFieldsScript = document.getElementById(`model-fields-${CONFIG.groupId}`);
-    if (initFieldsScript) {
-        currentFields = JSON.parse(initFieldsScript.textContent);
+    // --- 2.5 Initialize Select2 (Project, Model, EA) ---
+    const projectSelect = $('#project_select');
+    const modelSelect = $('#model_select');
+    const eaSelect = $('#ethical_approval_select');
+
+    if (projectSelect.length) {
+        projectSelect.select2({
+            theme: "bootstrap-5",
+            width: '100%',
+            placeholder: CONFIG.i18n.selectProject || "Select Project...",
+            allowClear: true,
+            ajax: {
+                url: CONFIG.urls.searchProjects,
+                dataType: 'json',
+                delay: 250,
+                data: function (params) {
+                    return {
+                        q: params.term,
+                        page: params.page || 1,
+                        show_archived: false
+                    };
+                },
+                processResults: function (data, params) {
+                    params.page = params.page || 1;
+                    return {
+                        results: data.results,
+                        pagination: {
+                            more: (params.page * 10) < data.total_count
+                        }
+                    };
+                },
+                cache: true
+            },
+            minimumInputLength: 0
+        });
+
+        projectSelect.on('select2:select', function (e) {
+            const projectId = e.params.data.id;
+            updateEADropdown(projectId);
+        });
+    }
+
+    if (modelSelect.length) {
+        modelSelect.select2({
+            theme: "bootstrap-5",
+            width: '100%',
+            allowClear: true
+        });
+    }
+
+    if (eaSelect.length) {
+        eaSelect.select2({
+            theme: "bootstrap-5",
+            width: '100%',
+            allowClear: true
+        });
+    }
+
+    function updateEADropdown(projectId) {
+        if (!eaSelect.length) return;
+        
+        const currentVal = eaSelect.val();
+
+        eaSelect.empty().append(new Option(CONFIG.i18n.selectEA || "Select Ethical Approval...", ''));
+
+        if (!projectId || projectId === '0') {
+            eaSelect.prop('disabled', true);
+            eaSelect.trigger('change');
+            return;
+        }
+
+        eaSelect.prop('disabled', false);
+        fetch(CONFIG.urls.getEthicalApprovalsForProject.replace('0', projectId))
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(ea => {
+                    const newOption = new Option(ea.text, ea.id, false, false);
+                    eaSelect.append(newOption);
+                });
+                
+                const targetId = CONFIG.ethicalApprovalId || currentVal;
+                if (targetId) {
+                    eaSelect.val(targetId);
+                }
+                eaSelect.trigger('change');
+            })
+            .catch(err => console.error("Error updating EA dropdown:", err));
+    }
+
+    // --- 3. Initial project-based state ---
+    if (projectSelect.length) {
+        const initialProjectId = projectSelect.val();
+        if (initialProjectId && initialProjectId !== '0') {
+            updateEADropdown(initialProjectId);
+        }
+    }
+
+    // --- 3.5 Initial Data Load ---
+    if (CONFIG.modelFields) {
+        currentFields = CONFIG.modelFields;
         animalTable.updateTableHeader(currentFields);
         
         if (CONFIG.existingAnimalData) {

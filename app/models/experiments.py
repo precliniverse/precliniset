@@ -39,40 +39,10 @@ class ExperimentalGroup(db.Model):
     __table_args__ = (db.UniqueConstraint('project_id', 'name', name='_project_group_name_uc'),)
 
     def __init__(self, **kwargs):
-        # 1. Handle ID generation/assignment first to ensure setters have it
-        group_id = kwargs.get('id')
-        if group_id is None:
-            project_id = kwargs.get('project_id')
-            if project_id:
-                from .projects import Project 
-                project = db.session.get(Project, project_id) 
-                if project and project.slug:
-                    today_str = datetime.now(timezone.utc).strftime('%y%m%d')
-                    prefix = f"{project.slug}-{today_str}-"
-                    
-                    last_group = ExperimentalGroup.query.filter(
-                        ExperimentalGroup.id.like(f"{prefix}%")
-                    ).order_by(db.desc(ExperimentalGroup.id)).first()
-                    
-                    sequence = 1
-                    if last_group:
-                        try:
-                            last_sequence_str = last_group.id.split('-')[-1]
-                            sequence = int(last_sequence_str) + 1
-                        except ValueError:
-                            pass
-                    
-                    group_id = f"{prefix}{sequence}"
-                else:
-                    group_id = secrets.token_hex(20)
-            else:
-                group_id = secrets.token_hex(20)
-        
-        # Explicitly set self.id and ensure it's in kwargs for super().__init__
-        self.id = group_id
-        kwargs['id'] = group_id
-        
-        # 2. Call super constructor - this will trigger other setters
+        # Ensure an ID exists before calling super
+        if 'id' not in kwargs:
+            kwargs['id'] = secrets.token_hex(20)
+        self.id = kwargs['id']
         super(ExperimentalGroup, self).__init__(**kwargs)
 
     @property
@@ -126,9 +96,13 @@ class DataTableFile(db.Model):
 class ExperimentDataRow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     data_table_id = db.Column(db.Integer, db.ForeignKey('data_table.id', ondelete='CASCADE'), nullable=False)
-    row_index = db.Column(db.Integer, nullable=False)
-    row_data = db.Column(db.JSON)
-    __table_args__ = (db.UniqueConstraint('data_table_id', 'row_index', name='_data_table_row_uc'),)
+    animal_id = db.Column(db.Integer, db.ForeignKey('animal.id', ondelete='CASCADE'), nullable=False)
+    row_data = db.Column(db.JSON) # Protocol-specific results (e.g., Trial 1, Trial 2)
+    
+    # Relationships
+    animal = db.relationship('Animal', backref='data_rows')
+    # Unique constraint: One measurement per animal per datatable
+    __table_args__ = (db.UniqueConstraint('data_table_id', 'animal_id', name='_dt_animal_uc'),)
 
     def __repr__(self):
-        return f'<ExperimentDataRow Table: {self.data_table_id} Index: {self.row_index}>'
+        return f'<ExperimentDataRow Table: {self.data_table_id} Animal: {self.animal_id}>'

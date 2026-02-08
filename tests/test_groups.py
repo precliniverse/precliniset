@@ -48,7 +48,7 @@ def test_edit_group_animal_data(team1_admin_client, db_session, init_database):
     group = init_database['group1']
     animal_model = init_database['animal_model']
     ea1 = init_database['ea1']  # Get the ethical approval from the fixture
-    animal_data = [{'ID': 'Mouse-01', 'Genotype': 'WT', 'Date of Birth': '2023-01-01'}, {'ID': 'Mouse-02', 'Genotype': 'KO', 'Date of Birth': '2023-01-01'}]
+    animal_data = [{'uid': 'Mouse-01', 'Genotype': 'WT', 'date_of_birth': '2023-01-01'}, {'uid': 'Mouse-02', 'Genotype': 'KO', 'date_of_birth': '2023-01-01'}]
     payload = {
         'name': group.name,
         'model': animal_model.id,

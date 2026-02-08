@@ -11,3 +11,5 @@ instance_bak/
 .vscode/
 *.rdb
 site/
+.gemini
+.pytest_cache/

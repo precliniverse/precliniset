@@ -6,39 +6,16 @@ and dynamic scientific measurements in a JSON column.
 """
 from datetime import date, datetime, timezone
 from typing import Optional
+import secrets
 
 from ..extensions import db
 
 
 class Animal(db.Model):
-    """Animal model with hybrid SQL+JSON storage.
-    
-    Core fields (ID, sex, status, date of birth) are stored in indexed SQL columns
-    for efficient querying. Dynamic scientific measurements (weight, tumor size, etc.)
-    are stored in a JSON column for flexibility.
-    
-    Attributes:
-        id: Primary key
-        uid: Unique animal identifier (e.g., "A001", "Mouse-1")
-        group_id: Foreign key to ExperimentalGroup
-        sex: Animal sex (user-configurable values)
-        status: Animal status (alive, dead, etc.)
-        date_of_birth: Date of birth
-        measurements: JSON column for dynamic scientific data
-        created_at: Timestamp of record creation
-        updated_at: Timestamp of last update
-    """
-    
-    __tablename__ = 'animal'
-    
     id = db.Column(db.Integer, primary_key=True)
-    uid = db.Column(db.String(100), nullable=False, index=True)
-    group_id = db.Column(
-        db.String(40),
-        db.ForeignKey('experimental_group.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True
-    )
+    uid = db.Column(db.String(100), unique=True, nullable=False, default=lambda: secrets.token_hex(12))
+    display_id = db.Column(db.String(50), nullable=False, index=True) # The "Simple ID" user sees
+    group_id = db.Column(db.String(40), db.ForeignKey('experimental_group.id', ondelete='CASCADE'), index=True)
     sex = db.Column(db.String(50), nullable=True)
     status = db.Column(db.String(20), nullable=False, default='alive', index=True)
     date_of_birth = db.Column(db.Date, nullable=True, index=True)
@@ -73,6 +50,23 @@ class Animal(db.Model):
             String representation showing UID and group
         """
         return f'<Animal {self.uid} (Group: {self.group_id})>'
+
+    @property
+    def age_days(self) -> Optional[int]:
+        """Calculate animal's age in days relative to today."""
+        if not self.date_of_birth:
+            return self.measurements.get('age_days') if self.measurements else None
+        
+        delta = date.today() - self.date_of_birth
+        return delta.days
+
+    def get_age_at(self, reference_date: date) -> Optional[int]:
+        """Calculate animal's age in days relative to a reference date."""
+        if not self.date_of_birth:
+            return self.measurements.get('age_days') if self.measurements else None
+        
+        delta = reference_date - self.date_of_birth
+        return delta.days
     
     def to_dict(self, include_measurements: bool = True) -> dict:
         """Convert animal to dictionary.
@@ -87,12 +81,11 @@ class Animal(db.Model):
         result = {
             'id': self.id,
             'uid': self.uid,
-            'ID': self.uid,  # Compatibility for capitalized lookup
+            'display_id': self.display_id,  # The "Simple ID" user sees
             'group_id': self.group_id,
             'sex': self.sex,
             'status': self.status,
             'date_of_birth': dob_iso,
-            'Date of Birth': dob_iso,  # Compatibility for capitalized lookup
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -100,5 +93,11 @@ class Animal(db.Model):
         if include_measurements and self.measurements:
             # Flatten measurements for frontend compatibility
             result.update(self.measurements)
+        
+        # Ensure canonical metadata fields are present (even if they were in measurements)
+        result['age_days'] = self.age_days
+        if self.measurements:
+            result['blinded_group'] = self.measurements.get('blinded_group')
+            result['treatment_group'] = self.measurements.get('treatment_group')
         
         return result

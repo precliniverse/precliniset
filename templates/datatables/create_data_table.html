@@ -118,7 +118,8 @@
             "downloadTransposed": "{{ url_for('datatables.download_merged_transposed_selected_datatables') }}",
             "analyzeBatch": "{{ url_for('datatables.analyze_selected_datatables') }}",
             "deleteBatch": "{{ url_for('datatables.batch_delete_datatables') }}",
-            "searchGroups": "{{ url_for('groups.search_groups_ajax') }}"
+            "searchGroups": "{{ url_for('groups.search_groups_ajax') }}",
+            "getAssignableUsers": "{{ url_for('groups.get_assignable_users_ajax', group_id='__GROUP_ID__') }}"
         },
         "i18n": {
             "searchPlaceholder": "{{ _('Search datatables...') }}",

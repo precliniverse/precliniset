@@ -123,33 +123,39 @@ document.addEventListener('DOMContentLoaded', function() {
             if (CONFIG.isBlinded) {
                 const blindedTh = document.createElement('th');
                 blindedTh.textContent = "Blinded Group";
+                blindedTh.dataset.fieldName = "blinded_group";
                 headerRow.appendChild(blindedTh);
                 
-                // Only show Treatment Group if user can view unblinded
+                // Only show treatment_group if user can view unblinded
                 if (CONFIG.canViewUnblinded) {
                     const treatmentTh = document.createElement('th');
                     treatmentTh.textContent = "Treatment Group";
+                    treatmentTh.dataset.fieldName = "treatment_group";
                     headerRow.appendChild(treatmentTh);
                 }
             } else {
-                // Not blinded, just show Treatment Group
+                // Not blinded, just show treatment_group
                 const treatmentTh = document.createElement('th');
                 treatmentTh.textContent = "Treatment Group";
+                treatmentTh.dataset.fieldName = "treatment_group";
                 headerRow.appendChild(treatmentTh);
             }
         }
 
-        // Age (Days) is always visible in UI
+        // age_days is always visible in UI
         const ageTh = document.createElement('th');
         ageTh.textContent = "Age (Days)";
+        ageTh.dataset.fieldName = "age_days";
         ageTh.title = "Calculated automatically from Date of Birth";
         headerRow.appendChild(ageTh);
 
         fields.forEach(field => {
+            const lowFieldName = field.name.toLowerCase();
             // Logic: Show if editing/viewing AND (not randomized OR not sensitive OR user can view unblinded)
             const shouldShow = !CONFIG.isEditing || !CONFIG.hasRandomization || !field.is_sensitive || CONFIG.canViewUnblinded;
 
-            if (shouldShow && field.name !== 'Age (Days)' && field.name !== 'Blinded Group' && field.name !== 'Treatment Group') {
+            if (shouldShow && lowFieldName !== 'age_days' && lowFieldName !== 'age (days)' && 
+                field.name !== 'blinded_group' && field.name !== 'treatment_group') {
                 const th = document.createElement('th');
                 th.textContent = field.name + (field.unit ? ` (${field.unit})` : '');
                 headerRow.appendChild(th);
@@ -201,34 +207,36 @@ document.addEventListener('DOMContentLoaded', function() {
         if (CONFIG.hasRandomization) {
             if (CONFIG.isBlinded) {
                 const blindedCell = document.createElement('td');
-                const blindedValue = animalData['Blinded Group'] || '-';
+                const blindedValue = animalData['blinded_group'] || '-';
                 blindedCell.innerHTML = `<span class="badge bg-info">${blindedValue}</span>`;
                 row.appendChild(blindedCell);
 
                 if (CONFIG.canViewUnblinded) {
                     const treatmentCell = document.createElement('td');
-                    treatmentCell.textContent = animalData['Treatment Group'] || '-';
+                    treatmentCell.textContent = animalData['treatment_group'] || '-';
                     row.appendChild(treatmentCell);
                 }
             } else {
                 const treatmentCell = document.createElement('td');
-                treatmentCell.textContent = animalData['Treatment Group'] || '-';
+                treatmentCell.textContent = animalData['treatment_group'] || '-';
                 row.appendChild(treatmentCell);
             }
         }
 
-        // Age (Days) Cell
+        // age_days Cell
         const ageCell = document.createElement('td');
         ageCell.className = "text-center bg-light";
         const ageSpan = document.createElement('span');
         ageSpan.className = "age-display";
-        ageSpan.textContent = animalData['Age (Days)'] || '-';
+        ageSpan.textContent = animalData['age_days'] || '-';
         ageCell.appendChild(ageSpan);
         row.appendChild(ageCell);
 
         // Field Cells
         fields.forEach(field => {
-            if (field.name === 'Age (Days)' || field.name === 'Blinded Group' || field.name === 'Treatment Group') return;
+            const lowFieldName = field.name.toLowerCase();
+            if (lowFieldName === 'age_days' || lowFieldName === 'age (days)' || 
+                field.name === 'blinded_group' || field.name === 'treatment_group') return;
 
             const shouldShow = !CONFIG.isEditing || !CONFIG.hasRandomization || !field.is_sensitive || CONFIG.canViewUnblinded;
             
@@ -240,20 +248,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 input.name = `animal_${rowIndex}_field_${field.name}`;
                 input.className = 'form-control form-control-sm';
                 
-                let fieldValue = animalData[field.name] || field.default_value || '';
+                // Try exact match, then lowercase
+                let fieldValue = animalData[field.name];
+                if (fieldValue === undefined || fieldValue === null) {
+                    fieldValue = animalData[lowFieldName];
+                }
+                if (fieldValue === undefined || fieldValue === null) fieldValue = field.default_value || '';
+                
                 if (field.type === 'date' && fieldValue) {
                     input.value = formatDateToHTMLInput(fieldValue);
                 } else {
                     input.value = fieldValue;
                 }
                 
-                if (field.name === 'ID') input.required = true;
+                if (lowFieldName === 'id' || lowFieldName === 'uid') input.required = true;
                 if (animalData.status === 'dead') input.disabled = true;
                 
                 if (field.type === 'category' && field.allowed_values) {
-                    input.setAttribute('list', `datalist-${field.name}-${rowIndex}`);
+                    input.setAttribute('list', `datalist-${field.name.replace(/\s+/g, '-')}-${rowIndex}`);
                     const datalist = document.createElement('datalist');
-                    datalist.id = `datalist-${field.name}-${rowIndex}`;
+                    datalist.id = `datalist-${field.name.replace(/\s+/g, '-')}-${rowIndex}`;
                     field.allowed_values.split(';').forEach(val => {
                         const option = document.createElement('option');
                         option.value = val.trim();
@@ -263,7 +277,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 // Death Info
-                if (field.name === 'Date of Birth' && animalData.status === 'dead' && animalData.death_date) {
+                if (lowFieldName === 'date_of_birth' && animalData.status === 'dead' && animalData.death_date) {
                     const div = document.createElement('div');
                     div.className = 'death-info';
                     div.dataset.deathDate = animalData.death_date;
@@ -466,16 +480,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Table Actions (Delete/Duplicate/Calculate Age)
     tableBody.addEventListener('change', (e) => {
         // Dynamic Age Calculation
-        if (e.target.name && e.target.name.includes('_field_Date of Birth')) {
+        if (e.target.name && e.target.name.includes('_field_date_of_birth')) {
             const row = e.target.closest('tr');
             calculateRowAge(row);
         }
     });
 
     function calculateRowAge(row) {
-        // Find Date of Birth input: match exactly or via Case/Underscore variations
-        const dobInput = row.querySelector('input[name*="_field_Date of Birth"]') || 
-                         row.querySelector('input[name*="_field_date_of_birth"]');
+        // Find date_of_birth input: match exactly
+        const dobInput = row.querySelector('input[name*="_field_date_of_birth"]');
         const ageDisplay = row.querySelector('.age-display');
         if (!dobInput || !ageDisplay) return;
 
@@ -489,7 +502,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const today = new Date();
         
         // Use death date if deceased
-        const deathInfo = row.querySelector('.death-info');
+        // Correct lookup for death-info (class name, not data attribute alone)
+        const deathInfo = row.querySelector('.death-info') || row.querySelector('.death-info-container');
         let endDate = today;
         if (deathInfo && deathInfo.dataset.deathDate) {
             endDate = new Date(deathInfo.dataset.deathDate);
@@ -546,8 +560,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const parts = input.name.split('_field_');
                 if (parts.length === 2) {
                     const fieldName = parts[1];
-                    // Don't copy the ID, we want a new one or blank
-                    if (fieldName !== 'ID') {
+                    // Don't copy the uid, we want a new one or blank
+                    if (fieldName !== 'uid') {
                         rowData[fieldName] = input.value;
                     }
                 }
@@ -566,8 +580,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const newRow = sourceRow.cloneNode(true);
             
-            // Reset the ID field in the clone
-            const idInput = newRow.querySelector('input[name*="_field_ID"]');
+            // Reset the uid field in the clone
+            const idInput = newRow.querySelector('input[name*="_field_uid"]');
             if (idInput) idInput.value = '';
 
             // Enable buttons if they were disabled (e.g. if source was dead)
@@ -576,7 +590,7 @@ document.addEventListener('DOMContentLoaded', function() {
             newRow.querySelectorAll('button').forEach(b => b.disabled = false);
 
             // Remove any death info text
-            newRow.querySelectorAll('.death-info').forEach(el => el.remove());
+            newRow.querySelectorAll('.death-info, .death-info-container').forEach(el => el.innerHTML = '');
 
             // Append and Reindex
             tableBody.appendChild(newRow);
@@ -663,11 +677,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     rowData[fieldName] = input.value;
                 }
             });
-            // Also collect Age (Days) from display span if present, 
+            // Also collect age_days from display span if present, 
             // though backend might recalculate it, it's safer to send current UI state
             const ageDisplay = row.querySelector('.age-display');
             if (ageDisplay) {
-                rowData['Age (Days)'] = ageDisplay.textContent.trim();
+                rowData['age_days'] = ageDisplay.textContent.trim();
             }
 
             animalData.push(rowData);

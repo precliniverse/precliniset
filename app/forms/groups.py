@@ -67,6 +67,7 @@ class GroupForm(FlaskForm):
         editing_group = kwargs.get('obj')
         formdata = kwargs.get('formdata')
         team_id_for_eas = kwargs.pop('team_id_for_eas', None)
+        prefilled_project = kwargs.pop('prefilled_project', None)
         
         self.original_name = None
         if editing_group and editing_group.name:
@@ -75,13 +76,14 @@ class GroupForm(FlaskForm):
         super().__init__(*args, **kwargs)
 
         # Lazy loading projects via AJAX on the frontend.
-        # Initialize choices with an empty list or the current project if editing.
+        # Initialize choices with an empty list or the current project if editing/prefilled.
         project_choices = []
         if editing_group and editing_group.project:
             project_choices = [(editing_group.project.id, editing_group.project.name)]
+        elif prefilled_project:
+            project_choices = [(prefilled_project.id, prefilled_project.name)]
         
         self.project.choices = [('', _l('Select Project...'))] + project_choices
-        # -------------------------------------------------------------------
 
         model_choices = [(m.id, m.name) for m in get_animal_models()]
         self.model.choices = [('', _l('Select Model...'))] + model_choices
@@ -91,13 +93,17 @@ class GroupForm(FlaskForm):
         selected_project_id = None
         if editing_group and editing_group.project:
             selected_project_id = editing_group.project.id
+        elif prefilled_project:
+            selected_project_id = prefilled_project.id
+            if not self.project.data:
+                self.project.data = prefilled_project.id
         elif formdata and 'project' in formdata and formdata['project'] != '':
             try:
                 selected_project_id = int(formdata['project'])
             except ValueError:
-                pass # Handle cases where formdata['project'] might not be an int yet
+                pass 
 
-        if selected_project_id and team_id_for_eas: # Use team_id_for_eas here
+        if selected_project_id and team_id_for_eas:
             eligible_eas = get_eligible_ethical_approvals(selected_project_id, team_id_for_eas)
             self.ethical_approval.choices.extend(
                 [(ea.id, f"{ea.reference_number} - {ea.title} ({ea.owner_team.name}) [Available: {get_animals_available_for_ea(ea)}]") for ea in eligible_eas]

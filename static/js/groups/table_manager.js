@@ -39,6 +39,16 @@ export class AnimalTable {
 
         const clone = this.rowTemplate.content.cloneNode(true);
         const tr = clone.querySelector('tr');
+        if (animalData.id) {
+            tr.dataset.animalId = animalData.id; // Store technical ID
+        }
+        
+        // --- Insert display_id cell after action cell ---
+        const actionCell = tr.querySelector('.action-cell');
+        const displayIdCell = document.createElement('td');
+        displayIdCell.dataset.fieldName = "display_id";
+        displayIdCell.textContent = animalData['display_id'] || '';
+        actionCell.after(displayIdCell);
         
         // --- 1. Handle Status styling ---
         if (animalData.status === 'dead') {
@@ -56,30 +66,33 @@ export class AnimalTable {
 
             if (this.config.isBlinded) {
                 blindedCell.classList.remove('d-none');
-                blindedCell.querySelector('.blinded-value').textContent = animalData['Blinded Group'] || '-';
+                blindedCell.querySelector('.blinded-value').textContent = animalData['blinded_group'] || '-';
                 
                 if (this.config.canViewUnblinded) {
                     treatmentCell.classList.remove('d-none');
-                    treatmentCell.querySelector('.treatment-value').textContent = animalData['Treatment Group'] || '-';
+                    treatmentCell.querySelector('.treatment-value').textContent = animalData['treatment_group'] || '-';
                 }
             } else {
                 treatmentCell.classList.remove('d-none');
-                treatmentCell.querySelector('.treatment-value').textContent = animalData['Treatment Group'] || '-';
+                treatmentCell.querySelector('.treatment-value').textContent = animalData['treatment_group'] || '-';
             }
         }
 
         // --- 3. Handle Age Cell ---
         const ageSpan = tr.querySelector('.age-display');
-        ageSpan.textContent = animalData['Age (Days)'] || '-';
-        if (animalData['Date of Birth']) {
+        ageSpan.textContent = animalData['age_days'] || '-';
+        const dob = animalData['date_of_birth'];
+        if (dob) {
             // Store raw date for calculations
-            ageSpan.dataset.birthDate = animalData['Date of Birth']; 
+            ageSpan.dataset.birthDate = dob; 
         }
 
         // --- 4. Generate Dynamic Measurement Cells ---
         fields.forEach(field => {
+            const lowFieldName = field.name.toLowerCase();
             // Skip fixed columns we already handled
-            if (field.name === 'Age (Days)' || field.name === 'Blinded Group' || field.name === 'Treatment Group') return;
+            if (lowFieldName === 'age_days' || lowFieldName === 'age (days)' || 
+                field.name === 'blinded_group' || field.name === 'treatment_group') return;
 
             // Check visibility based on sensitive blinding rules
             // Logic: if sensitive AND in a blinded group AND user cannot view unblinded -> hide
@@ -95,24 +108,27 @@ export class AnimalTable {
             input.name = `animal_${this.nextRowIndex}_field_${field.name}`;
             input.type = field.type === 'date' ? 'date' : 'text';
             
-            // Set Value
+            // Set Value - Try exact match then lowercase
             let val = animalData[field.name];
+            if (val === undefined || val === null) {
+                val = animalData[lowFieldName];
+            }
             if (val === undefined || val === null) val = field.default_value || '';
             
             if (field.type === 'date' && val) {
                  // Ensure YYYY-MM-DD format for date inputs
-                 if (val.includes('T')) val = val.split('T')[0];
+                 if (typeof val === 'string' && val.includes('T')) val = val.split('T')[0];
             }
             input.value = val;
 
             // Required/Disabled states
-            if (field.name === 'ID') input.required = true;
+            if (lowFieldName === 'id' || lowFieldName === 'uid') input.required = true;
             if (animalData.status === 'dead') input.disabled = true;
             if (this.config.isReadOnly) input.disabled = true;
 
             // Handle Categories (Datalist)
             if (field.type === 'category' && field.allowed_values) {
-                const listId = `datalist-${field.name}-${this.nextRowIndex}`;
+                const listId = `datalist-${field.name.replace(/\s+/g, '-')}-${this.nextRowIndex}`;
                 input.setAttribute('list', listId);
                 
                 // Create Datalist dynamically (template doesn't have it to keep it light)
@@ -127,8 +143,8 @@ export class AnimalTable {
                 cellClone.querySelector('td').appendChild(datalist);
             }
 
-            // Handle Death Info (only for Date of Birth field)
-            if (field.name === 'Date of Birth' && animalData.status === 'dead' && animalData.death_date) {
+            // Handle Death Info (only for date_of_birth field)
+            if (lowFieldName === 'date_of_birth' && animalData.status === 'dead' && animalData.death_date) {
                 const dDate = animalData.death_date.split('T')[0];
                 deathInfoContainer.innerHTML = `
                     <small class="text-muted d-block">${this.config.i18n.deceased}: ${dDate}</small>
@@ -200,36 +216,47 @@ export class AnimalTable {
 
         // Start with Actions column
         headerRow.innerHTML = `<th>${this.config.i18n.actions}</th>`;
+        
+        const displayIdTh = document.createElement('th');
+        displayIdTh.textContent = "ID"; // Use "ID" for display_id
+        displayIdTh.dataset.fieldName = "display_id";
+        headerRow.appendChild(displayIdTh);
 
         // Conditionally add Blinding/Randomization
         if (this.config.hasRandomization) {
             if (this.config.isBlinded) {
                 const blindedTh = document.createElement('th');
                 blindedTh.textContent = "Blinded Group";
+                blindedTh.dataset.fieldName = "blinded_group";
                 headerRow.appendChild(blindedTh);
                 
                 if (this.config.canViewUnblinded) {
                     const treatmentTh = document.createElement('th');
                     treatmentTh.textContent = "Treatment Group";
+                    treatmentTh.dataset.fieldName = "treatment_group";
                     headerRow.appendChild(treatmentTh);
                 }
             } else {
                 const treatmentTh = document.createElement('th');
                 treatmentTh.textContent = "Treatment Group";
+                treatmentTh.dataset.fieldName = "treatment_group";
                 headerRow.appendChild(treatmentTh);
             }
         }
 
-        // Age (Days) is always visible
+        // age_days is always visible
         const ageTh = document.createElement('th');
         ageTh.textContent = "Age (Days)";
+        ageTh.dataset.fieldName = "age_days";
         ageTh.title = "Calculated automatically from Date of Birth";
         headerRow.appendChild(ageTh);
 
         // Add dynamic fields
         fields.forEach(field => {
+            const lowFieldName = field.name.toLowerCase();
             const shouldShow = !this.config.isEditing || !this.config.hasRandomization || !field.is_sensitive || this.config.canViewUnblinded;
-            if (shouldShow && field.name !== 'Age (Days)' && field.name !== 'Blinded Group' && field.name !== 'Treatment Group') {
+            if (shouldShow && lowFieldName !== 'age_days' && lowFieldName !== 'age (days)' && 
+                field.name !== 'blinded_group' && field.name !== 'treatment_group') {
                 const th = document.createElement('th');
                 th.textContent = field.name + (field.unit ? ` (${field.unit})` : '');
                 headerRow.appendChild(th);
@@ -272,11 +299,22 @@ export class AnimalTable {
                     rowData[fieldName] = input.value;
                 }
             });
+
+            // Capture display_id from its dedicated cell
+            const displayIdCell = row.querySelector('td[data-field-name="display_id"]');
+            if (displayIdCell) {
+                rowData['display_id'] = displayIdCell.textContent.trim();
+            }
+            
+            // Capture the technical animal ID from the tr's dataset
+            if (row.dataset.animalId) {
+                rowData['id'] = parseInt(row.dataset.animalId);
+            }
             
             // Also capture age text just in case (though backend should calc it)
             const ageSpan = row.querySelector('.age-display');
             if (ageSpan) {
-                rowData['Age (Days)'] = ageSpan.textContent.trim();
+                rowData['age_days'] = ageSpan.textContent.trim();
             }
             
             data.push(rowData);

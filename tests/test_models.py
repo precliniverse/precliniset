@@ -279,7 +279,7 @@ def test_analyte_model(db_session):
     assert analyte.id is not None
     assert analyte.name == 'Glucose'
     assert analyte.data_type == AnalyteDataType.FLOAT
-    assert analyte.to_dict['name'] == 'Glucose'
+    assert analyte.to_dict()['name'] == 'Glucose'
 
 
 def test_animal_model_model(db_session):
@@ -455,14 +455,14 @@ def test_experiment_data_row_model(db_session):
     db_session.commit()
     
     row = ExperimentDataRow(
-        data_table_id=data_table.id, row_index=0,
+        data_table_id=data_table.id, animal_id=1,
         row_data={'analyte1': 10.5}
     )
     db_session.add(row)
     db_session.commit()
     
     assert row.id is not None
-    assert row.row_index == 0
+    assert row.animal_id == 1
     assert row.row_data == {'analyte1': 10.5}
 
 
@@ -670,7 +670,7 @@ def test_sample_model(db_session):
     db_session.add(group)
     db_session.commit()
     
-    animal = Animal(uid='Animal001', group_id=group.id, status='alive')
+    animal = Animal(uid='Animal001', display_id='Animal 1', group_id=group.id, status='alive')
     db_session.add(animal)
     db_session.commit()
     anticoagulant = Anticoagulant(name='Heparin')

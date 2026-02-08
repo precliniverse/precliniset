@@ -71,6 +71,7 @@ def test_datatable_view_columns_and_id(authenticated_client, app):
         
         animal = Animal(
             uid="A001", 
+            display_id="Animal 1",
             group_id=group.id, 
             date_of_birth=date(2023, 1, 1),
             measurements={"Weight": 100},
@@ -139,7 +140,7 @@ def test_datatable_timestamp_update(authenticated_client, app):
         db.session.add(group)
         db.session.flush()
         
-        animal = Animal(uid="A002", group_id=group.id, updated_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+        animal = Animal(uid="A002", display_id="Animal 2", group_id=group.id, updated_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
         db.session.add(animal)
         
         dt = DataTable(group_id=group.id, protocol_id=protocol.id, date="2024-01-01")

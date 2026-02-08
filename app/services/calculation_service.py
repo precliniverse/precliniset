@@ -66,6 +66,8 @@ class CalculationService:
                     # Look in updated_row instead of row_data to support dependency chains
                     val = updated_row.get(var_name)
                     
+                    # Formulas must use canonical keys (uid, date_of_birth, age_days) directly.
+                    
                     if val in [None, '']:
                         is_computable = False
                         break

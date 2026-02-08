@@ -24,7 +24,7 @@ group_for_datatable_model = ns.model('GroupForDataTable', {
 experiment_data_row_model = ns.model('ExperimentDataRow', {
     'id': fields.Integer(readonly=True),
     'data_table_id': fields.Integer(required=True),
-    'row_index': fields.Integer(required=True),
+    'animal_id': fields.Integer(required=True),
     'row_data': fields.Raw(description='JSON data for the experiment row')
 })
 
@@ -84,7 +84,7 @@ class DataTableList(Resource):
             for row_data in data['experiment_rows']:
                 new_row = ExperimentDataRow(
                     data_table_id=new_datatable.id,
-                    row_index=row_data['row_index'],
+                    animal_id=row_data['animal_id'],
                     row_data=row_data['row_data']
                 )
                 db.session.add(new_row)
@@ -127,7 +127,7 @@ class DataTableItem(Resource):
             for row_data in data['experiment_rows']:
                 new_row = ExperimentDataRow(
                     data_table_id=datatable.id,
-                    row_index=row_data['row_index'],
+                    animal_id=row_data['animal_id'],
                     row_data=row_data['row_data']
                 )
                 db.session.add(new_row)

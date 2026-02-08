@@ -22,7 +22,7 @@ def test_server_side_groups_tooltip_refactor(test_client, db_session, init_datab
     service = GroupService()
     
     animal_data = [{
-        "ID": "A-Dead",
+        "uid": "A-Dead",
         "date_of_birth": "2023-01-01",
         "status": "dead",
         "euthanasia_reason": "Limit reached",

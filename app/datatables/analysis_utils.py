@@ -162,9 +162,9 @@ def identify_outliers_and_calc_stats(df_group, numerical_cols):
 def get_age_range_from_df_view_helper(df_group_local):
     """Helper to format age range string."""
     age_range_str_local = lazy_gettext('N/A') 
-    if 'Age (Days)' in df_group_local.columns and not df_group_local['Age (Days)'].isnull().all():
-        min_age = df_group_local['Age (Days)'].min()
-        max_age = df_group_local['Age (Days)'].max()
+    if 'age_days' in df_group_local.columns and not df_group_local['age_days'].isnull().all():
+        min_age = df_group_local['age_days'].min()
+        max_age = df_group_local['age_days'].max()
         if pd.notnull(min_age) and pd.notnull(max_age):
             if min_age == max_age:
                 age_range_str_local = f"{int(min_age)} {lazy_gettext('days')}"

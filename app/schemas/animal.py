@@ -22,7 +22,8 @@ class AnimalSchema(BaseModel):
         measurements: Dynamic scientific measurements (weight, tumor size, etc.)
     """
     
-    animal_id: str = Field(..., alias="id", description="Unique animal identifier")
+    uid: str = Field(..., description="Unique animal identifier")
+    display_id: str = Field(..., description="User-facing animal identifier")
     date_of_birth: date = Field(..., description="Date of birth")
     sex: Optional[str] = Field(None, description="Animal sex (e.g., Male, Female)")
     measurements: Optional[Dict[str, Any]] = Field(
@@ -31,12 +32,11 @@ class AnimalSchema(BaseModel):
     )
     
     model_config = {
-        "populate_by_name": True,  # Allow both alias and field name
         "str_strip_whitespace": True,  # Strip whitespace from strings
         "extra": "allow", # Allow extra fields to be captured by model_validator
     }
 
-    @field_validator('animal_id', mode='before')
+    @field_validator('uid', mode='before')
     @classmethod
     def pre_validate_id(cls, v: Any) -> Any:
         # Compatibility: if it's a number, convert to string
@@ -44,31 +44,18 @@ class AnimalSchema(BaseModel):
             return str(v)
         return v
 
-    @pydantic.model_validator(mode='before')
+    @model_validator(mode='before')
     @classmethod
     def collect_extra_measurements(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
         
-        # Define fields that are NOT measurements
-        # (Using actual field names AND aliases)
-        known_fields = {'animal_id', 'id', 'ID', 'date_of_birth', 'Date of Birth', 'date of birth', 'sex', 'Sex', 'measurements', 'status', 'Status'}
-        
-        # Map capitalized variants to known fields for Pydantic
-        mapping = {
-            'ID': 'id',
-            'Date of Birth': 'date_of_birth',
-            'date of birth': 'date_of_birth',
-            'Sex': 'sex',
-            'Status': 'status'
+        # Canonical fields that are NOT measurements
+        known_fields = {
+            'uid', 'display_id', 'date_of_birth', 'sex', 'status', 
+            'measurements', 'age_days', 'blinded_group', 'treatment_group'
         }
-        for k, v in mapping.items():
-            if k in data and v not in data:
-                data[v] = data[k]
-                # We keep the original in data if it's a known field variant 
-                # to satisfy known_fields check later if needed, but del is fine
-                # because we already mapped it to a Pydantic field.
-
+        
         # Ensure measurements exists
         if 'measurements' not in data:
             data['measurements'] = {}
@@ -82,7 +69,7 @@ class AnimalSchema(BaseModel):
             
         return data
     
-    @field_validator('animal_id')
+    @field_validator('uid')
     @classmethod
     def validate_animal_id(cls, v: str) -> str:
         """Validate animal ID is not empty and sanitizes it."""

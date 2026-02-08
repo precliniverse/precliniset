@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
-from app.helpers import update_associated_data_tables
+from app.helpers import sort_analytes_list_by_name
 # Added Team to imports
 from app.models import (AnimalModel, AnimalModelAnalyteAssociation,
                         ExperimentalGroup, Project, EthicalApproval, 
@@ -30,6 +30,32 @@ class GroupService(BaseService):
     def __init__(self) -> None:
         super().__init__()
         self.validator = ValidationService()
+
+    def generate_group_id(self, name: str, project_id: int) -> str:
+        """Generates a structured ID for a group based on project slug and date."""
+        project = db.session.get(Project, project_id)
+        if not project or not project.slug:
+            import secrets
+            return secrets.token_hex(20)
+            
+        today_str = datetime.now(timezone.utc).strftime('%y%m%d')
+        prefix = f"{project.slug}-{today_str}-"
+        
+        # We need the last sequence for THIS prefix
+        last_group = ExperimentalGroup.query.filter(
+            ExperimentalGroup.id.like(f"{prefix}%")
+        ).order_by(db.desc(ExperimentalGroup.id)).first()
+        
+        sequence = 1
+        if last_group:
+            try:
+                # Assuming ID format prefixX where X is the sequence
+                last_sequence_str = last_group.id.split('-')[-1]
+                sequence = int(last_sequence_str) + 1
+            except (ValueError, IndexError):
+                pass
+        
+        return f"{prefix}{sequence}"
 
     def create_group(
         self, 
@@ -55,6 +81,10 @@ class GroupService(BaseService):
         Returns:
             Created ExperimentalGroup
         """
+        # Prepare ID if not provided
+        if 'id' not in kwargs:
+            kwargs['id'] = self.generate_group_id(name, project_id)
+
         # Create the group (no animal_data column anymore)
         group = ExperimentalGroup(
             name=name,
@@ -72,13 +102,16 @@ class GroupService(BaseService):
             to_insert = []
             # Validate and create animals
             for i, animal_dict in enumerate(animal_data):
-                animal_id = animal_dict.get('id') or animal_dict.get('ID') or f"{group.id}-A{i+1}"
+                animal_id = animal_dict.get('uid') or f"{group.id}-A{i+1}"
+                display_id = animal_dict.get('display_id') or f"Animal {i+1}"
                 
                 # Validate using AnimalSchema
                 try:
-                    # Ensure id is in dict for schema if it was generated
-                    if 'id' not in animal_dict:
-                        animal_dict['id'] = animal_id
+                    # Ensure uid and display_id are in dict for schema
+                    if 'uid' not in animal_dict:
+                        animal_dict['uid'] = animal_id
+                    if 'display_id' not in animal_dict:
+                        animal_dict['display_id'] = display_id
                     schema = AnimalSchema(**animal_dict)
                 except PydanticValidationError as e:
                     raise ValidationError(f"Invalid animal data for {animal_id}: {str(e)}")
@@ -96,7 +129,8 @@ class GroupService(BaseService):
                 
                 # Collect for bulk insert
                 to_insert.append({
-                    'uid': schema.animal_id,
+                    'uid': schema.uid,
+                    'display_id': schema.display_id,
                     'group_id': group.id,
                     'sex': schema.sex,
                     'date_of_birth': schema.date_of_birth,
@@ -210,13 +244,12 @@ class GroupService(BaseService):
         animal_data_list = self._convert_timestamps(animal_data_list)
         
         for i, d in enumerate(animal_data_list):
-            current_id = d.get('id') or d.get('ID')
+            current_id = d.get('uid')
             if not current_id:
-                d['id'] = f"{group.id}-A{i+1}"
+                d['uid'] = f"{group.id}-A{i+1}"
             else:
-                # Ensure it's in lowercase 'id' for the schema if it was in 'ID'
-                if 'ID' in d and 'id' not in d:
-                    d['id'] = d['ID']
+                # Ensure it's in canonical 'uid'
+                d['uid'] = current_id
  
         return animal_data_list, animal_field_names
 
@@ -266,7 +299,7 @@ class GroupService(BaseService):
 
         # 2. Update, create or delete Animal entities
         existing_animals = {a.uid: a for a in Animal.query.filter_by(group_id=group.id).all()}
-        new_animal_uids = {d.get('id') or d.get('ID') for d in animal_data_list if d.get('id') or d.get('ID')}
+        new_animal_uids = {d.get('uid') for d in animal_data_list if d.get('uid')}
         
         # Delete animals not in the new list
         for uid, animal in list(existing_animals.items()):
@@ -280,7 +313,7 @@ class GroupService(BaseService):
         now = datetime.now(timezone.utc)
         
         for animal_dict in animal_data_list:
-            animal_id = animal_dict.get('id') or animal_dict.get('ID')
+            animal_id = animal_dict.get('uid')
             if not animal_id:
                 continue
             
@@ -290,15 +323,14 @@ class GroupService(BaseService):
             
             # Core keys are normalized to lowercase for mapping
             core_keys_map = {
-                'id': 'uid',
                 'uid': 'uid',
+                'display_id': 'display_id',
                 'date_of_birth': 'date_of_birth',
-                'date of birth': 'date_of_birth',
                 'sex': 'sex',
                 'status': 'status'
             }
-            # Special keys to skip from measurements
-            internal_keys = {'age_days', 'age (days)', 'blinded group', 'treatment group'}
+            # Special keys to skip from measurements (system calculated or internal)
+            internal_keys = {'age_days', 'age (days)', 'blinded_group', 'blinded group', 'treatment_group', 'treatment group'}
             
             for key, value in animal_dict.items():
                 low_key = key.lower()
@@ -306,6 +338,17 @@ class GroupService(BaseService):
                     parsed_core[core_keys_map[low_key]] = value
                 elif low_key not in internal_keys:
                     measurements[key] = value
+            
+            # 2. Longitudinal Weight logic: Save weight to measurements['last_weight']
+            # Check for weight in various case-insensitive formats
+            weight_value = None
+            for weight_key in ['weight', 'Weight', 'WEIGHT']:
+                if weight_key in animal_dict and animal_dict[weight_key]:
+                    weight_value = animal_dict[weight_key]
+                    break
+            
+            if weight_value is not None:
+                measurements['last_weight'] = weight_value
 
             # 2. Parse typed fields from parsed_core
             dob = None
@@ -323,22 +366,32 @@ class GroupService(BaseService):
 
             sex = parsed_core.get('sex', animal_dict.get('sex'))
             status = parsed_core.get('status', animal_dict.get('status', 'alive'))
-            
+            display_id = parsed_core.get('display_id', animal_dict.get('display_id'))
+
             if animal_id in existing_animals:
                 # Update existing animal
                 existing_animal = existing_animals[animal_id]
+                # Preserve existing display_id if not provided in update
+                if not display_id:
+                    display_id = existing_animal.display_id
                 to_update.append({
                     'id': existing_animal.id,
                     'sex': sex,
                     'status': status,
                     'date_of_birth': dob,
+                    'display_id': display_id,
                     'measurements': measurements,
                     'updated_at': now
                 })
             else:
                 # Create new animal
+                # Ensure display_id is provided
+                if not display_id:
+                    display_id = f"Animal {len(to_insert) + 1}"
+                
                 to_insert.append({
                     'uid': animal_id,
+                    'display_id': display_id,
                     'group_id': group.id,
                     'sex': sex,
                     'status': status,
@@ -370,7 +423,7 @@ class GroupService(BaseService):
             ordered_data = [a.to_dict() for a in animals]
             
             # Determine column order from Animal Model
-            final_ordered_keys = ['id', 'date_of_birth', 'age_days', 'blinded group', 'treatment group']
+            final_ordered_keys = ['uid', 'date_of_birth', 'age_days', 'blinded_group', 'treatment_group']
             if group.model_id:
                 associations = AnimalModelAnalyteAssociation.query.filter_by(
                     animal_model_id=group.model_id
@@ -379,8 +432,8 @@ class GroupService(BaseService):
                     if assoc.analyte.name not in final_ordered_keys:
                         final_ordered_keys.append(assoc.analyte.name)
             
-            with suppress_audit():
-                update_associated_data_tables(db, group, ordered_data, final_ordered_keys)
+            # Note: update_associated_data_tables function has been removed as part of legacy cleanup
+            # The new animal_id foreign key system handles data synchronization automatically
 
         return group
 

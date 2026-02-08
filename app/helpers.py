@@ -73,7 +73,7 @@ def sort_analytes_list_by_name(analytes_list):
     """Sorts a list of Analyte objects."""
     if not analytes_list:
         return []
-    order = {'id': 0, 'date_of_birth': 1}
+    order = {'uid': 0, 'date_of_birth': 1}
     next_order_val = len(order)
     return sorted(analytes_list, key=lambda a: (order.get(a.name, next_order_val), a.name))
 
@@ -94,8 +94,8 @@ def get_ordered_analytes_for_model(model_id):
     final_ordered_analytes = []
     seen_analyte_names = set()
 
-    # id and date_of_birth are mandatory and should come first
-    priority_field_names = ['id', 'date_of_birth']
+    # uid and date_of_birth are mandatory and should come first
+    priority_field_names = ['uid', 'date_of_birth']
     
     for name in priority_field_names:
         analyte = next((a for a in model_analytes_ordered_by_association if a.name == name), None)
@@ -113,22 +113,23 @@ def get_ordered_analytes_for_model(model_id):
         'Death Date': Analyte(name='Death Date', data_type=AnalyteDataType.DATE, description='Date animal was declared dead'),
     }
 
-    # id and date_of_birth must exist as analytes for validation logic
-    if 'id' not in seen_analyte_names:
-        final_ordered_analytes.insert(0, Analyte(name='id', data_type=AnalyteDataType.TEXT, description='Unique animal identifier', is_mandatory=True))
-        seen_analyte_names.add('id')
+    # uid and date_of_birth must exist as analytes for validation logic
+    if 'uid' not in seen_analyte_names:
+        final_ordered_analytes.insert(0, Analyte(name='uid', data_type=AnalyteDataType.TEXT, description='Unique animal identifier', is_mandatory=True))
+        seen_analyte_names.add('uid')
     
     if 'date_of_birth' not in seen_analyte_names:
-        # Insert after id
-        idx = 1 if final_ordered_analytes[0].name == 'id' else 0
+        # Insert after uid
+        idx = 1 if final_ordered_analytes[0].name == 'uid' else 0
         final_ordered_analytes.insert(idx, Analyte(name='date_of_birth', data_type=AnalyteDataType.DATE, description="Animal's date of birth", is_mandatory=True))
         seen_analyte_names.add('date_of_birth')
 
     # Add any other analytes from the model not already included
     for analyte in model.analytes:
-        if analyte.name not in seen_analyte_names:
+        low_name = analyte.name.lower()
+        if low_name not in seen_analyte_names:
             final_ordered_analytes.append(analyte)
-            seen_analyte_names.add(analyte.name)
+            seen_analyte_names.add(low_name)
 
     return final_ordered_analytes
 
@@ -138,20 +139,17 @@ def get_ordered_columns_for_single_datatable_download(animal_model_field_defs, p
     seen_columns = set()
 
     animal_fields_temp_ordered = []
-    animal_id_field = None
+    
+    # Always include display_id as the primary identifier
+    ordered_columns.append('display_id')
+    seen_columns.add('display_id')
 
     if animal_model_field_defs:
         for field_def in animal_model_field_defs:
             if isinstance(field_def, (list, tuple)) and len(field_def) > 0:
                 field_name = field_def[0]
-                if field_name == 'id':
-                    animal_id_field = field_name
-                else:
+                if field_name not in {'uid', 'id', 'ID', 'display_id'}: # Exclude technical UIDs and already added display_id
                     animal_fields_temp_ordered.append(field_name)
-
-    if animal_id_field and animal_id_field not in seen_columns:
-        ordered_columns.append(animal_id_field)
-        seen_columns.add(animal_id_field)
 
     for field_name in animal_fields_temp_ordered:
         if field_name not in seen_columns:
@@ -170,9 +168,14 @@ def get_ordered_columns_for_single_datatable_download(animal_model_field_defs, p
                     ordered_columns.append(field_name)
                     seen_columns.add(field_name)
     
+    # Ensure uid is present in background for internal use if not explicitly added
+    if 'uid' not in seen_columns:
+        ordered_columns.append('uid')
+        seen_columns.add('uid')
+
     return ordered_columns
 
-def validate_and_convert(value, analyte_obj, field_name, row_index):
+def validate_and_convert(value, analyte_obj, field_name, row_identifier=None):
     """Validates and converts a value based on the Analyte object's data type."""
     from .models import AnalyteDataType
 
@@ -181,6 +184,11 @@ def validate_and_convert(value, analyte_obj, field_name, row_index):
 
     original_value = value
     value_str = str(value).strip()
+
+    # Build location context for error messages
+    location_context = ""
+    if row_identifier is not None:
+        location_context = f" in row {row_identifier + 1}"
 
     try:
         if analyte_obj.data_type == AnalyteDataType.INT:
@@ -198,7 +206,7 @@ def validate_and_convert(value, analyte_obj, field_name, row_index):
                 except ValueError:
                     raise ValueError(
                         f"Invalid date format '{value_str}' for field '{field_name}' "
-                        f"(expected YYYY-MM-DD or YYYY-MM-DD HH:MM:SS) in row {row_index + 1}"
+                        f"(expected YYYY-MM-DD or YYYY-MM-DD HH:MM:SS){location_context}"
                     )
         elif analyte_obj.data_type == AnalyteDataType.TEXT:
             return value_str
@@ -208,13 +216,13 @@ def validate_and_convert(value, analyte_obj, field_name, row_index):
                 if value_str not in allowed_list:
                     raise ValueError(
                         f"Value '{original_value}' for field '{field_name}' is not in the allowed list: "
-                        f"{ ', '.join(allowed_list) } in row {row_index + 1}"
+                        f"{ ', '.join(allowed_list) }{location_context}"
                     )
             return value_str
         else:
             raise ValueError(f"Unknown analyte data type '{analyte_obj.data_type.value}' for field '{field_name}'")
     except (ValueError, TypeError) as e:
-        raise ValueError(f"Invalid value '{original_value}' for field '{field_name}' (expected {analyte_obj.data_type.value}) in row {row_index + 1}. Error: {e}")
+        raise ValueError(f"Invalid value '{original_value}' for field '{field_name}' (expected {analyte_obj.data_type.value}){location_context}. Error: {e}")
 
 def generate_unique_name(base_name, existing_names_query):
     """Generates a unique name based on existing names from a query."""
@@ -246,21 +254,23 @@ def get_ordered_column_names(data_table):
         ).order_by(ProtocolAnalyteAssociation.order).all()
         protocol_analytes_ordered = [assoc.analyte for assoc in associations]
 
-    ordered_columns = ['id']
+    ordered_columns = ['ID']
     seen_columns = {'id'}
 
     for analyte in animal_analytes_ordered:
-        col_name = 'id' if analyte.name == 'Animal ID' else analyte.name
+        low_name = analyte.name.lower()
+        col_name = 'ID' if low_name in {'animal id', 'id', 'uid', 'display_id'} else analyte.name
         if col_name not in seen_columns:
             ordered_columns.append(col_name)
             seen_columns.add(col_name)
 
-    if 'Age (Days)' not in seen_columns:
-        ordered_columns.append('Age (Days)')
-        seen_columns.add('Age (Days)')
+    if 'age_days' not in seen_columns:
+        ordered_columns.append('age_days')
+        seen_columns.add('age_days')
 
     for analyte in protocol_analytes_ordered:
-        col_name = 'id' if analyte.name == 'Animal ID' else analyte.name
+        low_name = analyte.name.lower()
+        col_name = 'ID' if low_name in {'animal id', 'id', 'uid', 'display_id'} else analyte.name
         if col_name not in seen_columns:
             ordered_columns.append(col_name)
             seen_columns.add(col_name)
@@ -296,57 +306,7 @@ def get_field_types(data_table):
             
     return field_types
 
-def update_associated_data_tables(db, group, animal_data_list, animal_field_names):
-    """Updates the animal-related fields in ExperimentDataRows for all DataTables associated with a group."""
-    from .models import ExperimentDataRow
 
-    try:
-        for data_table in group.data_tables:
-            existing_rows_by_index = {row.row_index: row for row in data_table.experiment_rows.all()}
-            existing_indices = set(existing_rows_by_index.keys())
-
-            for i, new_animal_data in enumerate(animal_data_list):
-                existing_row = existing_rows_by_index.get(i)
-                if existing_row:
-                    updated = False
-                    existing_row.row_data = existing_row.row_data or {} 
-
-                    for field_name in animal_field_names:
-                        new_value = new_animal_data.get(field_name)
-                        if field_name in new_animal_data and existing_row.row_data.get(field_name) != new_value:
-                             existing_row.row_data[field_name] = new_value
-                             updated = True
-                        elif field_name in new_animal_data and field_name not in existing_row.row_data:
-                             existing_row.row_data[field_name] = new_value
-                             updated = True
-                        elif field_name == 'id' and existing_row.row_data.get('id') != new_value:
-                             existing_row.row_data['id'] = new_value
-                             updated = True
-
-                    if updated:
-                        flag_modified(existing_row, "row_data")
-                        db.session.add(existing_row)
-                    existing_indices.discard(i)
-
-                else:
-                    new_row_data = {fn: new_animal_data.get(fn) for fn in animal_field_names if fn in new_animal_data}
-                    if 'ID' in new_animal_data:
-                        new_row_data['ID'] = new_animal_data.get('ID')
-
-                    new_row = ExperimentDataRow(data_table_id=data_table.id, row_index=i, row_data=new_row_data)
-                    db.session.add(new_row)
-                    flag_modified(new_row, "row_data")
-
-            indices_to_delete = existing_indices
-            if indices_to_delete:
-                for index_to_del in indices_to_delete:
-                    row_to_delete = existing_rows_by_index.get(index_to_del)
-                    if row_to_delete:
-                        db.session.delete(row_to_delete)
-
-    except Exception as e:
-        current_app.logger.error(f"Error in update_associated_data_tables for group {group.id}: {e}")
-        raise
 
 def generate_xlsx_template(analytes, base_fields=None):
     """Generates an XLSX template file in memory."""
@@ -557,7 +517,7 @@ def clean_param_name_for_id(name):
     return cleaned_name
 
 def ensure_mandatory_analytes_exist(app, db):
-    """Ensures that the mandatory 'ID' and 'Date of Birth' analytes exist."""
+    """Ensures that the mandatory 'uid' and 'date_of_birth' analytes exist."""
     with app.app_context():
         try:
             from sqlalchemy import inspect
@@ -568,7 +528,7 @@ def ensure_mandatory_analytes_exist(app, db):
                 return
 
             mandatory_analytes = {
-                "id": {"type": AnalyteDataType.TEXT, "description": "Unique animal identifier"},
+                "uid": {"type": AnalyteDataType.TEXT, "description": "Unique animal identifier"},
                 "date_of_birth": {"type": AnalyteDataType.DATE, "description": "Animal's date of birth"}
             }
 

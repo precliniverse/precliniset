@@ -168,7 +168,6 @@ class Analyte(db.Model):
     protocol_associations = db.relationship('ProtocolAnalyteAssociation', back_populates='analyte', cascade="all, delete-orphan")
     animal_model_associations = db.relationship('AnimalModelAnalyteAssociation', back_populates='analyte', cascade="all, delete-orphan")
 
-    @property
     def to_dict(self):
         """Return dictionary representation."""
         return {
@@ -201,7 +200,7 @@ class AnimalModel(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'analytes': [analyte.to_dict for analyte in self.analytes]
+            'analytes': [analyte.to_dict() for analyte in self.analytes]
         }
 
     def __repr__(self):

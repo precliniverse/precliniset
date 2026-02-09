@@ -1,8 +1,8 @@
-"""Initial_Baseline
+"""Initial migration
 
-Revision ID: bd02d33cb42c
+Revision ID: d310ca89b36e
 Revises: 
-Create Date: 2026-02-02 17:06:24.590714
+Create Date: 2026-02-09 10:11:02.719948
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'bd02d33cb42c'
+revision = 'd310ca89b36e'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -603,7 +603,8 @@ def upgrade():
     op.create_table('animal',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('uid', sa.String(length=100), nullable=False),
-    sa.Column('group_id', sa.String(length=40), nullable=False),
+    sa.Column('display_id', sa.String(length=50), nullable=False),
+    sa.Column('group_id', sa.String(length=40), nullable=True),
     sa.Column('sex', sa.String(length=50), nullable=True),
     sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('date_of_birth', sa.Date(), nullable=True),
@@ -612,13 +613,14 @@ def upgrade():
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['group_id'], ['experimental_group.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('group_id', 'uid', name='_group_animal_uid_uc')
+    sa.UniqueConstraint('group_id', 'uid', name='_group_animal_uid_uc'),
+    sa.UniqueConstraint('uid')
     )
     with op.batch_alter_table('animal', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_animal_date_of_birth'), ['date_of_birth'], unique=False)
+        batch_op.create_index(batch_op.f('ix_animal_display_id'), ['display_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_animal_group_id'), ['group_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_animal_status'), ['status'], unique=False)
-        batch_op.create_index(batch_op.f('ix_animal_uid'), ['uid'], unique=False)
 
     op.create_table('data_table',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -720,11 +722,12 @@ def upgrade():
     op.create_table('experiment_data_row',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('data_table_id', sa.Integer(), nullable=False),
-    sa.Column('row_index', sa.Integer(), nullable=False),
+    sa.Column('animal_id', sa.Integer(), nullable=False),
     sa.Column('row_data', sa.JSON(), nullable=True),
+    sa.ForeignKeyConstraint(['animal_id'], ['animal.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['data_table_id'], ['data_table.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('data_table_id', 'row_index', name='_data_table_row_uc')
+    sa.UniqueConstraint('data_table_id', 'animal_id', name='_dt_animal_uc')
     )
     op.create_table('sample_conditions',
     sa.Column('sample_id', sa.Integer(), nullable=False),
@@ -765,9 +768,9 @@ def downgrade():
 
     op.drop_table('data_table')
     with op.batch_alter_table('animal', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_animal_uid'))
         batch_op.drop_index(batch_op.f('ix_animal_status'))
         batch_op.drop_index(batch_op.f('ix_animal_group_id'))
+        batch_op.drop_index(batch_op.f('ix_animal_display_id'))
         batch_op.drop_index(batch_op.f('ix_animal_date_of_birth'))
 
     op.drop_table('animal')

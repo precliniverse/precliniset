@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (CONFIG.modelFields && CONFIG.modelFields.length > 0) {
             return CONFIG.modelFields;
         }
-        return []; 
+        return [];
     }
 
     // --- State ---
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateEADropdown(projectId) {
         if (!eaSelect.length) return;
-        
+
         const currentVal = eaSelect.val();
 
         eaSelect.empty().append(new Option(CONFIG.i18n.selectEA || "Select Ethical Approval...", ''));
@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const newOption = new Option(ea.text, ea.id, false, false);
                     eaSelect.append(newOption);
                 });
-                
+
                 const targetId = CONFIG.ethicalApprovalId || currentVal;
                 if (targetId) {
                     eaSelect.val(targetId);
@@ -132,8 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (CONFIG.modelFields) {
         currentFields = CONFIG.modelFields;
         animalTable.updateTableHeader(currentFields);
-        
+
         if (CONFIG.existingAnimalData) {
+            animalTable.clearRows(); // Ensure a clean state before initial load
             CONFIG.existingAnimalData.forEach(animal => {
                 animalTable.addAnimalRow(animal, currentFields);
             });
@@ -141,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 4. Event Listeners ---
-    
+
     // Add Animal Button
     const addAnimalContainer = document.getElementById('add-animal-button-container');
     if (addAnimalContainer && currentFields.length > 0) {
@@ -153,38 +154,41 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         addAnimalContainer.appendChild(btn);
     }
-    
+
     // Model Change Listener (for new groups)
-    $('#model_select').on('change', async function() {
+    $('#model_select').on('change', async function () {
         const modelId = $(this).val();
-        if(!modelId || modelId === '0') return;
+        if (!modelId || modelId === '0') return;
 
         try {
             const url = CONFIG.urls.getModelFields.replace('0', modelId);
             const response = await fetch(url);
-            const fields = await response.json();
-            
-            currentFields = fields;
-            animalTable.clearRows();
-            animalTable.updateTableHeader(fields);
-            
-            // Re-render Add Button
-            addAnimalContainer.innerHTML = '';
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-success btn-sm';
-            btn.innerHTML = `<i class="fas fa-plus me-1"></i> ${CONFIG.i18n.addAnimal}`;
-            btn.addEventListener('click', () => {
-                animalTable.addAnimalRow({}, currentFields);
-            });
-            addAnimalContainer.appendChild(btn);
-            
-            // Allow template download
-             const downloadBtn = document.getElementById('download-data-btn');
-             if(downloadBtn) {
-                 downloadBtn.href = CONFIG.urls.downloadTemplate.replace('0', modelId);
-                 downloadBtn.removeAttribute('disabled');
-             }
+            const data = await response.json(); // data is the whole object
 
+            if (data.success) {
+                const fields = data.fields; // <--- FIX: Extract the array here
+                currentFields = fields;
+
+                animalTable.clearRows();
+                animalTable.updateTableHeader(fields); // Now fields is an array!
+
+                // Re-render "Add" button so you can add animals immediately
+                addAnimalContainer.innerHTML = '';
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-success btn-sm';
+                btn.innerHTML = `<i class="fas fa-plus me-1"></i> ${CONFIG.i18n.addAnimal}`;
+                btn.addEventListener('click', () => {
+                    animalTable.addAnimalRow({}, currentFields);
+                });
+                addAnimalContainer.appendChild(btn);
+
+                // Allow template download
+                const downloadBtn = document.getElementById('download-data-btn');
+                if (downloadBtn) {
+                    downloadBtn.href = CONFIG.urls.downloadTemplate.replace('0', modelId);
+                    downloadBtn.removeAttribute('disabled');
+                }
+            }
         } catch (e) {
             console.error("Error fetching model fields:", e);
         }
@@ -197,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = target.closest('tr');
             const inputs = tr.querySelectorAll('input, select');
             const rowData = {};
-            
+
             inputs.forEach(input => {
                 const parts = input.name.split('_field_');
                 if (parts.length === 2) {
@@ -205,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (fieldName !== 'ID') rowData[fieldName] = input.value;
                 }
             });
-            
+
             animalTable.addAnimalRow(rowData, currentFields);
         }
     });
@@ -236,10 +240,10 @@ document.addEventListener('DOMContentLoaded', () => {
             isValid = false;
             nameInput.classList.add('is-invalid');
             if (!nameInput.nextElementSibling || !nameInput.nextElementSibling.classList.contains('invalid-feedback')) {
-                 const div = document.createElement('div');
-                 div.className = 'invalid-feedback d-block';
-                 div.textContent = 'Group Name is required.';
-                 nameInput.parentNode.appendChild(div);
+                const div = document.createElement('div');
+                div.className = 'invalid-feedback d-block';
+                div.textContent = 'Group Name is required.';
+                nameInput.parentNode.appendChild(div);
             }
         }
         return isValid;
@@ -247,9 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveBtn = document.getElementById('save-group-btn');
     const groupForm = document.getElementById('group-form');
-    
+
     if (saveBtn) {
-        saveBtn.addEventListener('click', function(e) {
+        saveBtn.addEventListener('click', function (e) {
             e.preventDefault();
             if (validateForm()) {
                 if (CONFIG.isEditing) {
@@ -263,9 +267,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const confirmSaveBtn = document.getElementById('confirm-save-group');
     if (confirmSaveBtn) {
-        confirmSaveBtn.addEventListener('click', function() {
+        confirmSaveBtn.addEventListener('click', function () {
             const dontUpdate = document.getElementById('dont-update-datatables').checked;
             performAjaxSave(dontUpdate);
+        });
+    }
+
+    // --- Import Button ---
+    const importBtn = document.getElementById('import-xlsx-btn');
+    if (importBtn) {
+        importBtn.addEventListener('click', function () {
+            const fileInput = document.getElementById('xlsx_upload');
+            if (!fileInput.files.length) {
+                alert("Please select an XLSX file to import.");
+                return;
+            }
+
+            if (validateForm()) {
+                if (confirm("Importing this file will replace or update the current animal list. Continue?")) {
+                    performAjaxSave(false);
+                }
+            }
         });
     }
 
@@ -274,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('is_ajax', 'true');
         if (dontUpdateDataTables) formData.append('update_data_tables', 'no');
         if (allowNewCategories) formData.append('allow_new_categories', 'true');
-        
+
         const animalData = animalTable.getData();
         formData.append('animal_data', JSON.stringify(animalData));
 
@@ -282,31 +304,31 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                if (!CONFIG.isEditing && data.redirect_url) {
-                    window.location.href = data.redirect_url;
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (!CONFIG.isEditing && data.redirect_url) {
+                        window.location.href = data.redirect_url;
+                    } else {
+                        window.location.reload();
+                    }
+                } else if (data.type === 'new_categories') {
+                    handleNewCategoriesDiscovered(data.data, dontUpdateDataTables);
                 } else {
-                    window.location.reload();
+                    alert(data.message || "Error saving group.");
                 }
-            } else if (data.type === 'new_categories') {
-                handleNewCategoriesDiscovered(data.map, dontUpdateDataTables);
-            } else {
-                alert(data.message || "Error saving group.");
-            }
-             $('#saveConfirmationModal').modal('hide');
-        })
-        .catch(error => {
-            console.error('Error during AJAX save:', error);
-            alert("An error occurred while saving.");
-        });
+                $('#saveConfirmationModal').modal('hide');
+            })
+            .catch(error => {
+                console.error('Error during AJAX save:', error);
+                alert("An error occurred while saving.");
+            });
     }
 
     function handleNewCategoriesDiscovered(categoriesMap, dontUpdateDataTables) {
         const listContainer = document.getElementById('new-categories-list');
         listContainer.innerHTML = '';
-        
+
         for (const [analyteId, values] of Object.entries(categoriesMap)) {
             const div = document.createElement('div');
             div.className = 'mb-2';
@@ -324,10 +346,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             confirmBtn.style.display = 'inline-block';
             modalBody.textContent = "New values found. Add them to the system and proceed?";
-            
+
             const newConfirmBtn = confirmBtn.cloneNode(true);
             confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-            
+
             newConfirmBtn.addEventListener('click', () => {
                 performAjaxSave(dontUpdateDataTables, true);
             });
@@ -335,4 +357,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = new bootstrap.Modal(modalEl);
         modal.show();
     }
+
+    // --- 6. Dynamic Age Calculation ---
+    document.getElementById('animal-data-table').addEventListener('change', (e) => {
+        // Si on change un champ qui contient "date_of_birth"
+        if (e.target.name && e.target.name.includes('_field_date_of_birth')) {
+            const row = e.target.closest('tr');
+            calculateRowAge(row);
+        }
+    });
+
+    function calculateRowAge(row) {
+        // Look for the field ending in _date_of_birth
+        const dobInput = row.querySelector('input[name*="_field_date_of_birth"]');
+        const ageDisplay = row.querySelector('.age-display');
+
+        if (dobInput && dobInput.value) {
+            const dob = new Date(dobInput.value);
+            const today = new Date();
+            const diff = Math.floor((today - dob) / (1000 * 60 * 60 * 24));
+
+            if (!isNaN(diff) && diff >= 0) {
+                const weeks = Math.floor(diff / 7);
+                ageDisplay.textContent = `${diff} days (${weeks} weeks)`;
+            } else {
+                ageDisplay.textContent = '-';
+            }
+        } else {
+            if (ageDisplay) ageDisplay.textContent = '-';
+        }
+    }
+
+    // Trigger age calculation for initial rows
+    document.querySelectorAll('#animal-data-table tbody tr').forEach(row => {
+        calculateRowAge(row);
+    });
 });

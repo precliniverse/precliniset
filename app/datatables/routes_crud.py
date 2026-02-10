@@ -45,6 +45,7 @@ from ..forms.controlled_molecules import MoleculeUsageForm
 from ..helpers import (
     get_field_types,
     get_ordered_column_names,
+    get_ordered_columns_for_single_datatable_download,
     sort_analytes_list_by_name,
     validate_and_convert
 )
@@ -239,7 +240,11 @@ def edit_data_table(id):
         assignee_and_housing_form.assigned_to_id.choices = [('', lazy_gettext('Unassigned'))] + [(u.id, u.email) for u in sorted_users]
     
     animals = sorted(data_table.group.animals, key=lambda a: a.id)
-    group_animal_data = [a.to_dict() for a in animals]
+    group_animal_data = []
+    for a in animals:
+        d = a.to_dict()
+        d['id'] = a.id
+        group_animal_data.append(d)
     
     column_names = get_ordered_column_names(data_table)
     field_types = get_field_types(data_table)
@@ -284,16 +289,17 @@ def edit_data_table(id):
             if item_assoc.item.name not in EXCLUDED_METADATA_FIELDS:
                 metadata_fields.add(item_assoc.item.name)
 
-    existing_rows_query = data_table.experiment_rows.order_by(ExperimentDataRow.row_index)
-    existing_data_rows_dict = {r.row_index: r.row_data for r in existing_rows_query.all()}
+    existing_rows_query = data_table.experiment_rows.order_by(ExperimentDataRow.animal_id)
+    existing_data_rows_dict = {r.animal_id: r.row_data for r in existing_rows_query.all()}
     num_expected_rows = len(group_animal_data)
 
     def prepare_template_data(current_rows_dict, current_group_data, all_columns_list):
         rows = []
         for i in range(len(current_group_data)):
             merged = current_group_data[i].copy() if i < len(current_group_data) else {}
-            # Update with saved experiment row data
-            merged.update(current_rows_dict.get(i, {}))
+            
+            animal_db_id = merged.get('id')
+            merged.update(current_rows_dict.get(animal_db_id, {}))
             
             age_in_days = None
             date_of_birth_str = merged.get('date_of_birth')
@@ -315,7 +321,7 @@ def edit_data_table(id):
                 else:
                     row_data[col] = merged.get(col)
 
-            rows.append({'row_index': i, 'row_data': row_data})
+            rows.append({'row_index': i, 'row_data': row_data, 'animal_db_id': animal_db_id})
         return rows
 
     if request.method == 'POST':
@@ -439,16 +445,24 @@ def edit_data_table(id):
                  flash(lazy_gettext("You do not have permission to edit this DataTable."), "danger")
                  return redirect(url_for('datatables.edit_data_table', id=id))
                  
+             # Iterate over all possible molecule forms submitted
+             # The key is checking if a specific molecule submit button was pressed or if it's a general submit
+             # In this UI, the submit button is inside the accordion, so we check for the specific molecule ID field
              mol_id_str = request.form.get('molecule_id')
+             
              if mol_id_str:
                  mol_form = MoleculeUsageForm(prefix=f"mol_{mol_id_str}")
+                 # Manually populate the form data from request.form to ensure prefix matching works if Flask-WTF didn't auto-pick it up
                  if mol_form.validate_on_submit():
                      try:
+                         # animal_ids_json comes from the hidden input updated by JS
+                         # We rely on the JS to put the UIDs or IDs there. 
+                         # Service expects a JSON list.
                          molecule_service.record_usage(
                              data_table_id=data_table.id,
                              molecule_id=int(mol_id_str),
                              volume_used=mol_form.volume_used.data,
-                             animal_ids_json=mol_form.animal_ids.data,
+                             animal_ids_json=mol_form.animal_ids.data, 
                              recorded_by_id=current_user.id,
                              notes=mol_form.notes.data
                          )
@@ -494,10 +508,14 @@ def edit_data_table(id):
             elif not data_changed and not validation_errors:
                 flash(_('No changes were made.'), 'info')
 
-    updated_rows = data_table.experiment_rows.order_by(ExperimentDataRow.row_index).all()
-    updated_dict = {r.row_index: r.row_data for r in updated_rows}
+    updated_rows = data_table.experiment_rows.order_by(ExperimentDataRow.animal_id).all()
+    updated_dict = {r.animal_id: r.row_data for r in updated_rows}
     updated_animals = sorted(data_table.group.animals, key=lambda a: a.id)
-    updated_group_data = [a.to_dict() for a in updated_animals]
+    updated_group_data = []
+    for a in updated_animals:
+        d = a.to_dict()
+        d['id'] = a.id
+        updated_group_data.append(d)
     template_data = prepare_template_data(updated_dict, updated_group_data, column_names)
     protocol_field_units = {a.name: a.unit for a in data_table.protocol.analytes} if data_table.protocol else {}
     date_fields = [a.name for a in data_table.protocol.analytes if a.data_type == AnalyteDataType.DATE] if data_table.protocol else []
@@ -536,7 +554,8 @@ def edit_data_table(id):
                            metadata_fields=list(metadata_fields), assignee_and_housing_form=assignee_and_housing_form,
                            edit_form=edit_form, calculated_fields=calculated_fields,
                            controlled_molecules_data=controlled_molecules_data,
-                           animals_dataset=updated_group_data)
+                           animals_dataset=updated_group_data,
+                           protocol_analytes_map=protocol_analytes_map)
 
 
 @datatables_bp.route('/<int:datatable_id>/move', methods=['POST'])
@@ -1372,6 +1391,7 @@ def download_data_table(id):
     rows_query_dl = data_table_dl.experiment_rows.order_by(ExperimentDataRow.animal_id)
     existing_data_rows_dict_dl = {r.animal_id: r.row_data for r in rows_query_dl.all()}
     data_for_df_dl = []
+    all_actual_data_keys_dl = set()
     
     for animal_dl in animals_dl:
         merged_row_data_dl = animal_dl.to_dict()
@@ -1476,6 +1496,7 @@ def download_transposed_data_table(id):
     rows_query_trans = data_table_trans.experiment_rows.order_by(ExperimentDataRow.animal_id)
     existing_data_rows_dict_trans = {r.animal_id: r.row_data for r in rows_query_trans.all()}
     data_for_df_trans = []
+    all_actual_data_keys_trans = set()
     
     for animal_trans in animals_trans:
         merged_row_data_trans = animal_trans.to_dict()
@@ -1677,9 +1698,13 @@ def view_data_table(datatable_id):
     animal_model_view = experimental_group_view.model
     # Sort animals by ID for consistent indexing
     animals_view = sorted(experimental_group_view.animals, key=lambda a: a.id)
-    animal_data_list_view = [a.to_dict() for a in animals_view]
+    animal_data_list_view = []
+    for a in animals_view:
+        d = a.to_dict()
+        d['id'] = a.id
+        animal_data_list_view.append(d)
     experiment_rows_query_view = data_table_view.experiment_rows.order_by(ExperimentDataRow.id)
-    experiment_rows_dict_view = {row.row_index: row.row_data for row in experiment_rows_query_view.all()}
+    experiment_rows_dict_view = {row.animal_id: row.row_data for row in experiment_rows_query_view.all()}
     if not animal_data_list_view: flash(lazy_gettext("No animal data found for the group associated with this DataTable."), "warning")
     processed_data_for_df_view = []
     
@@ -1693,7 +1718,8 @@ def view_data_table(datatable_id):
     if metadata_fields: allowed_columns.update(metadata_fields)
 
     for i_view, animal_info_view in enumerate(animal_data_list_view):
-        exp_row_data_view = experiment_rows_dict_view.get(i_view, {})
+        animal_db_id = animal_info_view.get('id')
+        exp_row_data_view = experiment_rows_dict_view.get(animal_db_id, {})
         merged_raw = {**animal_info_view, **exp_row_data_view}
         
         # Filter and Fix ID
@@ -1808,7 +1834,7 @@ def view_data_table(datatable_id):
         if exclude_outliers_view:
             for col_view_stats in numerical_protocol_cols_view:
                 if col_view_stats in df_outlier_flags_overall_view.columns: df_for_stats_overall_view.loc[df_outlier_flags_overall_view[col_view_stats], col_view_stats] = pd.NA
-            _, overall_stats_final_view = identify_outliers_and_calc_stats(df_for_stats_overall_view, numerical_protocol_cols_view)
+            unused_outlier_mask, overall_stats_final_view = identify_outliers_and_calc_stats(df_for_stats_overall_view, numerical_protocol_cols_view)
         else: overall_stats_final_view = overall_stats_initial_view
         all_display_rows_with_outlier_info_view = df_for_display_overall_view.to_dict(orient='records')
         subgroup_summaries_view["Overall"] = {'label': lazy_gettext("Overall (all animals)"), 'stats': overall_stats_final_view, 'age_range': get_age_range_from_df_view_helper(df_for_stats_overall_view), 'animal_count': len(df_for_stats_overall_view.dropna(subset=numerical_protocol_cols_view, how='all')), 'initial_animal_count': len(df_temp_overall_view)}

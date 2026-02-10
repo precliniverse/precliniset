@@ -152,7 +152,7 @@ class DataTableService(BaseService):
         animal_model_fields = set()
 
         for dt in datatables_to_process:
-            exp_rows_dict = {row.row_index: row.row_data for row in dt.experiment_rows.all()}
+            exp_rows_dict = {row.animal_id: row.row_data for row in dt.experiment_rows.all()}
             
             if dt.group.model and dt.group.model.analytes:
                 animal_model_fields.update(a.name for a in dt.group.model.analytes)
@@ -164,7 +164,7 @@ class DataTableService(BaseService):
                 if not animal_id:
                     continue
 
-                merged_data = {**animal_info, **exp_rows_dict.get(i, {})}
+                merged_data = {**animal_info, **exp_rows_dict.get(animal.id, {})}
                 
                 if dt.protocol and dt.protocol.analytes:
                     for analyte in dt.protocol.analytes:
@@ -266,14 +266,14 @@ class DataTableService(BaseService):
         for dt in datatables:
             dt_date = dt.date
             # Get experiment rows
-            exp_rows = {row.row_index: row.row_data for row in dt.experiment_rows.all()}
+            exp_rows = {row.animal_id: row.row_data for row in dt.experiment_rows.all()}
 
             for idx, animal in enumerate(animals):
                 animal_id = animal.uid
-                if idx not in exp_rows:
+                if animal.id not in exp_rows:
                     continue
-
-                row_data = exp_rows[idx]
+                
+                row_data = exp_rows[animal.id]
                 for analyte in analytes:
                     if analyte.name in row_data and row_data[analyte.name] is not None:
                         if analyte.name not in concatenated_data[animal_id]:
@@ -480,11 +480,10 @@ class DataTableService(BaseService):
         protocol_analytes_map = {a.name: a for a in protocol_analytes_ordered} if protocol_analytes_ordered else {}
         protocol_field_names = [a.name for a in protocol_analytes_ordered] if protocol_analytes_ordered else []
         
-        num_expected_rows = len(data_table.group.animals) if data_table.group else 0
-        animals = sorted(data_table.group.animals, key=lambda a: a.id)
-        animal_map = {i: animal for i, animal in enumerate(animals)}
-
-        existing_rows_query = data_table.experiment_rows
+        animals = sorted(data_table.group.animals, key=lambda a: a.id) if data_table.group else []
+        animal_index_map = {a.id: i for i, a in enumerate(animals)} # For error messages, map animal_id to a display row index
+        
+        existing_rows_query = data_table.experiment_rows.order_by(ExperimentDataRow.animal_id)
         existing_data_rows_dict = {r.animal_id: r.row_data for r in existing_rows_query.all()}
 
         validation_errors, data_changed = False, False
@@ -497,12 +496,14 @@ class DataTableService(BaseService):
             parts = k.split('_')
             if len(parts) == 3:
                 try:
-                    r_idx, c_idx = int(parts[1]), int(parts[2])
-                    animal = animal_map.get(r_idx)
+                    animal_id, c_idx = int(parts[1]), int(parts[2])
+                    animal = db.session.get(Animal, animal_id)
                     if not animal:
                         continue
 
-                    if 0 <= r_idx < num_expected_rows and 0 <= c_idx < len(column_names):
+                    r_idx = animal_index_map.get(animal_id, 0) # Get a display row index for error messages
+
+                    if 0 <= c_idx < len(column_names):
                         col_name_manual = column_names[c_idx]
                         
                         if col_name_manual in protocol_field_names:

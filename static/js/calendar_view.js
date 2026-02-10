@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                fetch(`/datatables/${datatableId}/move`, {
+                fetch(`/api/v1/groups/datatables/${datatableId}/move`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

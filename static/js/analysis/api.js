@@ -6,7 +6,7 @@
 const API = {
     // Polls the status of the Celery task
     pollAnalysisStatus: function (taskId, onComplete, onError) {
-        const pollUrl = CONFIG.urls.analysisStatus.replace('TASK_ID', taskId);
+        const pollUrl = window.CONFIG.urls.analysisStatus.replace('TASK_ID', taskId);
 
         const poller = setInterval(() => {
             fetch(pollUrl)
@@ -39,14 +39,14 @@ const API = {
         let url;
         let payload = { groups: groupCols };
 
-        if (CONFIG.datatableId) {
-            url = `/datatables/api/group_levels/${CONFIG.datatableId}`;
+        if (window.CONFIG.datatableId) {
+            url = `/datatables/api/group_levels/${window.CONFIG.datatableId}`;
         } else {
             // Merged Analysis: Use merged endpoint
             url = `/datatables/api/group_levels/merged`;
             // Need pass list of IDs. They should be in formData from server
-            if (CONFIG.formData && CONFIG.formData.selected_datatable_ids) {
-                payload.datatable_ids = CONFIG.formData.selected_datatable_ids;
+            if (window.CONFIG.formData && window.CONFIG.formData.selected_datatable_ids) {
+                payload.datatable_ids = window.CONFIG.formData.selected_datatable_ids;
             } else {
                 console.warn("Merged analysis but no IDs found in CONFIG.");
                 return [];
@@ -66,7 +66,7 @@ const API = {
             return data.levels || [];
         } catch (e) {
             console.warn("Failed to fetch group levels:", e);
-            return [];
+            throw e; // Re-throw so manager can catch and display error
         }
     }
 };

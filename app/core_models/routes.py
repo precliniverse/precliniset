@@ -1062,18 +1062,6 @@ def edit_model(model_type, id=None):
                 )
                 db.session.add(new_assoc)
 
-            mandatory_analytes = Analyte.query.filter_by(is_mandatory=True).all()
-            current_max_order = len(final_analyte_ids)
-            for man_analyte in mandatory_analytes:
-                if man_analyte.id not in final_analyte_ids:
-                    new_mandatory_assoc = AnimalModelAnalyteAssociation(
-                        animal_model_id=model.id,
-                        analyte_id=man_analyte.id,
-                        order=current_max_order
-                    )
-                    db.session.add(new_mandatory_assoc)
-                    current_max_order += 1
-
             try:
                 db.session.commit()
                 flash(_l('Animal Model "%(name)s" updated successfully!', name=model.name), 'success')

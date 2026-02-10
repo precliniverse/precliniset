@@ -69,35 +69,16 @@ class Animal(db.Model):
         return delta.days
     
     def to_dict(self, include_measurements: bool = True) -> dict:
-        """Convert animal to dictionary.
-        
-        Args:
-            include_measurements: Whether to include measurements
-            
-        Returns:
-            Dictionary representation of animal
-        """
-        dob_iso = self.date_of_birth.isoformat() if self.date_of_birth else None
+        """Convert animal to dictionary."""
         result = {
-            'id': self.id,
+            'id': self.id,  # CRITICAL: Keep Integer ID for backend operations (updates/joins)
             'uid': self.uid,
-            'display_id': self.display_id,  # The "Simple ID" user sees
-            'group_id': self.group_id,
+            'display_id': self.display_id, 
             'sex': self.sex,
             'status': self.status,
-            'date_of_birth': dob_iso,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'date_of_birth': self.date_of_birth.isoformat() if self.date_of_birth else None,
         }
-        
         if include_measurements and self.measurements:
-            # Flatten measurements for frontend compatibility
             result.update(self.measurements)
-        
-        # Ensure canonical metadata fields are present (even if they were in measurements)
-        result['age_days'] = self.age_days
-        if self.measurements:
-            result['blinded_group'] = self.measurements.get('blinded_group')
-            result['treatment_group'] = self.measurements.get('treatment_group')
         
         return result

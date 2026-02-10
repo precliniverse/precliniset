@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function initializeAnimalCountTooltips() {
         // Destroy existing tooltips first to avoid duplicates
         const existingTooltips = document.querySelectorAll('.animal-count[data-bs-toggle="tooltip"]');
-        existingTooltips.forEach(function(el) {
+        existingTooltips.forEach(function (el) {
             const tooltip = bootstrap.Tooltip.getInstance(el);
             if (tooltip) {
                 tooltip.dispose();
@@ -397,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Initialize tooltips when table is drawn
-    table.on('draw', function() {
+    table.on('draw', function () {
         // Small delay to ensure DOM is ready
         setTimeout(initializeAnimalCountTooltips, 100);
     });
@@ -480,11 +480,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 selectAllCheckbox.id = 'selectAllAnimalsDeadModal';
                 th.appendChild(selectAllCheckbox);
 
+                // Add all model fields as columns
                 modelFields.forEach(field => {
-                    if (field.name === 'ID' || field.name === 'Genotype' || field.name === 'Cage') {
-                        th = headerRow.insertCell();
-                        th.textContent = field.name;
-                    }
+                    th = headerRow.insertCell();
+                    th.textContent = field.name;
                 });
                 th = headerRow.insertCell();
                 th.textContent = 'Status';
@@ -506,11 +505,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (animal.status === 'dead') checkbox.disabled = true;
                     cell.appendChild(checkbox);
 
+                    // Add all model field values
                     modelFields.forEach(field => {
-                        if (field.name === 'ID' || field.name === 'Genotype' || field.name === 'Cage') {
-                            cell = row.insertCell();
-                            cell.textContent = animal[field.name] || '';
-                        }
+                        cell = row.insertCell();
+                        cell.textContent = animal[field.name] || '';
                     });
 
                     cell = row.insertCell();
@@ -560,7 +558,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Apply to Selected Button Logic
                 const applyToSelectedBtn = modalEl.querySelector('#applyToSelectedBtn');
                 if (applyToSelectedBtn) {
-                    applyToSelectedBtn.addEventListener('click', function() {
+                    applyToSelectedBtn.addEventListener('click', function () {
                         const globalReason = modalEl.querySelector('#global_euthanasia_reason').value;
                         const globalSeverity = modalEl.querySelector('#global_severity').value;
 
@@ -591,7 +589,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 // Ensure modal is properly disposed when hidden
-                modalEl.addEventListener('hidden.bs.modal', function() {
+                modalEl.addEventListener('hidden.bs.modal', function () {
                     // Reset form and clear dynamic content
                     const form = modalEl.querySelector('#declareDeadForm');
                     if (form) form.reset();

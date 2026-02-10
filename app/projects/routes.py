@@ -441,11 +441,13 @@ def create_project():
 @projects_bp.route('/<string:project_slug>', methods=['GET', 'POST'])
 @login_required
 def view_edit_project(project_slug):
+    from sqlalchemy.orm import selectinload
+    
     project = Project.query.filter_by(slug=project_slug).options(
-        joinedload(Project.groups).joinedload(ExperimentalGroup.animals)
+       selectinload(Project.groups).selectinload(ExperimentalGroup.animals)
     ).first_or_404()
     
-    if not check_project_permission(project, 'read', allow_abort=True): 
+    if not check_project_permission(project, 'read', allow_abort=True):
         abort(403)
 
     project_perms = perm_service.get_effective_project_permissions(current_user, project)

@@ -289,7 +289,7 @@ def create_app(config_class=None):
         if app.config.get('FORCE_HTTPS', False) and not app.testing:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
 
-        response.headers['Permissions-Policy'] = "camera=(), microphone=(), geolocation=(), usb=(), interest-cohort=()"
+        response.headers['Permissions-Policy'] = "camera=(), microphone=(), geolocation=(), usb=()"
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
 
         return response

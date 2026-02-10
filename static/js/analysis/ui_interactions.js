@@ -80,7 +80,9 @@ const UI = {
         container.innerHTML = '';
         const currentSelected = CONFIG.formData.grouping_params || [];
 
-        CONFIG.categoricalColumns.forEach((param, index) => {
+        const allGroupingParams = [...CONFIG.categoricalColumns, ...CONFIG.numericalColumns].sort();
+
+        allGroupingParams.forEach((param, index) => {
             const isSelected = currentSelected.includes(param);
 
             // Add to hidden select
@@ -146,23 +148,31 @@ const UI = {
         this.updateSplittingOptions(); // Populate splitting options
     },
 
-    // --- Splitting Parameter Logic ---
+    // --- Splitting & Random Effect Logic ---
     updateSplittingOptions: function () {
         const splittingSelect = document.getElementById('splitting_param');
+        const randomEffectSelect = document.getElementById('random_effect_param');
+
         if (!splittingSelect) return;
 
-        // Save current selection
-        const currentVal = CONFIG.formData.splitting_param;
+        const currentSplit = CONFIG.formData.splitting_param;
+        const currentRandom = CONFIG.formData.random_effect_param;
 
-        // Clear (keep first "No split" option)
+        // Reset
         splittingSelect.innerHTML = '<option value="">' + (splittingSelect.options[0]?.text || "Do not split analysis") + '</option>';
+        if (randomEffectSelect) {
+            randomEffectSelect.innerHTML = '<option value="">-- None --</option>';
+        }
 
-        // Populate with all categorical columns (or just selected grouping params? Usually any categorical)
-        // User asked "split by" dropdown is not populated. 
-        // Usually splitting is done by ANY categorical column.
         CONFIG.categoricalColumns.forEach(col => {
-            const isSel = col === currentVal;
-            splittingSelect.appendChild(new Option(col, col, isSel, isSel));
+            // Populate Splitting
+            splittingSelect.appendChild(new Option(col, col, col === currentSplit, col === currentSplit));
+
+            // Populate Random Effect (Blocking Factor)
+            // Typically categorical (Cage, Batch)
+            if (randomEffectSelect) {
+                randomEffectSelect.appendChild(new Option(col, col, col === currentRandom, col === currentRandom));
+            }
         });
     },
 
@@ -204,8 +214,8 @@ const UI = {
         // Combine numerical and categorical columns for unified selection
         // Numerical columns come first, then categorical
         const allSelectableParams = [
-            ...CONFIG.numericalColumns.map(col => ({name: col, type: 'numerical'})),
-            ...CONFIG.categoricalColumns.map(col => ({name: col, type: 'categorical'}))
+            ...CONFIG.numericalColumns.map(col => ({ name: col, type: 'numerical' })),
+            ...CONFIG.categoricalColumns.map(col => ({ name: col, type: 'categorical' }))
         ];
 
         allSelectableParams.forEach((paramObj, index) => {
@@ -328,14 +338,14 @@ const UI = {
                 methodContainer.style.display = excludeCheck.checked ? 'block' : 'none';
             });
         }
-        
+
         if (methodSelect && thresholdInput) {
-             methodSelect.addEventListener('change', () => {
-                 // Set reasonable defaults for threshold based on method
-                 if (methodSelect.value === 'iqr') thresholdInput.value = 1.5;
-                 else if (methodSelect.value === 'std') thresholdInput.value = 3.0;
-                 else if (methodSelect.value === 'grubbs') thresholdInput.value = 0.05; // alpha
-             });
+            methodSelect.addEventListener('change', () => {
+                // Set reasonable defaults for threshold based on method
+                if (methodSelect.value === 'iqr') thresholdInput.value = 1.5;
+                else if (methodSelect.value === 'std') thresholdInput.value = 3.0;
+                else if (methodSelect.value === 'grubbs') thresholdInput.value = 0.05; // alpha
+            });
         }
 
         // Populate Dropdowns (Covariate, Survival Cols)

@@ -14,15 +14,21 @@
     <div>
         <h1 class="mb-0">{{ _('Edit Data Table') }}</h1>
         <div class="text-muted small mt-1 d-flex align-items-center flex-wrap gap-3">
-             <span class="text-nowrap"><i class="fas fa-layer-group"></i> <strong>{{ _('Group') }}:</strong> <a href="{{ url_for('groups.edit_group', id=data_table.group.id) }}" class="text-decoration-none">{{ data_table.group.name }}</a></span>
-             <span class="text-nowrap"><i class="fas fa-file-alt"></i> <strong>{{ _('Protocol') }}:</strong> <a href="{{ url_for('core_models.edit_model', model_type='protocol', id=data_table.protocol.id) }}" class="text-decoration-none">{{ data_table.protocol.name }}</a>
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-info" data-bs-toggle="modal" data-bs-target="#protocolDetailsModal" title="{{ _('Details') }}">
+            <span class="text-nowrap"><i class="fas fa-layer-group"></i> <strong>{{ _('Group') }}:</strong> <a
+                    href="{{ url_for('groups.edit_group', id=data_table.group.id) }}" class="text-decoration-none">{{
+                    data_table.group.name }}</a></span>
+            <span class="text-nowrap"><i class="fas fa-file-alt"></i> <strong>{{ _('Protocol') }}:</strong> <a
+                    href="{{ url_for('core_models.edit_model', model_type='protocol', id=data_table.protocol.id) }}"
+                    class="text-decoration-none">{{ data_table.protocol.name }}</a>
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-info" data-bs-toggle="modal"
+                    data-bs-target="#protocolDetailsModal" title="{{ _('Details') }}">
                     <i class="fas fa-info-circle"></i>
                 </button>
-             </span>
-             <span class="text-nowrap"><i class="fas fa-clipboard-check"></i> <strong>{{ _('EA') }}:</strong>
+            </span>
+            <span class="text-nowrap"><i class="fas fa-clipboard-check"></i> <strong>{{ _('EA') }}:</strong>
                 {% if data_table.group.ethical_approval %}
-                <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=data_table.group.ethical_approval.id) }}" class="text-decoration-none">
+                <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=data_table.group.ethical_approval.id) }}"
+                    class="text-decoration-none">
                     {{ data_table.group.ethical_approval.reference_number }}
                 </a>
                 {% else %}
@@ -33,8 +39,8 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 justify-content-end">
-        <a href="{{ url_for('datatables.view_data_table', datatable_id=data_table.id) }}"
-            class="btn btn-sm btn-info" title="{{ _('View') }}"><i class="fa-solid fa-eye"></i> {{
+        <a href="{{ url_for('datatables.view_data_table', datatable_id=data_table.id) }}" class="btn btn-sm btn-info"
+            title="{{ _('View') }}"><i class="fa-solid fa-eye"></i> {{
             _('View') }}</a>
         <a href="{{ url_for('datatables.analyze_datatable', datatable_id=data_table.id) }}"
             class="btn btn-sm btn-success" title="{{ _('Analyze') }}"><i class="fa-solid fa-chart-bar"></i> {{
@@ -57,8 +63,8 @@
             </ul>
         </div>
         {% else %}
-        <a href="{{ url_for('datatables.download_data_table', id=data_table.id) }}"
-            class="btn btn-sm btn-secondary" title="{{ _('Download XLSX') }}"><i class="fas fa-file-download"></i>
+        <a href="{{ url_for('datatables.download_data_table', id=data_table.id) }}" class="btn btn-sm btn-secondary"
+            title="{{ _('Download XLSX') }}"><i class="fas fa-file-download"></i>
             {{ _('Download') }}</a>
         {% endif %}
 
@@ -100,32 +106,35 @@
     <form method="POST" id="metadata-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="update_metadata" value="true" />
-        
+
         <div class="metadata-grid">
             <!-- Date -->
             <div class="metadata-field">
-                 <label class="metadata-label">{{ _('Date') }}</label>
-                 <div class="input-group input-group-sm">
+                <label class="metadata-label">{{ _('Date') }}</label>
+                <div class="input-group input-group-sm">
                     <input type="date" name="date" class="form-control" value="{{ data_table.date }}">
-                    <span class="input-group-text"><a href="{{ url_for('calendar.view_calendar', date=data_table.date) }}" title="{{ _('View on Calendar') }}" class="text-decoration-none"><i class="fas fa-calendar-alt"></i></a></span>
+                    <span class="input-group-text"><a
+                            href="{{ url_for('calendar.view_calendar', date=data_table.date) }}"
+                            title="{{ _('View on Calendar') }}" class="text-decoration-none"><i
+                                class="fas fa-calendar-alt"></i></a></span>
                 </div>
             </div>
-            
+
             <!-- Assigned To -->
             <div class="metadata-field">
-                 <label class="metadata-label">{{ _('Assigned To') }}</label>
-                 {{ assignee_and_housing_form.assigned_to_id(class="form-select form-select-sm") }}
+                <label class="metadata-label">{{ _('Assigned To') }}</label>
+                {{ assignee_and_housing_form.assigned_to_id(class="form-select form-select-sm") }}
             </div>
-            
+
             <!-- Housing -->
             <div class="metadata-field">
                 <label class="metadata-label">{{ _('Housing') }}</label>
                 {{ assignee_and_housing_form.housing_condition_set_id(class="form-select form-select-sm") }}
             </div>
-            
+
             <!-- Update Button -->
-             <div class="metadata-field">
-                 <label class="metadata-label metadata-label-spacer" aria-hidden="true">{{ _('Update Info') }}</label>
+            <div class="metadata-field">
+                <label class="metadata-label metadata-label-spacer" aria-hidden="true">{{ _('Update Info') }}</label>
                 <button type="submit" class="btn btn-primary btn-sm" title="{{_('Update Metadata')}}">
                     <i class="fas fa-save me-1"></i> {{ _('Update Info') }}
                 </button>
@@ -142,25 +151,26 @@
         gap: 0.5rem;
         align-items: end;
     }
-    
+
     @media (max-width: 991px) {
         .metadata-grid {
             grid-template-columns: repeat(2, 1fr);
         }
     }
-    
+
     @media (max-width: 767px) {
         .metadata-grid {
             grid-template-columns: 1fr;
         }
     }
-    
+
     .metadata-field {
         display: flex;
         flex-direction: column;
-        min-height: 52px; /* Compact: label (24px) + gap (4px) + input (31px) */
+        min-height: 52px;
+        /* Compact: label (24px) + gap (4px) + input (31px) */
     }
-    
+
     .metadata-label {
         font-size: 0.75rem;
         text-transform: uppercase;
@@ -171,11 +181,11 @@
         line-height: 1.5rem;
         display: block;
     }
-    
+
     .metadata-label-spacer {
         visibility: hidden;
     }
-    
+
     /* Native select sizing before Select2 initialization */
     #metadata-form select.form-select-sm {
         height: 31px;
@@ -184,14 +194,14 @@
         line-height: 1.5;
         box-sizing: border-box;
     }
-    
+
     /* Select2 container - match native select exactly */
     #metadata-form .select2-container {
         width: 100% !important;
         height: 31px !important;
         max-height: 31px !important;
     }
-    
+
     #metadata-form .select2-container .select2-selection--single {
         height: 31px !important;
         max-height: 31px !important;
@@ -204,32 +214,33 @@
         box-sizing: border-box;
         overflow: hidden;
     }
-    
+
     #metadata-form .select2-container .select2-selection--single .select2-selection__rendered {
         padding-left: 0.5rem;
         padding-right: 0.5rem;
-        line-height: 29px; /* 31px - 2px border */
+        line-height: 29px;
+        /* 31px - 2px border */
         font-size: 0.875rem;
         color: #212529;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    
+
     #metadata-form .select2-container .select2-selection--single .select2-selection__arrow {
         height: 29px;
         right: 0.5rem;
     }
-    
+
     /* Input group sizing */
-    #metadata-form .input-group-sm > .form-control,
-    #metadata-form .input-group-sm > .input-group-text {
+    #metadata-form .input-group-sm>.form-control,
+    #metadata-form .input-group-sm>.input-group-text {
         height: 31px;
         padding: 0.25rem 0.5rem;
         font-size: 0.875rem;
         line-height: 1.5;
     }
-    
+
     /* Button sizing */
     #metadata-form .btn-sm {
         height: 31px;
@@ -243,66 +254,78 @@
 <div class="card bg-body-tertiary border-0 mb-3">
     <div class="card-body py-2">
         <div class="row g-2 align-items-center">
-             <!-- Worksheets & Raw Data (Edit Form) -->
-             <div class="col-lg-6 border-end pe-3">
+            <!-- Worksheets & Raw Data (Edit Form) -->
+            <div class="col-lg-6 border-end pe-3">
                 <form method="POST" enctype="multipart/form-data" novalidate id="edit-datatable-form">
                     {{ edit_form.hidden_tag() }}
                     <div class="row g-2 align-items-center">
                         <div class="col">
-                             <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-body border-end-0"><i class="fa-solid fa-link text-muted"></i></span>
-                                {% if data_table.raw_data_url and (data_table.raw_data_url.startswith('http://') or data_table.raw_data_url.startswith('https://')) %}
-                                    <a href="{{ data_table.raw_data_url }}" target="_blank" class="form-control form-control-sm border-start-0 text-truncate" title="{{ data_table.raw_data_url }}">{{ data_table.raw_data_url }}</a>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-body border-end-0"><i
+                                        class="fa-solid fa-link text-muted"></i></span>
+                                {% if data_table.raw_data_url and (data_table.raw_data_url.startswith('http://') or
+                                data_table.raw_data_url.startswith('https://')) %}
+                                <a href="{{ data_table.raw_data_url }}" target="_blank"
+                                    class="form-control form-control-sm border-start-0 text-truncate"
+                                    title="{{ data_table.raw_data_url }}">{{ data_table.raw_data_url }}</a>
                                 {% else %}
-                                    {{ edit_form.raw_data_url(class="form-control form-control-sm border-start-0", placeholder=_('Raw Data URL')) }}
+                                {{ edit_form.raw_data_url(class="form-control form-control-sm border-start-0",
+                                placeholder=_('Raw Data URL')) }}
                                 {% endif %}
                             </div>
                         </div>
                         <div class="col-auto">
-                             <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#filesModal">
-                                    <i class="fa-solid fa-paperclip"></i> <span class="badge text-bg-secondary ms-1">{{ data_table.files.count() }}</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal"
+                                    data-bs-target="#filesModal">
+                                    <i class="fa-solid fa-paperclip"></i> <span class="badge text-bg-secondary ms-1">{{
+                                        data_table.files.count() }}</span>
                                 </button>
                                 {% if not is_read_only %}
-                                <button type="button" class="btn btn-outline-success" id="add-file-btn" title="{{_('Upload New File')}}">
+                                <button type="button" class="btn btn-outline-success" id="add-file-btn"
+                                    title="{{_('Upload New File')}}">
                                     <i class="fa-solid fa-plus"></i>
                                 </button>
                                 {% endif %}
                             </div>
                         </div>
-                         <div style="display: none;">
-                            {{ edit_form.files(class="form-control form-control-sm", multiple=True, id="worksheet-files-input") }}
+                        <div style="display: none;">
+                            {{ edit_form.files(class="form-control form-control-sm", multiple=True,
+                            id="worksheet-files-input") }}
                         </div>
                     </div>
                 </form>
-             </div>
-             
-             <!-- Excel Import (Upload Form) -->
-             <div class="col-lg-6 ps-3">
-                 {% if is_read_only %}
-                    <span class="text-muted small w-100 text-center d-block">{{ _('Read-only: No import') }}</span>
-                 {% else %}
-                 <div class="d-flex align-items-center justify-content-end gap-2">
-                     <form method="POST" enctype="multipart/form-data" novalidate class="d-flex align-items-center">
+            </div>
+
+            <!-- Excel Import (Upload Form) -->
+            <div class="col-lg-6 ps-3">
+                {% if is_read_only %}
+                <span class="text-muted small w-100 text-center d-block">{{ _('Read-only: No import') }}</span>
+                {% else %}
+                <div class="d-flex align-items-center justify-content-end gap-2">
+                    <form method="POST" enctype="multipart/form-data" novalidate class="d-flex align-items-center">
                         {{ upload_form.hidden_tag() }}
                         <div class="input-group input-group-sm">
-                             {{ upload_form.file(class="form-control form-control-sm") }}
-                             <button type="submit" name="submit_upload" value="True" class="btn btn-primary">
+                            {{ upload_form.file(class="form-control form-control-sm") }}
+                            <button type="submit" name="submit_upload" value="True" class="btn btn-primary">
                                 <i class="fas fa-file-import"></i> {{ _('Import Data') }}
-                             </button>
+                            </button>
                         </div>
-                         <span class="ms-2 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _('Upload an Excel (.xlsx, .xls) or CSV file to update existing data. The file must contain an ID column to match animals. Only columns corresponding to protocol analytes will be updated.') }}">
+                        <span class="ms-2 text-muted" data-bs-toggle="tooltip" data-bs-placement="top"
+                            title="{{ _('Upload an Excel (.xlsx, .xls) or CSV file to update existing data. The file must contain an ID column to match animals. Only columns corresponding to protocol analytes will be updated.') }}">
                             <i class="fas fa-info-circle"></i>
                         </span>
-                     </form>
-                     {% if data_table.protocol.enable_import_wizard %}
-                     <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#importWizardModal" title="{{ _('Import Wizard - Advanced formatting and assignment') }}">
-                         <i class="fas fa-magic"></i> {{ _('Wizard') }}
-                     </button>
-                     {% endif %}
-                 </div>
-                 {% endif %}
-             </div>
+                    </form>
+                    {% if data_table.protocol.enable_import_wizard %}
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal"
+                        data-bs-target="#importWizardModal"
+                        title="{{ _('Import Wizard - Advanced formatting and assignment') }}">
+                        <i class="fas fa-magic"></i> {{ _('Wizard') }}
+                    </button>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
@@ -324,14 +347,17 @@
             <div class="card mb-1">
                 <div class="card-header py-1 px-3" id="headingMol{{ molecule.id }}">
                     <h2 class="mb-0">
-                        <button class="btn btn-link btn-block text-start text-decoration-none p-0 d-flex justify-content-between align-items-center w-100" type="button" data-bs-toggle="collapse"
-                            data-bs-target="#collapseMol{{ molecule.id }}" aria-expanded="true"
-                            aria-controls="collapseMol{{ molecule.id }}">
+                        <button
+                            class="btn btn-link btn-block text-start text-decoration-none p-0 d-flex justify-content-between align-items-center w-100"
+                            type="button" data-bs-toggle="collapse" data-bs-target="#collapseMol{{ molecule.id }}"
+                            aria-expanded="true" aria-controls="collapseMol{{ molecule.id }}">
                             <span class="d-flex align-items-center">
                                 <strong class="text-body">{{ molecule.name }}</strong>
-                                <span class="badge bg-secondary ms-2 small" style="font-size: 0.7rem;">{{ molecule.regulation_category.value }}</span>
+                                <span class="badge bg-secondary ms-2 small" style="font-size: 0.7rem;">{{
+                                    molecule.regulation_category.value }}</span>
                             </span>
-                            <span class="text-muted small">{{ _('Record Usage') }} <i class="fas fa-chevron-down ms-1"></i></span>
+                            <span class="text-muted small">{{ _('Record Usage') }} <i
+                                    class="fas fa-chevron-down ms-1"></i></span>
                         </button>
                     </h2>
                 </div>
@@ -501,13 +527,29 @@
                                 {% set is_calculated = col_name in calculated_fields %}
 
                                 <div class="position-relative h-100">
-                                    <input type="{{ 'date' if col_name in date_fields else 'text' }}"
+                                    {# Find the analyte object for this column to get metadata #}
+                                    {% set analyte_obj = protocol_analytes_map.get(col_name) %}
+
+                                    <input type="{{ 'date' if (analyte_obj and analyte_obj.data_type.value == 'date')
+                                             else 'number' if (analyte_obj and analyte_obj.data_type.value in ['int', 'float'])
+                                             else 'text' }}" {% if analyte_obj and analyte_obj.data_type.value=='float'
+                                        %}step="any" {% endif %} {% if analyte_obj and
+                                        analyte_obj.data_type.value=='category'
+                                        %}list="datalist-{{ row_item.animal_db_id }}-{{ col_index }}" {% endif %}
                                         class="form-control form-control-sm border-0 h-100 rounded-0 cell-input {% if is_readonly_structural or is_calculated %}bg-body-tertiary text-muted{% endif %}"
-                                        name="cell_{{ row_index }}_{{ col_index }}"
-                                        value="{{ current_row_data.get(col_name, '') }}" style="min-width: 80px;" {% if
-                                        is_readonly_structural or is_read_only or is_calculated %}readonly tabindex="-1"
-                                        {% endif %} {% if is_calculated %}title="{{ _('Calculated Field') }}" {% endif
-                                        %}>
+                                        name="cell_{{ row_item.animal_db_id }}_{{ col_index }}"
+                                        value="{{ current_row_data.get(col_name, '') }}" {{ 'readonly' if
+                                        is_readonly_structural or is_read_only or is_calculated }}>
+
+                                    {# Add Datalist for Categories #}
+                                    {% if analyte_obj and analyte_obj.data_type.value == 'category' and
+                                    analyte_obj.allowed_values %}
+                                    <datalist id="datalist-{{ row_item.animal_db_id }}-{{ col_index }}">
+                                        {% for val in analyte_obj.allowed_values.split(';') %}
+                                        <option value="{{ val.strip() }}">
+                                            {% endfor %}
+                                    </datalist>
+                                    {% endif %}
                                     {% if is_calculated %}
                                     <span class="position-absolute top-0 end-0 p-1 text-muted"
                                         style="font-size: 0.6rem; pointer-events: none;">
@@ -585,15 +627,23 @@
                 </div>
             </div>
         </div>
-        
+
         {% if data_table.protocol.enable_import_wizard %}
+        {# Import Wizard Config Container #}
+        <div id="import-wizard-config" data-data-table-id="{{ data_table.id }}"
+            data-protocol-id="{{ data_table.protocol.id }}" data-group-id="{{ data_table.group.id }}"
+            style="display: none;"></div>
+
         <!-- Import Wizard Modal -->
-        <div class="modal fade" id="importWizardModal" tabindex="-1" aria-labelledby="importWizardModalLabel" aria-hidden="true">
+        <div class="modal fade" id="importWizardModal" tabindex="-1" aria-labelledby="importWizardModalLabel"
+            x-data="importWizard({})" x-init="initWizardFromConfig()" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header bg-primary-subtle text-primary-emphasis">
-                        <h5 class="modal-title" id="importWizardModalLabel"><i class="fa-solid fa-file-import me-2"></i>{{ _('Import Raw Data Assistant') }}</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <h5 class="modal-title" id="importWizardModalLabel"><i
+                                class="fa-solid fa-file-import me-2"></i>{{ _('Import Raw Data Assistant') }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                            aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
                         <!-- Stepper -->
@@ -618,7 +668,8 @@
                             </div>
 
                             <div class="mb-3">
-                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#advanced-parse-options">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#advanced-parse-options">
                                     <i class="fas fa-cog"></i> {{ _('Advanced Parsing Options') }}
                                 </button>
                                 <div class="collapse mt-2" id="advanced-parse-options">
@@ -626,22 +677,31 @@
                                         <div class="row">
                                             <div class="col-md-6 mb-2">
                                                 <label class="form-label small fw-bold">{{ _('Rows to skip') }}</label>
-                                                <input type="number" id="import-skip-rows" class="form-control form-control-sm" value="0" min="0">
+                                                <input type="number" id="import-skip-rows"
+                                                    class="form-control form-control-sm" value="0" min="0">
                                             </div>
                                             <div class="col-md-6 mb-2">
-                                                <label class="form-label small fw-bold">{{ _('Data anchor text') }}</label>
-                                                <input type="text" id="import-anchor-text" class="form-control form-control-sm" placeholder="{{ _('e.g. [DATA]') }}">
-                                                <small class="text-muted d-block" style="font-size: 0.7rem;">{{ _('Skips all lines until this text is found.') }}</small>
+                                                <label class="form-label small fw-bold">{{ _('Data anchor text')
+                                                    }}</label>
+                                                <input type="text" id="import-anchor-text"
+                                                    class="form-control form-control-sm"
+                                                    placeholder="{{ _('e.g. [DATA]') }}">
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">{{ _('Skips
+                                                    all lines until this text is found.') }}</small>
                                             </div>
                                             <div class="col-md-6 mb-2">
                                                 <label class="form-label small fw-bold">{{ _('Anchor Offset') }}</label>
-                                                <input type="number" id="import-anchor-offset" class="form-control form-control-sm" value="0">
-                                                <small class="text-muted d-block" style="font-size: 0.7rem;">{{ _('X rows to skip AFTER the anchor.') }}</small>
+                                                <input type="number" id="import-anchor-offset"
+                                                    class="form-control form-control-sm" value="0">
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">{{ _('X
+                                                    rows to skip AFTER the anchor.') }}</small>
                                             </div>
                                             <div class="col-md-6 mb-2">
                                                 <label class="form-label small fw-bold">{{ _('Row Interval') }}</label>
-                                                <input type="number" id="import-row-interval" class="form-control form-control-sm" value="1" min="1">
-                                                <small class="text-muted d-block" style="font-size: 0.7rem;">{{ _('Import every Xth row (e.g. 11 for skip 10).') }}</small>
+                                                <input type="number" id="import-row-interval"
+                                                    class="form-control form-control-sm" value="1" min="1">
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">{{
+                                                    _('Import every Xth row (e.g. 11 for skip 10).') }}</small>
                                             </div>
                                         </div>
                                     </div>
@@ -654,14 +714,17 @@
                                     <option value="">-- No Pipeline --</option>
                                     <!-- Options populated by JS -->
                                 </select>
-                                <small class="text-muted">{{ _('Selecting a pipeline will bypass manual mapping and use a custom script to parse the file.') }}</small>
+                                <small class="text-muted">{{ _('Selecting a pipeline will bypass manual mapping and use
+                                    a custom script to parse the file.') }}</small>
                             </div>
 
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <label class="form-label fw-bold">{{ _('Select Mapping Template (Optional)') }}</label>
+                                    <label class="form-label fw-bold">{{ _('Select Mapping Template (Optional)')
+                                        }}</label>
                                     <div>
-                                        <button class="btn btn-xs btn-outline-primary" type="button" id="import-template-btn">
+                                        <button class="btn btn-xs btn-outline-primary" type="button"
+                                            id="import-template-btn">
                                             <i class="fas fa-file-import"></i> {{ _('Import from JSON') }}
                                         </button>
                                         <input type="file" id="template-file-input" class="d-none" accept=".json">
@@ -679,10 +742,12 @@
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h5>{{ _('Step 2: Map Columns & Formulas') }}</h5>
                                 <div class="d-flex gap-2">
-                                    <button class="btn btn-xs btn-outline-secondary" type="button" id="export-template-btn" title="{{ _('Export as portable JSON') }}">
+                                    <button class="btn btn-xs btn-outline-secondary" type="button"
+                                        id="export-template-btn" title="{{ _('Export as portable JSON') }}">
                                         <i class="fas fa-file-export"></i> {{ _('Export JSON') }}
                                     </button>
-                                    <button class="btn btn-xs btn-outline-info" type="button" data-bs-toggle="collapse" data-bs-target="#import-help-guide">
+                                    <button class="btn btn-xs btn-outline-info" type="button" data-bs-toggle="collapse"
+                                        data-bs-target="#import-help-guide">
                                         <i class="fas fa-question-circle"></i> {{ _('Help Guide') }}
                                     </button>
                                 </div>
@@ -690,19 +755,29 @@
 
                             <div class="collapse mb-3" id="import-help-guide">
                                 <div class="card card-body bg-body-tertiary small shadow-sm border-0">
-                                    <h6><i class="fas fa-info-circle text-primary"></i> {{ _('Advanced Logic Guide') }}</h6>
-                                    <p class="mb-2">{{ _('You can enter Python formulas in the <code>f(x)=</code> fields. Use <code>x</code> as the placeholder for the raw value.') }}</p>
+                                    <h6><i class="fas fa-info-circle text-primary"></i> {{ _('Advanced Logic Guide') }}
+                                    </h6>
+                                    <p class="mb-2">{{ _('You can enter Python formulas in the <code>f(x)=</code>
+                                        fields. Use <code>x</code> as the placeholder for the raw value.') }}</p>
                                     <div class="row">
                                         <div class="col-md-6">
                                             <ul class="mb-0">
-                                                <li><strong>{{ _('Math') }}:</strong> <code>x * 10</code>, <code>abs(x)</code>, <code>round(x, 2)</code></li>
-                                                <li><strong>{{ _('Limits') }}:</strong> <code>max(0, x)</code>, <code>min(100, x)</code></li>
+                                                <li><strong>{{ _('Math') }}:</strong> <code>x * 10</code>,
+                                                    <code>abs(x)</code>, <code>round(x, 2)</code>
+                                                </li>
+                                                <li><strong>{{ _('Limits') }}:</strong> <code>max(0, x)</code>,
+                                                    <code>min(100, x)</code>
+                                                </li>
                                             </ul>
                                         </div>
                                         <div class="col-md-6">
                                             <ul class="mb-0">
-                                                <li><strong>{{ _('Advanced') }}:</strong> <code>math.log10(x)</code>, <code>math.sqrt(x)</code></li>
-                                                <li><strong>{{ _('Constants') }}:</strong> <code>math.pi</code>, <code>math.e</code></li>
+                                                <li><strong>{{ _('Advanced') }}:</strong> <code>math.log10(x)</code>,
+                                                    <code>math.sqrt(x)</code>
+                                                </li>
+                                                <li><strong>{{ _('Constants') }}:</strong> <code>math.pi</code>,
+                                                    <code>math.e</code>
+                                                </li>
                                             </ul>
                                         </div>
                                     </div>
@@ -731,7 +806,8 @@
                                     </label>
                                 </div>
                                 <div id="template-name-container" class="mt-2 d-none">
-                                    <input type="text" id="new-template-name" class="form-control form-control-sm" placeholder="{{ _('Template Name') }}">
+                                    <input type="text" id="new-template-name" class="form-control form-control-sm"
+                                        placeholder="{{ _('Template Name') }}">
                                 </div>
                             </div>
                         </div>
@@ -751,15 +827,18 @@
                             <h5>{{ _('Step 4: Final Confirmation') }}</h5>
                             <div class="alert alert-warning">
                                 <i class="fas fa-exclamation-triangle me-2"></i>
-                                {{ _('Important: This will overwrite any existing data for the matched animals in this datatable. This action will be logged in the audit trail.') }}
+                                {{ _('Important: This will overwrite any existing data for the matched animals in this
+                                datatable. This action will be logged in the audit trail.') }}
                             </div>
                             <p id="import-summary-text"></p>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" id="import-prev-btn" disabled>{{ _('Previous') }}</button>
+                        <button type="button" class="btn btn-secondary" id="import-prev-btn" disabled>{{ _('Previous')
+                            }}</button>
                         <button type="button" class="btn btn-primary" id="import-next-btn">{{ _('Next') }}</button>
-                        <button type="button" class="btn btn-success d-none" id="import-finalize-btn">{{ _('Import Now') }}</button>
+                        <button type="button" class="btn btn-success d-none" id="import-finalize-btn">{{ _('Import Now')
+                            }}</button>
                     </div>
                 </div>
             </div>
@@ -769,25 +848,31 @@
             /* Force Select2 to match form-control-sm height */
             .select2-container .select2-selection--single {
                 height: 31px !important;
-                padding: 2px 8px; /* Standard sm padding */
+                padding: 2px 8px;
+                /* Standard sm padding */
                 display: flex;
                 align-items: center;
-                border: 1px solid #ced4da; /* Ensure border matches */
+                border: 1px solid #ced4da;
+                /* Ensure border matches */
             }
+
             .select2-container--bootstrap-5 .select2-selection {
                 font-size: 0.875rem;
             }
+
             /* Match input-group height exactly */
-            .input-group-sm > .form-control,
-            .input-group-sm > .input-group-text,
-            .input-group-sm > .btn {
-                 height: 31px !important;
+            .input-group-sm>.form-control,
+            .input-group-sm>.input-group-text,
+            .input-group-sm>.btn {
+                height: 31px !important;
             }
+
             .step-indicator {
                 position: relative;
                 padding-bottom: 10px;
                 border-bottom: 2px solid #e9ecef;
             }
+
             .step {
                 font-weight: bold;
                 color: #6c757d;
@@ -795,9 +880,11 @@
                 text-align: center;
                 position: relative;
             }
+
             .step.active {
                 color: #0d6efd;
             }
+
             .step.active::after {
                 content: '';
                 position: absolute;
@@ -807,6 +894,7 @@
                 height: 4px;
                 background-color: #0d6efd;
             }
+
             .btn-xs {
                 padding: 1px 5px;
                 font-size: 0.75rem;

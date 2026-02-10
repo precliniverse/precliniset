@@ -1,16 +1,53 @@
 {# templates/datatables/analysis/_form_stage2.html #}
-<div id="propose-workflow-stage" {% if analysis_stage !='propose_workflow' %}style="display: none;" {% endif %}>
+{# Alpine.js Refactored Version - Uses parent analysisManager component #}
+<div id="propose-workflow-stage" x-show="currentStage === 'propose_workflow'" x-transition>
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-primary-subtle text-primary-emphasis">
             <h5 class="mb-0">{{ _('Step 2: Review Data & Select Tests') }}</h5>
-            <input type="hidden" name="analysis_stage" id="analysis_stage_2" value="execute_analysis">
         </div>
         <div class="card-body">
 
-            {# --- Overall Suggestions & Feedback --- #}
+            {# --- Selected Parameters (from Step 1) --- #}
+            <div class="mb-4">
+                <h6 class="fw-bold"><i class="fas fa-check-circle me-2"></i>{{ _('Selected Parameters') }}</h6>
+                <div class="alert alert-info py-2 mb-2">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted fw-bold">{{ _('Numerical Parameters:') }}</small>
+                            <div id="selected-numerical-display">
+                                <template x-if="selectedNumericals.length === 0">
+                                    <span class="text-warning">{{ _('None selected') }}</span>
+                                </template>
+                                <template x-for="param in selectedNumericals" :key="param">
+                                    <span class="badge bg-primary me-1 mb-1" x-text="param"></span>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted fw-bold">{{ _('Grouping Parameters:') }}</small>
+                            <div id="selected-grouping-display">
+                                <template x-if="selectedGroupings.length === 0">
+                                    <span class="text-warning">{{ _('None selected') }}</span>
+                                </template>
+                                <template x-for="param in selectedGroupings" :key="param">
+                                    <span class="badge bg-secondary me-1 mb-1" x-text="param"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" @click="goToStep1()">
+                    <i class="fas fa-edit me-1"></i>{{ _('Modify Selection') }}
+                </button>
+            </div>
+
+            <hr>
+
+            {# --- Analysis Results --- #}
             {% if analysis_results.overall_suggestion_notes %}
             <div class="alert alert-primary-subtle border-primary-subtle mb-4 py-2 small">
-                <h6 class="fw-bold mb-1 text-primary-emphasis small"><i class="fas fa-comment-alt me-2"></i>{{ _('Scientific Rationale') }}</h6>
+                <h6 class="fw-bold mb-1 text-primary-emphasis small"><i class="fas fa-comment-alt me-2"></i>{{
+                    _('Scientific Rationale') }}</h6>
                 <ul class="mb-0 ps-3">
                     {% for note in analysis_results.overall_suggestion_notes %}
                     <li>{{ note }}</li>
@@ -48,13 +85,16 @@
                                         "%.3f"|format(checks.shapiro_p) if checks.shapiro_p else 'N/A' }})</li>
                                     <li><strong>Variance:</strong> {{ checks.homogeneity }} (p={{
                                         "%.3f"|format(checks.levene_p) if checks.levene_p else 'N/A' }})</li>
-                                    {% if checks.error %}<li class="text-danger fw-bold">{{ checks.error }}</li>{% endif %}
-                                    {% if checks.warning %}<li class="text-warning fw-bold">{{ checks.warning }}</li>{% endif %}
+                                    {% if checks.error %}<li class="text-danger fw-bold">{{ checks.error }}</li>{% endif
+                                    %}
+                                    {% if checks.warning %}<li class="text-warning fw-bold">{{ checks.warning }}</li>{%
+                                    endif %}
                                 </ul>
-                                
+
                                 {% if checks.overall_suggestion_notes %}
                                 <div class="mt-2 bg-body p-2 border rounded border-primary-subtle">
-                                    <div class="x-small fw-bold text-primary-emphasis mb-1"><i class="fas fa-info-circle me-1"></i>{{ _('Rationale / Notes:') }}</div>
+                                    <div class="x-small fw-bold text-primary-emphasis mb-1"><i
+                                            class="fas fa-info-circle me-1"></i>{{ _('Rationale / Notes:') }}</div>
                                     <ul class="mb-0 ps-3 x-small">
                                         {% for note in checks.overall_suggestion_notes %}
                                         <li>{{ note|safe }}</li>
@@ -155,7 +195,6 @@
                                         <i class="fas fa-question"></i> N/A
                                     </span>
                                     {% endif %}
-                                    {# Show p-values if available #}
                                     {% if checks.get('normality_results') %}
                                     <div class="text-muted mt-1" style="font-size: 0.75rem;">
                                         {% for group, result in checks.normality_results.items() %}
@@ -180,7 +219,8 @@
                                     </div>
                                     {% endif %}
                                     {% elif checks.get('variance_results') and checks.variance_results.get('p_value') %}
-                                    <span class="badge bg-warning-subtle text-warning-emphasis" title="Levene's test failed (p < 0.05)">
+                                    <span class="badge bg-warning-subtle text-warning-emphasis"
+                                        title="Levene's test failed (p < 0.05)">
                                         <i class="fas fa-exclamation-triangle"></i> Unequal
                                     </span>
                                     <div class="text-muted" style="font-size: 0.75rem;">
@@ -196,12 +236,10 @@
                                 {# Graph Selection #}
                                 <td>
                                     <select name="chosen_graph_{{ param }}" class="form-select form-select-sm">
-                                        {# Logic for default graph: Violin if not normal, else Box #}
                                         {% set default_graph = 'Box Plot' %}
                                         {% if checks.get('any_group_not_normal') %}
                                         {% set default_graph = 'Violin Plot' %}
                                         {% endif %}
-
                                         <option value="Box Plot" {% if default_graph=='Box Plot' %}selected{% endif %}>
                                             {{ _('Box Plot') }}</option>
                                         <option value="Violin Plot" {% if default_graph=='Violin Plot' %}selected{%
@@ -213,7 +251,6 @@
 
                                 {# Test Selection #}
                                 <td>
-                                    {# Find the suggested test #}
                                     {% set possible_tests = checks.get('possible_tests', []) %}
                                     {% set suggestion = None %}
                                     {% for test in possible_tests %}
@@ -221,7 +258,6 @@
                                     {% set suggestion = test %}
                                     {% endif %}
                                     {% endfor %}
-
                                     <select name="chosen_test_{{ param }}" class="form-select form-select-sm">
                                         {% for test in possible_tests %}
                                         {% if test.get('suggested', False) %}
@@ -247,24 +283,11 @@
             </div>
 
             <div class="d-flex justify-content-between">
-                <button type="button" class="btn btn-outline-secondary" id="btn-back-to-step1">{{ _('Back') }}</button>
-                <button type="button" class="btn btn-success" id="btn-execute-analysis">
+                <button type="button" class="btn btn-outline-secondary" @click="goToStep1()">{{ _('Back') }}</button>
+                <button type="button" class="btn btn-success" @click="submitAnalysis()">
                     <i class="fas fa-play me-1"></i> {{ _('Run Analysis') }}
                 </button>
             </div>
         </div>
     </div>
 </div>
-
-<script nonce="{{ csp_nonce }}">
-    document.getElementById('btn-back-to-step1')?.addEventListener('click', function () {
-        document.getElementById('propose-workflow-stage').style.display = 'none';
-        document.getElementById('initial-selection-stage').style.display = 'block';
-    });
-
-    document.getElementById('btn-execute-analysis')?.addEventListener('click', function () {
-        const form = document.getElementById('analysis-form');
-        document.getElementById('analysis_stage').value = 'execute_analysis';
-        form.submit();
-    });
-</script>

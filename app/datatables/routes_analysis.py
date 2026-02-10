@@ -34,8 +34,8 @@ def analyze_datatable(datatable_id):
          # FAST PATH
          numerical_cols, categorical_cols, column_types = analysis_service.get_datatable_metadata(data_table)
          df = None # We don't need the DF for the form
-         subject_id_col = 'ID' # Default
-         subject_id_col_present = True # Assumed for form
+         subject_id_col = 'uid' # Use 'uid' for internal work (V2 Model)
+         subject_id_col_present = True # uid is always present in Animal model
     else:
          # SLOW PATH (Analysis execution or Result display)
          df, numerical_cols, categorical_cols = analysis_service.prepare_dataframe(data_table)
@@ -51,7 +51,7 @@ def analyze_datatable(datatable_id):
             flash(_("No data rows available in this DataTable to analyze."), "warning")
             return redirect(url_for('datatables.edit_data_table', id=datatable_id))
             
-         subject_id_col = 'ID'
+         subject_id_col = 'uid'
          subject_id_col_present = subject_id_col in df.columns
 
     # 2. Handle State & Session
@@ -115,11 +115,30 @@ def analyze_datatable(datatable_id):
             )
              analysis_stage = 'show_results'
 
+
+    # Sort columns to put grouping factors first
+    priority_factors = ['treatment group', 'blinded group', 'genotype', 'sex', 'status', 'age_days']
+    
+    def sort_cols(cols):
+        # Case-insensitive matching
+        prioritized = []
+        others = []
+        
+        for p in priority_factors:
+           for c in cols:
+               if c.lower() == p and c not in prioritized:
+                   prioritized.append(c)
+
+        for c in cols:
+           if c not in prioritized:
+               others.append(c)
+        return prioritized + others
+
     return render_template(
         'datatables/analysis.html',
         data_table=data_table,
-        categorical_columns=categorical_cols,
-        numerical_columns=numerical_cols,
+        categorical_columns=sort_cols(list(categorical_cols)) if categorical_cols else [],
+        numerical_columns=sort_cols(list(numerical_cols)) if numerical_cols else [],
         column_types=column_types,
         analysis_stage=analysis_stage,
         form_data=form_data,
@@ -242,8 +261,8 @@ def analyze_selected_datatables():
     return render_template(
         'datatables/analysis.html',
         analysis_page_title=page_title,
-        categorical_columns=sorted(categorical_cols),
-        numerical_columns=sorted(numerical_cols),
+        categorical_columns=categorical_cols,
+        numerical_columns=numerical_cols,
         column_types=column_types,
         analysis_stage=analysis_stage,
         form_data=form_data,
@@ -404,6 +423,7 @@ def _extract_form_data(form, stage):
         'reference_range_id': form.get('reference_range_id') or form.get('confirmed_reference_range_id'),
         'control_group_param': form.get('control_group_param') or form.get('confirmed_control_group_param'),
         'covariate_param': form.get('covariate_param') or form.get('confirmed_covariate_param'),
+        'random_effect_param': form.get('random_effect_param') or form.get('confirmed_random_effect_param'),
         'survival_time_col': form.get('survival_time_col') or form.get('confirmed_survival_time_col'),
         'survival_event_col': form.get('survival_event_col') or form.get('confirmed_survival_event_col'),
         'enable_survival': (form.get('enable_survival') == 'true') or (form.get('confirmed_enable_survival') == 'true'),
@@ -430,6 +450,7 @@ def _extract_form_data(form, stage):
         'confirmed_reference_range_id': data['reference_range_id'],
         'confirmed_control_group_param': data['control_group_param'],
         'confirmed_covariate_param': data['covariate_param'],
+        'confirmed_random_effect_param': data['random_effect_param'],
         'confirmed_survival_time_col': data['survival_time_col'],
         'confirmed_survival_event_col': data['survival_event_col'],
         'confirmed_enable_survival': data['enable_survival'],

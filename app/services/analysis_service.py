@@ -1,5 +1,6 @@
 # app/services/analysis_service.py
 import pandas as pd
+from scipy import stats
 from sqlalchemy import func
 from datetime import datetime
 from flask import current_app
@@ -66,8 +67,38 @@ class AnalysisService:
         
         if df.empty:
             return None, [], []
+
+        # Ensure uid is present (fallback to display_id or stringified int ID if missing)
+        if 'uid' not in df.columns:
+            if 'display_id' in df.columns:
+                df['uid'] = df['display_id']
+            elif 'id' in df.columns:
+                df['uid'] = df['id'].astype(str)
         
-        # 6. Type Conversion based on Analyte definitions
+        # 7. Add Housing Conditions
+        if data_table.housing_condition:
+            housing_defaults = {}
+            for item_assoc in data_table.housing_condition.item_associations:
+                housing_defaults[item_assoc.item.name] = item_assoc.default_value
+            
+            for col_name, val in housing_defaults.items():
+                if col_name not in df.columns:
+                    df[col_name] = val
+
+        # 8. Add Treatment Group Mapping if blinded
+        if data_table.group.randomization_details:
+             details = data_table.group.randomization_details
+             if details.get('use_blinding') and 'Blinded Group' in df.columns:
+                 blinding_key = details.get('blinding_key', {})
+                 # We create Treatment Group by mapping Blinded Group
+                 df['Treatment Group'] = df['Blinded Group'].map(blinding_key)
+             elif not details.get('use_blinding') and 'Treatment Group' not in df.columns:
+                 # If not blinded, maybe Treatment Group is already in measurements?
+                 # If not, it might be in randomization_details.animal_groups
+                 animal_groups = details.get('animal_groups', {})
+                 df['Treatment Group'] = df['uid'].map(animal_groups)
+
+        # 9. Type Conversion based on Analyte definitions
         all_field_defs = (
             (data_table.group.model.analytes if data_table.group.model else []) +
             (data_table.protocol.analytes if data_table.protocol else [])
@@ -82,7 +113,7 @@ class AnalysisService:
         if 'age_days' in df.columns:
             df['age_days'] = pd.to_numeric(df['age_days'], errors='coerce')
         
-        # 7. Identify Column Types (Clean deduplication)
+        # 10. Identify Column Types (Clean deduplication)
         numerical_columns = []
         categorical_columns = []
         seen = set()
@@ -155,10 +186,11 @@ class AnalysisService:
         
         # 1. Deduplication Gatekeeper
         # We explicitly skip fields that are handled as core columns or internal metadata
+        # NOTE: 'id' (int) is skipped for analysis columns, but 'uid' is kept as subject identifier
         seen_lower = {
-            'id', 'uid', 'animal_id', 'date_of_birth', 'date of birth', 
+            'id', 'animal_id', 'date_of_birth', 'date of birth', 
             'sex', 'status', 'created_at', 'updated_at', 'group_id',
-            'age_days', 'age (days)', 'blinded group', 'treatment group'
+            'blinded group', 'treatment group'
         }
         
         # 2. Animal Model Fields (Custom measurements)
@@ -209,10 +241,35 @@ class AnalysisService:
         
         # 5. Calculated Age
         # No legacy DOB/age check, just add age_days if it can be calculated
-        if 'age_days' not in seen_lower and data_table.date:
+        if data_table.date:
              numerical_columns.append('age_days')
              column_types['age_days'] = 'numerical'
              seen_lower.add('age_days')
+        
+        # 6. Randomization Factors
+        if data_table.group and data_table.group.randomization_details:
+            details = data_table.group.randomization_details
+            if details.get('use_blinding'):
+                categorical_columns.append('Blinded Group')
+                column_types['Blinded Group'] = 'categorical'
+            
+            categorical_columns.append('Treatment Group')
+            column_types['Treatment Group'] = 'categorical'
+
+        # 7. Housing Conditions
+        if data_table.housing_condition:
+            for item_assoc in data_table.housing_condition.item_associations:
+                item_name = item_assoc.item.name
+                if item_name.lower() in seen_lower:
+                    continue
+                
+                if item_assoc.item.data_type.value in ['int', 'float']:
+                    numerical_columns.append(item_name)
+                    column_types[item_name] = 'numerical'
+                else:
+                    categorical_columns.append(item_name)
+                    column_types[item_name] = 'categorical'
+                seen_lower.add(item_name.lower())
                  
         return numerical_columns, categorical_columns, column_types
 
@@ -306,7 +363,10 @@ class AnalysisService:
         if long_df.empty:
             return pd.DataFrame(), [_l("No common analytes found across all selected datatables.")], source_identifiers
         
-        long_df['measurement_label'] = long_df['analyte_name']
+        # Custom Labeling for Repeated Measures (Merged Analysis)
+        # We append the date to the analyte name to distinguish repeated measurements for the same animal.
+        # Format: "Analyte Name (YYYY-MM-DD)"
+        long_df['measurement_label'] = long_df['analyte_name'] + ' (' + long_df['datatable_date'].astype(str) + ')'
         
         # Base animal data (unique animals)
         animal_df = pd.DataFrame(all_animals)
@@ -323,8 +383,25 @@ class AnalysisService:
             aggfunc='first'
         )
         
-        # Join
+        # 4. Join & Post-Process
         final_df = animal_df.join(pivoted_df, how='left')
+
+        # Add Housing Conditions (Take from first DataTable as they should be consistent)
+        first_dt = datatables_to_process[0]
+        if first_dt.housing_condition:
+            for item_assoc in first_dt.housing_condition.item_associations:
+                if item_assoc.item.name not in final_df.columns:
+                    final_df[item_assoc.item.name] = item_assoc.default_value
+
+        # Add Treatment Group Mapping
+        if first_dt.group.randomization_details:
+             details = first_dt.group.randomization_details
+             if details.get('use_blinding') and 'Blinded Group' in final_df.columns:
+                 blinding_key = details.get('blinding_key', {})
+                 final_df['Treatment Group'] = final_df['Blinded Group'].map(blinding_key)
+             elif not details.get('use_blinding') and 'Treatment Group' not in final_df.columns:
+                 animal_groups = details.get('animal_groups', {})
+                 final_df['Treatment Group'] = final_df.index.to_series().map(animal_groups)
         
         return final_df.reset_index(), errors, source_identifiers
 
@@ -357,6 +434,7 @@ class AnalysisService:
         extra_context = {
             'has_control_group': bool(form_data.get('control_group_param')),
             'has_covariate': bool(form_data.get('covariate_param')),
+            'has_random_effect': bool(form_data.get('random_effect_param')),
             'exclude_outliers': bool(exclude_outliers),
             'outlier_method': form_data.get('outlier_method', 'iqr'),
             'outlier_threshold': float(form_data.get('outlier_threshold', 1.5))
@@ -555,7 +633,8 @@ class AnalysisService:
                 extra_params = {
                     'outlier_method': outlier_method,
                     'outlier_threshold': outlier_threshold,
-                    'control_group': form_data.get('control_group_param')
+                    'control_group': form_data.get('control_group_param'),
+                    'covariate': form_data.get('covariate_param')
                 }
                 sub_stats = self.stats_service.execute_test(df_long, test_key, '_MeasurementValue_', grouping, True, subject_id, exclude_outliers, extra_params=extra_params)
 
@@ -606,7 +685,8 @@ class AnalysisService:
              extra_params = {
                  'outlier_method': outlier_method,
                  'outlier_threshold': outlier_threshold,
-                 'control_group': form_data.get('control_group_param')
+                 'control_group': form_data.get('control_group_param'),
+                 'covariate': form_data.get('covariate_param')
              }
              stats_res = self.stats_service.execute_test(df_long, test_key, '_MeasurementValue_', grouping, True, subject_id, exclude_outliers, extra_params=extra_params)
              
@@ -643,6 +723,7 @@ class AnalysisService:
     def _analyze_independent(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None, suggestions=None):
         # Handle Splitting
         splitting_param = form_data.get('splitting_param')
+        random_effect = form_data.get('random_effect_param')
         
         # Prepare grouping for PLOTS and SUMMARY (Combined)
         grouping_for_plots = list(grouping)
@@ -677,16 +758,22 @@ class AnalysisService:
             # Check for Cage Effect
             self._check_cage_effect(df, param, results)
             
-            # Prepare extra params for advanced tests (ANCOVA / Dunnett)
+            # Prepare extra params for advanced tests
             outlier_method = form_data.get('outlier_method', 'iqr')
             outlier_threshold = float(form_data.get('outlier_threshold', 1.5))
             extra_params = {
                 'control_group': form_data.get('control_group_param'),
                 'covariate': form_data.get('covariate_param'),
+                'random_effect': random_effect,
                 'event_col': form_data.get('survival_event_col'),
                 'outlier_method': outlier_method,
                 'outlier_threshold': outlier_threshold
             }
+
+            # FORCE LMM if Random Effect is selected
+            if random_effect and random_effect in df.columns:
+                 # Override test selection to LMM if a blocking factor is explicitly chosen
+                 test_key = 'lmm_blocking'
 
             stats_res = {'p_value': None, 'results_data': None, 'error': None}
 
@@ -938,3 +1025,48 @@ class AnalysisService:
         df = df.sort_index(axis=1)  # Sort columns by date
         
         return df, dates
+
+    def _check_cage_effect(self, df, param, results):
+        """
+        Heuristic check for Cage effects using Kruskal-Wallis.
+        Adds a note to results if significant.
+        """
+        # Identify Cage Column (case-insensitive)
+        cage_col = next((c for c in df.columns if c.lower() in ['cage', 'cage_id', 'cageid']), None)
+        
+        if not cage_col:
+            return
+
+        # Check sufficiency: at least 2 cages with data
+        # Ensure param exists in df
+        if param not in df.columns:
+            return
+
+        df_clean = df[[cage_col, param]].dropna()
+        if df_clean.empty:
+            return
+
+        groups = df_clean[cage_col].unique()
+        if len(groups) < 2:
+            return
+
+        # Perform Test (Kruskal-Wallis)
+        try:
+            groups_data = [df_clean[df_clean[cage_col] == g][param] for g in groups]
+            
+            if len(groups_data) < 2:
+                return
+
+            stat, p_val = stats.kruskal(*groups_data)
+            
+            if p_val < 0.05:
+                 msg = _l("Warning: Potential Batch/Cage Effect detected for {param} (p={p:.4f}). Animals in different cages appear to have different values.").format(param=param, p=p_val)
+                 results['overall_notes'].append(msg)
+                 
+                 # Store p-value for frontend highlighting if needed
+                 if 'cage_effect_p_values' not in results:
+                     results['cage_effect_p_values'] = {}
+                 results['cage_effect_p_values'][param] = p_val
+                 
+        except Exception as e:
+            current_app.logger.warning(f"Cage effect check failed: {e}")

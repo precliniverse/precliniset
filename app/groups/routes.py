@@ -1,5 +1,8 @@
 # app/groups/routes.py
 import io
+import openpyxl
+from openpyxl.comments import Comment
+from openpyxl.worksheet.datavalidation import DataValidation
 import json
 import os
 import random
@@ -713,175 +716,97 @@ def download_group_data(group_id):
 
     model = group.model
     if not model:
-        flash(_l(f"Cannot generate file: Group '{group.name}' has no associated Animal Model."), "warning")
+        flash(_l("Group has no associated Animal Model."), "warning")
         return redirect(url_for('groups.edit_group', id=group_id))
 
-    try:
-        import openpyxl
-        from openpyxl.comments import Comment
-        from openpyxl.worksheet.datavalidation import DataValidation
-        from app.models import AnimalModelAnalyteAssociation, AnalyteDataType
-        
-        # Get ordered analytes
-        associations = AnimalModelAnalyteAssociation.query.filter_by(animal_model_id=model.id).order_by(AnimalModelAnalyteAssociation.order).all()
-        ordered_animal_model_analytes = [assoc.analyte for assoc in associations]
+    # 1. Prepare Workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Animal Data"
 
-        final_ordered_field_names_set = set()
-        final_ordered_field_names = []
+    # 2. Define Column Structure
+    # We want: ID (display), DOB, Sex, [Model Analytes], uid (hidden at end)
+    from app.models import AnimalModelAnalyteAssociation, AnalyteDataType
+    associations = AnimalModelAnalyteAssociation.query.filter_by(animal_model_id=model.id).order_by(AnimalModelAnalyteAssociation.order).all()
+    ordered_analytes = [assoc.analyte for assoc in associations]
 
-        # Add standard fields (uid and date_of_birth are mandatory)
-        standard_fields = ["uid", "date_of_birth"]
+    header_names = ["ID", "date_of_birth", "sex"]
+    # Add other analytes from model, avoiding duplicates
+    for a in ordered_analytes:
+        if a.name.lower() not in ['id', 'uid', 'display_id', 'date_of_birth', 'sex', 'age_days']:
+            header_names.append(a.name)
+    
+    header_names.append("uid") # Technical mapping ID
+    ws.append(header_names)
 
-        for key in standard_fields:
-            if key not in final_ordered_field_names_set:
-                final_ordered_field_names.append(key)
-                final_ordered_field_names_set.add(key)
+    # 3. Add Scientific Guidance (Comments & Validation)
+    analyte_map = {a.name: a for a in ordered_analytes}
+    # Add default system analytes to map for validation
+    from app.models import Analyte
+    sex_analyte = Analyte.query.filter_by(name='sex').first()
+    if sex_analyte: analyte_map['sex'] = sex_analyte
 
-        # Add model analytes (excluding system-calculated/mock fields)
-        excluded_fields = {'age_days', 'blinded_group', 'treatment_group', 'status'}
-        for analyte in ordered_animal_model_analytes:
-            low_name = analyte.name.lower()
-            if low_name not in final_ordered_field_names_set and analyte.name not in excluded_fields:
-                final_ordered_field_names.append(analyte.name)
-                final_ordered_field_names_set.add(low_name)
-        
-        if 'death_date' not in final_ordered_field_names_set:
-            final_ordered_field_names.append('death_date')
-            final_ordered_field_names_set.add('death_date')
+    for col_idx, field_name in enumerate(header_names, 1):
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        cell = ws.cell(row=1, column=col_idx)
+        analyte = analyte_map.get(field_name)
 
-        # Prepare data first to handle renames
-        animal_data = [a.to_dict() for a in sorted(group.animals, key=lambda a: a.id)]
-        processed_animal_data = []
-        today = date.today()
-        for animal in animal_data:
-            processed_animal = animal.copy()
-            # Calculate Age
-            dob_str = processed_animal.get('date_of_birth')
-            if dob_str:
-                try:
-                    dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
-                    processed_animal['age_days'] = (today - dob).days
-                except:
-                    pass
-                    
-            processed_animal_data.append(processed_animal)
+        if analyte:
+            # A. Add Comments (Description + Unit)
+            comment_text = []
+            if analyte.description: comment_text.append(f"Desc: {analyte.description}")
+            if analyte.unit: comment_text.append(f"Unit: {analyte.unit}")
+            if comment_text:
+                cell.comment = Comment("\n".join(comment_text), "Precliniset System")
 
-        # Now build field names from processed data
-        final_ordered_field_names_set = set()
-        final_ordered_field_names = []
+            # B. Add Data Validation (Dropdowns for CATEGORY)
+            if analyte.data_type == AnalyteDataType.CATEGORY and analyte.allowed_values:
+                vals = [v.strip() for v in analyte.allowed_values.split(';') if v.strip()]
+                # Excel formula for list (comma separated)
+                formula = f'"{",".join(vals)}"'
+                dv = DataValidation(type="list", formula1=formula, allow_blank=True)
+                ws.add_data_validation(dv)
+                dv.add(f"{col_letter}2:{col_letter}1000")
 
-        # Add standard fields
-        is_blinded = group.randomization_details.get('use_blinding', False) if group.randomization_details else False
-        can_unblind = can_view_unblinded_data(group)
+    # 4. Fill Data
+    for animal in sorted(group.animals, key=lambda a: a.id):
+        d = animal.to_dict()
+        row_data = []
+        for col in header_names:
+            if col == "ID": row_data.append(animal.display_id)
+            elif col == "uid": row_data.append(animal.uid)
+            elif col == "date_of_birth": row_data.append(animal.date_of_birth.isoformat() if animal.date_of_birth else '')
+            else: row_data.append(d.get(col, ''))
+        ws.append(row_data)
 
-        standard_fields = ["uid", "date_of_birth", "age_days"]
-        if is_blinded:
-            standard_fields.append("blinded_group")
-            if can_unblind:
-                standard_fields.append("treatment_group")
-        else:
-            standard_fields.append("treatment_group")
+    # Find the letter for the 'uid' column (it's the last one)
+    uid_col_letter = openpyxl.utils.get_column_letter(len(header_names))
 
-        for key in standard_fields:
-            if key not in final_ordered_field_names_set:
-                final_ordered_field_names.append(key)
-                final_ordered_field_names_set.add(key)
+    # HIDE the column from the user
+    ws.column_dimensions[uid_col_letter].hidden = True
 
-        # Add model analytes
-        for analyte in ordered_animal_model_analytes:
-            if analyte.name.lower() not in final_ordered_field_names_set:
-                final_ordered_field_names.append(analyte.name)
-                final_ordered_field_names_set.add(analyte.name.lower())
+    # OPTIONAL: Add a protection message in a comment on the header
+    ws[f"{uid_col_letter}1"].comment = Comment(
+        "SYSTEM COLUMN: DO NOT MODIFY. This ID links the row to the database.", 
+        "System"
+    )
+    
+    # 5. Finalize File
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
 
-        if 'death_date' not in final_ordered_field_names_set:
-            final_ordered_field_names.append('death_date')
-            final_ordered_field_names_set.add('death_date')
+    # Restore original naming convention
+    project_slug = group.project.slug if group.project else 'NoProj'
+    filename = f"{project_slug}_{group.name}_{model.name}_data.xlsx".replace(' ', '_')
 
-        # Add dynamic fields from processed data
-        for animal in processed_animal_data:
-            for key in animal.keys():
-                if key not in final_ordered_field_names_set:
-                    final_ordered_field_names.append(key)
-                    final_ordered_field_names_set.add(key)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
-        # Ensure all animals have all fields
-        for processed_animal in processed_animal_data:
-            for field_name in final_ordered_field_names:
-                if field_name not in processed_animal:
-                    processed_animal[field_name] = None
-
-        df = pd.DataFrame(processed_animal_data, columns=final_ordered_field_names)
-        df = df.fillna('')
-
-        # Use dataframe_to_excel_bytes for CSV injection protection
-        output = dataframe_to_excel_bytes(df, sheet_name='Animal Data', index=False)
-        
-        # Add data validation and comments to the workbook
-        import openpyxl
-        from openpyxl.comments import Comment
-        from openpyxl.worksheet.datavalidation import DataValidation
-        
-        # Reopen the BytesIO to add validation
-        output.seek(0)
-        workbook = openpyxl.load_workbook(output)
-        worksheet = workbook['Animal Data']
-        
-        # Create a mapping of field names to analytes for validation
-        analyte_map = {analyte.name: analyte for analyte in ordered_animal_model_analytes}
-        
-        for col_idx, field_name in enumerate(final_ordered_field_names, 1):
-            if field_name in analyte_map:
-                analyte = analyte_map[field_name]
-                col_letter = openpyxl.utils.get_column_letter(col_idx)
-                header_cell = worksheet.cell(row=1, column=col_idx)
-                comment_lines = []
-                
-                if analyte.description:
-                    comment_lines.append(f"Description: {analyte.description}")
-                if analyte.unit:
-                    comment_lines.append(f"Unit: {analyte.unit}")
-                
-                # Add data validation for category fields
-                if analyte.data_type == AnalyteDataType.CATEGORY and analyte.allowed_values:
-                    allowed_list = [v.strip() for v in analyte.allowed_values.split(';')]
-                    formula = f'"{";".join(allowed_list)}"'
-                    dv = DataValidation(type="list", formula1=formula, allow_blank=True)
-                    worksheet.add_data_validation(dv)
-                    dv.add(f'{col_letter}2:{col_letter}1048576')
-                    comment_lines.append(f"Allowed values: {', '.join(allowed_list)}")
-                
-                # Add date validation
-                elif analyte.data_type == AnalyteDataType.DATE:
-                    dv = DataValidation(type="date", operator="greaterThan", formula1="1900-01-01")
-                    worksheet.add_data_validation(dv)
-                    dv.add(f'{col_letter}2:{col_letter}1048576')
-                    comment_lines.append("Format: YYYY-MM-DD")
-                    for cell in worksheet[col_letter][1:]:
-                        cell.number_format = 'YYYY-MM-DD'
-                
-                if comment_lines:
-                    header_cell.comment = Comment("\n".join(comment_lines), "System")
-        
-        # Save back to BytesIO
-        output = io.BytesIO()
-        workbook.save(output)
-        output.seek(0)
-
-        safe_group_name = _safe_filename(group.name)
-        safe_model_name = _safe_filename(model.name)
-        project_slug = _safe_filename(group.project.slug if group.project else 'unknown_project')
-        download_filename = f"{project_slug}_{safe_group_name}_{safe_model_name}_data.xlsx"
-
-        return send_file(
-            output,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=download_filename
-        )
-    except Exception as e:
-        current_app.logger.error(f"Error generating group data file for group {group_id}: {e}", exc_info=True)
-        flash(_l(f"Error generating data file: {e}"), "danger")
-        return redirect(url_for('groups.edit_group', id=group_id))
 
 @groups_bp.route('/declare_dead/<string:group_id>', methods=['POST'])
 @login_required
@@ -1495,28 +1420,59 @@ def get_group_animal_data(group_id):
     if not group or not check_group_permission(group, 'read'):
         return jsonify({'error': 'Group not found or permission denied'}), 404
 
-    # Get datatable info for animals
+    # --- 1. Récupération des infos DataTables (Votre correctif précédent) ---
     datatable_info = {}
     if group.animals:
-        # Get all datatables for this group
+        sorted_animals = sorted(group.animals, key=lambda a: a.id)
+        animal_id_to_index = {a.id: i for i, a in enumerate(sorted_animals)}
+
         datatables = DataTable.query.filter_by(group_id=group_id).options(db.joinedload(DataTable.protocol)).all()
 
-        # For each animal index, collect datatables they participated in
         for dt in datatables:
-            rows = ExperimentDataRow.query.filter_by(data_table_id=dt.id).with_entities(ExperimentDataRow.row_index).all()
+            rows = ExperimentDataRow.query.filter_by(data_table_id=dt.id).with_entities(ExperimentDataRow.animal_id).all()
             for row in rows:
-                animal_idx = row.row_index
-                if animal_idx not in datatable_info:
-                    datatable_info[animal_idx] = []
-                datatable_info[animal_idx].append({
-                    'id': dt.id,
-                    'name': dt.protocol.name if dt.protocol else 'Unknown',
-                    'date': dt.date,
-                    'severity': dt.protocol.severity.value if dt.protocol and dt.protocol.severity else 'Unknown'
-                })
+                animal_idx = animal_id_to_index.get(row.animal_id)
+                if animal_idx is not None:
+                    if animal_idx not in datatable_info:
+                        datatable_info[animal_idx] = []
+                    datatable_info[animal_idx].append({
+                        'id': dt.id,
+                        'name': dt.protocol.name if dt.protocol else 'Unknown',
+                        'date': dt.date,
+                        'severity': dt.protocol.severity.value if dt.protocol and dt.protocol.severity else 'Unknown'
+                    })
+
+    # --- 2. Préparation des données animaux (CORRECTIF D'AFFICHAGE ICI) ---
+    animals_data = []
+    # On trie par ID pour garder l'ordre cohérent
+    for a in sorted(group.animals, key=lambda x: x.id):
+        d = a.to_dict()
+        
+        # --- PATCH COMPATIBILITÉ POUR LE MODAL JS ---
+        # Le JS cherche 'ID', 'Genotype', 'Cage' (avec majuscules)
+        # Mais le modèle retourne 'display_id', 'genotype', 'cage'
+        
+        # 1. ID
+        d['ID'] = a.display_id
+        
+        # 2. Genotype (si présent en minuscule, on le duplique avec la majuscule)
+        if 'genotype' in d:
+            d['Genotype'] = d['genotype']
+            
+        # 3. Cage
+        if 'cage' in d:
+            d['Cage'] = d['cage']
+        
+        # 4. Model - Ajouter le nom du modèle animal
+        if group.model:
+            d['Model'] = group.model.name
+        else:
+            d['Model'] = ''
+            
+        animals_data.append(d)
 
     response = {
-        'animals': [a.to_dict() for a in sorted(group.animals, key=lambda x: x.id)],
+        'animals': animals_data,
         'datatable_info': datatable_info
     }
 

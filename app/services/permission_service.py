@@ -112,39 +112,10 @@ class PermissionService:
         """
         Returns a SQLAlchemy query for all projects visible to the given user.
         Optimized for dashboards/lists to avoid N+1 permission checks.
-        """
-        from sqlalchemy import or_
-
-        # 1. Super Admin sees everything
-        if user.is_super_admin:
-            return Project.query
-
-        # 2. Get User's Team IDs
-        # We assume user.teams is a relationship returning Team objects
-        # We need IDs for the IN clause
-        user_team_ids = [t.id for t in user.get_teams()] # Use get_teams() method
-
-        # 3. Construct Filter
-        query = Project.query.outerjoin(
-            ProjectUserShare, 
-            (ProjectUserShare.project_id == Project.id) & (ProjectUserShare.user_id == user.id)
-        ).outerjoin(
-            ProjectTeamShare, 
-            (ProjectTeamShare.project_id == Project.id) & (ProjectTeamShare.team_id.in_(user_team_ids) if user_team_ids else False)
-        )
-
-        filter_condition = or_(
-            # A. Owned by User's Team
-            Project.team_id.in_(user_team_ids) if user_team_ids else False,
-            
-            # B. Direct User Share exist
-            ProjectUserShare.project_id.isnot(None),
-            
-            # C. Team Share exist
-            ProjectTeamShare.project_id.isnot(None)
-        )
         
-        return query.filter(filter_condition)
+        Delegates to ProjectQuery.accessible_by() for the implementation.
+        """
+        return Project.query.accessible_by(user)
 
     def get_bulk_project_permissions(self, user, projects):
         """

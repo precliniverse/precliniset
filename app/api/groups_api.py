@@ -1,10 +1,11 @@
 # app/api/groups_api.py
-from flask import g, request, render_template_string, current_app, url_for
+from datetime import datetime
+from flask import g, request, render_template_string, current_app, jsonify
 from flask_restx import Resource, fields
-import json
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models import AnimalModel, EthicalApproval, ExperimentalGroup, Project, Team
+from app.models import AnimalModel, EthicalApproval, ExperimentalGroup, Project, ProjectTeamShare, ProjectUserShare, Team, User
 from app.permissions import (
     can_create_group_for_project,
     check_group_permission, 
@@ -51,11 +52,17 @@ class GroupList(Resource):
     decorators = [token_required]
 
     def get_project(self, project_slug_or_id, permission="read"):
-        project = None
+        from sqlalchemy.orm import selectinload, joinedload
+        
+        query = Project.query.options(
+            # Eager load groups and animals to prevent N+1
+            selectinload(Project.groups).selectinload(ExperimentalGroup.animals)
+        )
+
         if str(project_slug_or_id).isdigit():
-            project = db.session.get(Project, int(project_slug_or_id))
-        if not project:
-            project = Project.query.filter_by(slug=project_slug_or_id).first()
+            project = query.filter_by(id=int(project_slug_or_id)).first()
+        else:
+            project = query.filter_by(slug=project_slug_or_id).first()
         
         if not project or not check_project_permission(project, permission):
             ns.abort(404, "Project not found or permission denied.")
@@ -382,3 +389,175 @@ class ServerSideGroupList(Resource):
             "recordsFiltered": result["filtered_records"],
             "data": data
         }
+
+
+# ============================================================================
+# RPC-style endpoints migrated from groups/routes.py
+# ============================================================================
+
+# Parser for group search query parameters
+search_parser = ns.parser()
+search_parser.add_argument('q', type=str, help='Search term for group name', location='args')
+search_parser.add_argument('project_id', type=str, help='Filter by project ID', location='args')
+search_parser.add_argument('page', type=int, help='Page number (default: 1)', location='args')
+
+group_search_result_model = ns.model('GroupSearchResult', {
+    'id': fields.String,
+    'text': fields.String
+})
+
+group_search_response_model = ns.model('GroupSearchResponse', {
+    'results': fields.List(fields.Nested(group_search_result_model)),
+    'total_count': fields.Integer,
+    'pagination': fields.Nested(ns.model('Pagination', {
+        'more': fields.Boolean
+    }))
+})
+
+@ns.route("/groups/search")
+class GroupSearch(Resource):
+    """Search experimental groups for autocompletion.
+    
+    Migrated from groups/routes.py search_groups_ajax.
+    Returns a paginated list of groups matching the search term.
+    """
+    decorators = [token_required]
+    
+    @ns.doc("search_groups")
+    @ns.expect(search_parser)
+    @ns.marshal_with(group_search_response_model)
+    def get(self):
+        """Search groups by name or project."""
+        from sqlalchemy import or_
+        
+        args = search_parser.parse_args()
+        search_term = args.get('q', '').strip()
+        project_id = args.get('project_id')
+        page = args.get('page', 1)
+        per_page = 15
+        
+        query = ExperimentalGroup.query.join(Project)
+        
+        # Filter by project if provided
+        if project_id and project_id != '0':
+            query = query.filter(ExperimentalGroup.project_id == project_id)
+            
+        # Permission check: Only groups from projects accessible to the user
+        accessible_projects = g.current_user.get_accessible_projects()
+        project_ids = [p.id for p in accessible_projects]
+        query = query.filter(ExperimentalGroup.project_id.in_(project_ids))
+        query = query.options(joinedload(ExperimentalGroup.animals))
+        
+        # Only active groups and projects
+        query = query.filter(ExperimentalGroup.is_archived == False)
+        query = query.filter(Project.is_archived == False)
+        
+        if search_term:
+            query = query.filter(
+                or_(
+                    ExperimentalGroup.name.ilike(f'%{search_term}%'),
+                    Project.name.ilike(f'%{search_term}%'),
+                    Project.slug.ilike(f'%{search_term}%')
+                )
+            )
+        
+        total_count = query.count()
+        groups = query.order_by(ExperimentalGroup.name).offset((page - 1) * per_page).limit(per_page).all()
+        
+        results = []
+        for g in groups:
+            results.append({
+                'id': g.id,
+                'text': f"{g.name} ({g.project.name})"
+            })
+        
+        return {
+            'results': results,
+            'total_count': total_count,
+            'pagination': {'more': (page * per_page) < total_count}
+        }
+
+
+@api.namespace("groups").route("/<string:group_id>/assignable_users")
+class GroupAssignableUsers(Resource):
+    """Get users who can be assigned to datatables for this group.
+    
+    Migrated from groups/routes.py get_assignable_users_ajax.
+    Returns a list of users who have create/edit permissions for datatables.
+    """
+    decorators = [token_required]
+    
+    @api.doc("get_assignable_users")
+    def get(self, group_id):
+        """Get list of assignable users for a group."""
+        from sqlalchemy import or_
+        
+        group = db.session.get(ExperimentalGroup, group_id)
+        if not group:
+            return {'error': 'Group not found'}, 404
+            
+        if not check_group_permission(group, 'read'):
+            return {'error': 'Permission denied'}, 403
+            
+        project = group.project
+        assignable_users = {}
+        
+        # 1. Members of the owning team
+        if project.team:
+            for membership in project.team.memberships:
+                if membership.user:
+                    assignable_users[membership.user.id] = {
+                        'id': membership.user.id,
+                        'email': membership.user.email
+                    }
+            for link in project.team.user_roles:
+                if link.user:
+                    assignable_users[link.user.id] = {
+                        'id': link.user.id,
+                        'email': link.user.email
+                    }
+                    
+        # 2. Members of shared teams who have 'create_datatables' or 'edit_datatables' perms
+        shared_permissions = ProjectTeamShare.query.filter(
+            ProjectTeamShare.project_id == project.id,
+            or_(
+                ProjectTeamShare.can_create_datatables == True,
+                ProjectTeamShare.can_edit_datatables == True
+            )
+        ).all()
+        
+        for perm in shared_permissions:
+            if perm.team:
+                for membership in perm.team.memberships:
+                    if membership.user:
+                        assignable_users[membership.user.id] = {
+                            'id': membership.user.id,
+                            'email': membership.user.email
+                        }
+                for link in perm.team.user_roles:
+                    if link.user:
+                        assignable_users[link.user.id] = {
+                            'id': link.user.id,
+                            'email': link.user.email
+                        }
+                        
+        # 3. Direct user shares
+        shared_users = ProjectUserShare.query.filter(
+            ProjectUserShare.project_id == project.id,
+            or_(
+                ProjectUserShare.can_create_datatables == True,
+                ProjectUserShare.can_edit_datatables == True
+            )
+        ).all()
+        
+        for share in shared_users:
+            if share.user:
+                assignable_users[share.user.id] = {
+                    'id': share.user.id,
+                    'email': share.user.email
+                }
+                
+        # Sort by email
+        results = sorted(assignable_users.values(), key=lambda x: x['email'])
+        
+        return results

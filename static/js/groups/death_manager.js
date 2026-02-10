@@ -21,12 +21,12 @@ export class DeathManager {
             const newSubmitBtn = this.submitDeadBtn.cloneNode(true);
             this.submitDeadBtn.parentNode.replaceChild(newSubmitBtn, this.submitDeadBtn);
             this.submitDeadBtn = newSubmitBtn;
-            
+
             this.submitDeadBtn.addEventListener('click', () => this.handleSubmit());
         }
-        
+
         // Modal Event Cleaning
-         if (this.modalEl) {
+        if (this.modalEl) {
             this.modalEl.addEventListener('hidden.bs.modal', () => {
                 const form = this.modalEl.querySelector('#declareDeadForm');
                 if (form) form.reset();
@@ -36,25 +36,37 @@ export class DeathManager {
                     table.querySelector('tbody').innerHTML = '';
                 }
             });
-         }
+        }
     }
 
     handleDeclareClick(e) {
         if (!e.target.closest('.declare-dead-btn')) return;
-        
+
         e.stopPropagation();
         const btn = e.target.closest('.declare-dead-btn');
         const groupId = btn.getAttribute('data-group-id');
         const groupName = btn.getAttribute('data-group-name');
 
-        const modelFieldsScript = document.getElementById(btn.getAttribute('data-model-fields-id'));
+        // Try to get modelFields from data attribute first (for edit_group.html)
         let modelFields = [];
-        if (modelFieldsScript) {
+        const dataModelFields = btn.getAttribute('data-model-fields');
+        if (dataModelFields) {
             try {
-                modelFields = JSON.parse(modelFieldsScript.textContent);
+                modelFields = JSON.parse(dataModelFields);
             } catch (e) {
-                console.error("Error parsing model fields JSON:", e);
+                console.error("Error parsing data-model-fields JSON:", e);
                 modelFields = [];
+            }
+        } else {
+            // Fallback to looking for script element by ID (legacy support)
+            const modelFieldsScript = document.getElementById(btn.getAttribute('data-model-fields-id'));
+            if (modelFieldsScript) {
+                try {
+                    modelFields = JSON.parse(modelFieldsScript.textContent);
+                } catch (e) {
+                    console.error("Error parsing model fields JSON:", e);
+                    modelFields = [];
+                }
             }
         }
 
@@ -89,11 +101,10 @@ export class DeathManager {
                 selectAllCheckbox.id = 'selectAllAnimalsDeadModal_edit';
                 th.appendChild(selectAllCheckbox);
 
+                // Add all model fields as columns
                 modelFields.forEach(field => {
-                    if (['ID', 'Genotype', 'Cage'].includes(field.name)) {
-                        th = headerRow.insertCell();
-                        th.textContent = field.name;
-                    }
+                    th = headerRow.insertCell();
+                    th.textContent = field.name;
                 });
                 th = headerRow.insertCell();
                 th.textContent = 'Status';
@@ -115,11 +126,10 @@ export class DeathManager {
                     if (animal.status === 'dead') checkbox.disabled = true;
                     cell.appendChild(checkbox);
 
+                    // Add all model field values
                     modelFields.forEach(field => {
-                         if (['ID', 'Genotype', 'Cage'].includes(field.name)) {
-                            cell = row.insertCell();
-                            cell.textContent = animal[field.name] || '';
-                        }
+                        cell = row.insertCell();
+                        cell.textContent = animal[field.name] || '';
                     });
 
                     cell = row.insertCell();
@@ -135,7 +145,10 @@ export class DeathManager {
                         <option value="état de santé">état de santé</option>
                         <option value="fin de protocole">fin de protocole</option>
                         <option value="Point limite atteint">Point limite atteint</option>`;
-                    if (animal.status === 'dead') reasonSelect.disabled = true;
+                    if (animal.status === 'dead') {
+                        reasonSelect.disabled = true;
+                        reasonSelect.value = animal.euthanasia_reason || '';
+                    }
                     cell.appendChild(reasonSelect);
 
                     // Severity
@@ -147,7 +160,10 @@ export class DeathManager {
                         <option value="légère">légère</option>
                         <option value="modérée">modérée</option>
                         <option value="sévère">sévère</option>`;
-                     if (animal.status === 'dead') severitySelect.disabled = true;
+                    if (animal.status === 'dead') {
+                        severitySelect.disabled = true;
+                        severitySelect.value = animal.severity || '';
+                    }
                     cell.appendChild(severitySelect);
                 });
 
@@ -157,34 +173,34 @@ export class DeathManager {
                         checkbox.checked = this.checked;
                     });
                 });
-                
+
                 // "Apply to Selected" Logic
                 const applyBtn = this.modalEl.querySelector('#applyToSelectedBtn');
                 // Clone to remove old listeners
                 const newApplyBtn = applyBtn.cloneNode(true);
                 applyBtn.parentNode.replaceChild(newApplyBtn, applyBtn);
-                
+
                 newApplyBtn.addEventListener('click', () => {
-                     const globalReason = this.modalEl.querySelector('#global_euthanasia_reason').value;
-                     const globalSeverity = this.modalEl.querySelector('#global_severity').value;
-                     if (!globalReason || !globalSeverity) {
-                         alert("Please select both euthanasia reason and severity to apply.");
-                         return;
-                     }
-                      const checkedCheckboxes = body.querySelectorAll('input[name="animal_indices"]:checked');
-                        if (checkedCheckboxes.length === 0) {
-                            alert("Please select at least one animal to apply the settings to.");
-                            return;
-                        }
+                    const globalReason = this.modalEl.querySelector('#global_euthanasia_reason').value;
+                    const globalSeverity = this.modalEl.querySelector('#global_severity').value;
+                    if (!globalReason || !globalSeverity) {
+                        alert("Please select both euthanasia reason and severity to apply.");
+                        return;
+                    }
+                    const checkedCheckboxes = body.querySelectorAll('input[name="animal_indices"]:checked');
+                    if (checkedCheckboxes.length === 0) {
+                        alert("Please select at least one animal to apply the settings to.");
+                        return;
+                    }
 
-                        checkedCheckboxes.forEach(checkbox => {
-                            const index = checkbox.value;
-                            const reasonSelect = body.querySelector(`select[name="euthanasia_reason_${index}"]`);
-                            const severitySelect = body.querySelector(`select[name="severity_${index}"]`);
+                    checkedCheckboxes.forEach(checkbox => {
+                        const index = checkbox.value;
+                        const reasonSelect = body.querySelector(`select[name="euthanasia_reason_${index}"]`);
+                        const severitySelect = body.querySelector(`select[name="severity_${index}"]`);
 
-                            if (reasonSelect && !reasonSelect.disabled) reasonSelect.value = globalReason;
-                            if (severitySelect && !severitySelect.disabled) severitySelect.value = globalSeverity;
-                        });
+                        if (reasonSelect && !reasonSelect.disabled) reasonSelect.value = globalReason;
+                        if (severitySelect && !severitySelect.disabled) severitySelect.value = globalSeverity;
+                    });
                 });
 
                 modalInstance.show();
@@ -239,15 +255,15 @@ export class DeathManager {
                 animals: animalData
             })
         })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                const modal = bootstrap.Modal.getInstance(this.modalEl);
-                if (modal) modal.hide();
-                window.location.reload();
-            } else {
-                alert("Error: " + data.message);
-            }
-        });
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const modal = bootstrap.Modal.getInstance(this.modalEl);
+                    if (modal) modal.hide();
+                    window.location.reload();
+                } else {
+                    alert("Error: " + data.message);
+                }
+            });
     }
 }

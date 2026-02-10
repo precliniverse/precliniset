@@ -255,22 +255,13 @@ class GroupService(BaseService):
 
     def save_group_data(
         self, 
-        group: ExperimentalGroup, 
-        animal_data_list: List[Dict[str, Any]], 
-        update_datatables: bool = True, 
-        allow_new_categories: bool = False
-    ) -> ExperimentalGroup:
-        """Validates and saves animal data to Animal entities (V2 refactored).
+        group, 
+        animal_data_list, 
+        update_datatables=True, 
+        allow_new_categories=False
+    ):
+        """Validates and saves animal data to Animal entities (V2 refactored)."""
         
-        Args:
-            group: ExperimentalGroup instance
-            animal_data_list: List of animal dictionaries
-            update_datatables: Whether to update associated datatables
-            allow_new_categories: Whether to allow new category values
-            
-        Returns:
-            ExperimentalGroup instance
-        """
         # 1. Validate Data Integrity
         if group.model:
             validation_result = self.validator.validate_animal_data(animal_data_list, group.model, strict=False)
@@ -297,101 +288,134 @@ class GroupService(BaseService):
                 else:
                     raise BusinessError(json.dumps({'type': 'new_categories', 'data': new_categories}))
 
-        # 2. Update, create or delete Animal entities
-        existing_animals = {a.uid: a for a in Animal.query.filter_by(group_id=group.id).all()}
-        new_animal_uids = {d.get('uid') for d in animal_data_list if d.get('uid')}
+        # 1b. Map existing animals by Integer ID (Primary Key) for robust updates
+        # This prevents deletion/recreation if the UID string is edited by the user
+        existing_animals_by_pk = {a.id: a for a in Animal.query.filter_by(group_id=group.id).all()}
         
-        # Delete animals not in the new list
-        for uid, animal in list(existing_animals.items()):
-            if uid not in new_animal_uids:
+        # Identify which PKs are present in the incoming data
+        incoming_pks = set()
+        for d in animal_data_list:
+            # The form field is 'id' (from to_dict) or 'field_id' depending on source
+            # But in process_animal_data we flattened it. 
+            # Note: 'id' might be the display_id in some contexts, so we look for the integer one.
+            # We rely on the frontend passing the integer ID safely, usually mapped to a key like 'db_id' or 'id' if distinct from display_id.
+            # Based on table_manager.js fix, it submits `animal_X_field_id`.
+            
+            pk = d.get('id') 
+            if pk and str(pk).isdigit():
+                incoming_pks.add(int(pk))
+
+        # Delete animals not in the new list (Sync mode)
+        for pk, animal in list(existing_animals_by_pk.items()):
+            if pk not in incoming_pks:
                 db.session.delete(animal)
-                del existing_animals[uid]
+                del existing_animals_by_pk[pk]
         
         to_insert = []
         to_update = []
-        
         now = datetime.now(timezone.utc)
-        
+        import secrets
+
         for animal_dict in animal_data_list:
-            animal_id = animal_dict.get('uid')
-            if not animal_id:
-                continue
+            # Try to find by PK first (Robust), then UID (Legacy/Import), then treat as new
+            pk = animal_dict.get('id')
+            existing_animal = None
             
-            # 1. Parse keys into core vs measurements
+            if pk and str(pk).isdigit() and int(pk) in existing_animals_by_pk:
+                existing_animal = existing_animals_by_pk[int(pk)]
+            
+            # Fallback to UID lookup if no PK (e.g. fresh import from Excel)
+            if not existing_animal:
+                uid = animal_dict.get('uid')
+                if uid:
+                    existing_animal = next((a for a in existing_animals_by_pk.values() if a.uid == uid), None)
+
+            # Support 'ID' (from Excel) or 'display_id' (from form)
+            display_id = animal_dict.get('ID') or animal_dict.get('display_id')
+            
+            # Parse keys into core vs measurements
             measurements = {}
             parsed_core = {}
             
-            # Core keys are normalized to lowercase for mapping
+            # Core keys mapping (Case insensitive matching)
             core_keys_map = {
                 'uid': 'uid',
+                'id': 'display_id', 
                 'display_id': 'display_id',
                 'date_of_birth': 'date_of_birth',
+                'date of birth': 'date_of_birth', # Handle Excel header variant
                 'sex': 'sex',
                 'status': 'status'
             }
-            # Special keys to skip from measurements (system calculated or internal)
+            # Skip internal/system keys
             internal_keys = {'age_days', 'age (days)', 'blinded_group', 'blinded group', 'treatment_group', 'treatment group'}
             
             for key, value in animal_dict.items():
                 low_key = key.lower()
                 if low_key in core_keys_map:
+                    # Don't overwrite with None/empty if we assume keeping old value, 
+                    # but here we usually want the file to be the source of truth.
                     parsed_core[core_keys_map[low_key]] = value
                 elif low_key not in internal_keys:
                     measurements[key] = value
             
-            # 2. Longitudinal Weight logic: Save weight to measurements['last_weight']
-            # Check for weight in various case-insensitive formats
+            # Longitudinal Weight logic
             weight_value = None
-            for weight_key in ['weight', 'Weight', 'WEIGHT']:
+            for weight_key in ['weight', 'Weight', 'WEIGHT', 'Body Weight']:
                 if weight_key in animal_dict and animal_dict[weight_key]:
                     weight_value = animal_dict[weight_key]
                     break
-            
             if weight_value is not None:
                 measurements['last_weight'] = weight_value
 
-            # 2. Parse typed fields from parsed_core
+            # Parse Typed Fields (Date)
             dob = None
             dob_val = parsed_core.get('date_of_birth')
             if dob_val:
                 try:
                     if isinstance(dob_val, str):
+                        # Handle YYYY-MM-DD or ISO with time
                         dob = datetime.strptime(dob_val.split('T')[0], '%Y-%m-%d').date()
                     elif hasattr(dob_val, 'date'):
                         dob = dob_val.date()
                     else:
-                        dob = dob_val
+                        dob = dob_val # Already date object
                 except (ValueError, TypeError):
-                    pass
+                    pass # Keep None if invalid
 
             sex = parsed_core.get('sex', animal_dict.get('sex'))
-            status = parsed_core.get('status', animal_dict.get('status', 'alive'))
-            display_id = parsed_core.get('display_id', animal_dict.get('display_id'))
+            status = parsed_core.get('status', 'alive') # Default to alive
+            
+            # Final fallback for display_id
+            final_display_id = str(display_id) if display_id else parsed_core.get('display_id')
 
-            if animal_id in existing_animals:
-                # Update existing animal
-                existing_animal = existing_animals[animal_id]
-                # Preserve existing display_id if not provided in update
-                if not display_id:
-                    display_id = existing_animal.display_id
+            if existing_animal:
+                # --- UPDATE EXISTING ---
+                if not final_display_id:
+                    final_display_id = existing_animal.display_id
+                
                 to_update.append({
                     'id': existing_animal.id,
                     'sex': sex,
                     'status': status,
                     'date_of_birth': dob,
-                    'display_id': display_id,
+                    'display_id': str(final_display_id),
                     'measurements': measurements,
                     'updated_at': now
                 })
             else:
-                # Create new animal
-                # Ensure display_id is provided
-                if not display_id:
-                    display_id = f"Animal {len(to_insert) + 1}"
+                # --- CREATE NEW ---
+                # Generate default ID if missing
+                if not final_display_id:
+                    final_display_id = f"Animal {len(to_insert) + len(existing_animals_by_pk) + 1}"
+                
+                # SECURITY FIX IS HERE:
+                # Always generate a FRESH unique ID. Do NOT use animal_dict.get('uid').
+                new_uid = secrets.token_hex(12)
                 
                 to_insert.append({
-                    'uid': animal_id,
-                    'display_id': display_id,
+                    'uid': new_uid,
+                    'display_id': str(final_display_id),
                     'group_id': group.id,
                     'sex': sex,
                     'status': status,
@@ -401,39 +425,19 @@ class GroupService(BaseService):
                     'updated_at': now
                 })
         
+        # Batch execute
         if to_insert:
             db.session.execute(insert(Animal), to_insert)
         
         if to_update:
             db.session.execute(update(Animal), to_update)
         
-        # 3. Update project timestamp
+        # Update project timestamp
         if group.project:
             group.project.updated_at = now
 
         db.session.flush()
 
-        # 4. Update associated datatables if requested
-        if update_datatables:
-            # Refresh from DB to get updated fields and ensure all animals are loaded
-            db.session.expire(group, ['animals'])
-            animals = sorted(group.animals, key=lambda a: a.id)
-            
-            # Prepare ordered data for datatable update
-            ordered_data = [a.to_dict() for a in animals]
-            
-            # Determine column order from Animal Model
-            final_ordered_keys = ['uid', 'date_of_birth', 'age_days', 'blinded_group', 'treatment_group']
-            if group.model_id:
-                associations = AnimalModelAnalyteAssociation.query.filter_by(
-                    animal_model_id=group.model_id
-                ).order_by(AnimalModelAnalyteAssociation.order).all()
-                for assoc in associations:
-                    if assoc.analyte.name not in final_ordered_keys:
-                        final_ordered_keys.append(assoc.analyte.name)
-            
-            # Note: update_associated_data_tables function has been removed as part of legacy cleanup
-            # The new animal_id foreign key system handles data synchronization automatically
 
         return group
 
@@ -469,7 +473,7 @@ class GroupService(BaseService):
         sort_column: str, 
         sort_direction: str
     ) -> Dict[str, Any]:
-        from sqlalchemy.orm import joinedload
+        from sqlalchemy.orm import joinedload, selectinload
         from app.services.permission_service import PermissionService
         
         query = db.session.query(ExperimentalGroup) \
@@ -479,7 +483,7 @@ class GroupService(BaseService):
                 joinedload(ExperimentalGroup.project),
                 joinedload(ExperimentalGroup.team),
                 joinedload(ExperimentalGroup.model),
-                joinedload(ExperimentalGroup.animals)
+                selectinload(ExperimentalGroup.animals)
             )
 
         # Apply permissions: only accessible projects (optimized query)

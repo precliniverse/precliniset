@@ -118,6 +118,67 @@ class StatisticsService:
             df_test = df_test.dropna(subset=cols_to_numeric + valid_grouping)
         
         return df_test, outliers_count
+    
+    def _run_lmm_blocking(self, df, dv, groups, subject_id, res, extra_params=None):
+        """
+        Runs a Linear Mixed Model (LMM) to account for a Blocking Factor (Random Effect).
+        Model: DV ~ Group + (1|Block)
+        """
+        block = extra_params.get('random_effect')
+        if not block or block not in df.columns:
+            res['error'] = "Blocking factor (random effect) not specified or not found."
+            return
+
+        group_col = self._get_single_group_col(df, groups)
+        
+        try:
+            # Using Pingouin's mixed_linear_model
+            # Formula API is cleaner: dv ~ fixed + (1|random)
+            # Pingouin syntax: formula="dv ~ fixed", groups="random"
+            
+            # Ensure numeric
+            df[dv] = pd.to_numeric(df[dv], errors='coerce')
+            df = df.dropna(subset=[dv, group_col, block])
+            
+            # Simple model: Fixed effect = Group, Random Intercept = Block
+            lmm = pg.mixed_linear_model(
+                data=df, 
+                dv=dv, 
+                formula=f"{quote_name(dv)} ~ C({quote_name(group_col)})", 
+                groups=block
+            )
+            
+            res['results_data'] = {
+                'title': _l('Linear Mixed Model (Corrected for %(block)s)', block=block),
+                'columns': lmm.columns.tolist(),
+                'rows': lmm.to_dict('records')
+            }
+            
+            # Extract Fixed Effect P-value for the Group
+            # Pingouin returns terms like "Intercept", "C(Group)[T.Val]"
+            # We look for the Group term
+            
+            # LMM p-values in Pingouin are often labelled 'pval'
+            group_rows = lmm[lmm['Term'].str.contains(group_col, na=False)]
+            if not group_rows.empty:
+                # If multiple levels (e.g. Group B vs A, Group C vs A), we might have multiple p-values.
+                # LMM doesn't give a single "Omnibus" p-value for the factor like ANOVA does easily 
+                # without running a separate anova() on the model object.
+                # However, Pingouin's mixed_linear_model return includes a stats table.
+                
+                # For scientific reporting, users usually want the Omnibus ANOVA style F-test of the fixed effect.
+                # We can try statsmodels for that if Pingouin is limited, or just report the coefficients table.
+                
+                res['p_value'] = group_rows['pval'].min() # Heuristic: report min p-value of contrasts
+                res['notes'].append(_l("Result shows model coefficients. p-value indicates significance of specific contrasts vs reference level."))
+            else:
+                res['p_value'] = None
+                
+            res['notes'].append(_l("Used Linear Mixed Model to control for random effect of '%(block)s'.", block=block))
+
+        except Exception as e:
+            res['error'] = f"LMM Failed: {str(e)}"
+            current_app.logger.error(f"LMM Error: {e}", exc_info=True)
 
     # --- Specific Test Handlers ---
 

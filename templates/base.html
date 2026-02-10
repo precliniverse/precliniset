@@ -27,7 +27,7 @@
     {% endblock %} {# Added block for extra head content like Quill CSS #}
     <script nonce="{{ csp_nonce }}">
         // Prevent theme flash
-        (function() {
+        (function () {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-bs-theme', savedTheme);
         })();
@@ -38,7 +38,8 @@
     <nav class="navbar navbar-expand-lg border-bottom sticky-top bg-body shadow-sm">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.index') }}">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="{{ _('Home') }}" width="60" height="60" class="d-inline-block align-top me-2 logo-img">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="{{ _('Home') }}" width="60" height="60"
+                    class="d-inline-block align-top me-2 logo-img">
                 {{ _('Precliniset') }}
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
@@ -110,13 +111,15 @@
                 {% endif %}
 
                 <!-- Global Search  -->
-                <form class="d-flex ms-auto me-3 align-items-center" method="GET" action="{{ url_for('main.search_results') }}"
-                    id="globalSearchForm">
+                <form class="d-flex ms-auto me-3 align-items-center" method="GET"
+                    action="{{ url_for('main.search_results') }}" id="globalSearchForm">
                     <input name="q" class="form-control form-control-sm me-2" type="search"
                         placeholder="{{ _('Global Search...') }}" aria-label="Search"
                         value="{{ request.args.get('q', '') }}">
-                    <button class="btn btn-sm btn-outline-success me-2" type="submit"><i class="fas fa-search"></i></button>
-                    <a href="{{ url_for('main.documentation') }}" class="text-secondary me-2" title="{{ _('Documentation') }}">
+                    <button class="btn btn-sm btn-outline-success me-2" type="submit"><i
+                            class="fas fa-search"></i></button>
+                    <a href="{{ url_for('main.documentation') }}" class="text-secondary me-2"
+                        title="{{ _('Documentation') }}">
                         <i class="fas fa-question-circle fa-lg"></i>
                     </a>
                 </form>
@@ -124,7 +127,8 @@
                 <!-- Theme Toggle & User Menu -->
                 <ul class="navbar-nav align-items-center">
                     <li class="nav-item me-2">
-                        <button class="btn btn-link nav-link px-2" id="bd-theme" type="button" aria-expanded="false" title="{{ _('Toggle Theme') }}">
+                        <button class="btn btn-link nav-link px-2" id="bd-theme" type="button" aria-expanded="false"
+                            title="{{ _('Toggle Theme') }}">
                             <i class="fas fa-moon theme-icon-active" id="theme-icon"></i>
                         </button>
                     </li>
@@ -196,8 +200,7 @@
         integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"
         nonce="{{ csp_nonce }}"></script>
     <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-        crossorigin="anonymous"
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"
         nonce="{{ csp_nonce }}"></script>
     <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.js" nonce="{{ csp_nonce }}"></script>
@@ -206,6 +209,10 @@
     <!-- Select2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"
         nonce="{{ csp_nonce }}"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js" nonce="{{ csp_nonce }}"></script>
+    {# Alpine.js Components - Load immediately after Alpine #}
+    <script src="{{ url_for('static', filename='js/app_components.js') }}" nonce="{{ csp_nonce }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js" nonce="{{ csp_nonce }}"></script>
     <script src="https://cdn.plot.ly/plotly-3.1.0.min.js" charset="utf-8" nonce="{{ csp_nonce }}"></script>
     <!-- FullCalendar JS -->
@@ -214,7 +221,7 @@
     <script nonce="{{ csp_nonce }}">
         // Global AJAX setup to include CSRF token for all requests to our own API
         $.ajaxSetup({
-            beforeSend: function(xhr, settings) {
+            beforeSend: function (xhr, settings) {
                 const csrfToken = "{{ csrf_token() }}";
                 // Always send for our API endpoints if they use session auth
                 if (settings.url.startsWith('/api/') || settings.url.includes(window.location.host + '/api/')) {
@@ -231,7 +238,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const themeBtn = document.getElementById('bd-theme');
             const themeIcon = document.getElementById('theme-icon');
-            
+
             const getStoredTheme = () => localStorage.getItem('theme');
             const setStoredTheme = theme => localStorage.setItem('theme', theme);
 
@@ -286,7 +293,10 @@
         </div>
     </footer>
 
-    {% block scripts %}{% endblock %}
+    {% block scripts %}
+    {# Alpine.js Components #}
+    <script src="{{ url_for('static', filename='js/app_components.js') }}" nonce="{{ csp_nonce }}"></script>
+    {% endblock %}
 </body>
 
 </html>

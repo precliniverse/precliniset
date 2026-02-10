@@ -12,6 +12,7 @@ from app.models import (Attachment, DataTable, ExperimentalGroup,
                         ProjectEthicalApprovalAssociation,
                         ProjectPartnerAssociation, Team, User, Workplan,
                         WorkplanEvent, WorkplanVersion)
+from app.queries import ProjectQuery
 from app.services.base import BaseService
 from app.utils.files import validate_file_type  # Import utility
 
@@ -60,82 +61,24 @@ class ProjectService(BaseService):
         - Projects owned by teams the user is a member of
         - Projects shared with the user's teams (ProjectTeamShare)
         - Projects shared directly with the user (ProjectUserShare)
+        
+        Uses the new ProjectQuery chainable methods.
         """
-        from sqlalchemy import or_
-        from app.models import ProjectTeamShare, ProjectUserShare
+        # Build the query using ProjectQuery chainable methods
+        base_query = Project.query.accessible_by(user)
         
-        # For super admin, return all projects
-        if user.is_super_admin:
-            base_query = self.model.query
-            
-            if not show_archived:
-                base_query = base_query.filter(self.model.is_archived == False)
-            
-            if search_term:
-                search_pattern = f"%{search_term}%"
-                base_query = base_query.filter(
-                    or_(
-                        self.model.name.ilike(search_pattern),
-                        self.model.description.ilike(search_pattern),
-                        self.model.slug.ilike(search_pattern)
-                    )
-                )
-            
-            pagination = base_query.order_by(self.model.name).paginate(page=page, per_page=per_page, error_out=False)
-            return pagination.items, pagination.total
-        
-        # For regular users, get accessible projects
-        user_teams = user.get_teams()
-        team_ids = [team.id for team in user_teams]
-        
-        # Build subqueries for accessible project IDs
-        # 1. Projects owned by user's teams (with Project:read permission)
-        from app.models import UserTeamRoleLink, Role, role_permissions, Permission
-        
-        has_permission_for_project_team = db.session.query(db.literal(1)).select_from(UserTeamRoleLink).join(Role).join(role_permissions).join(Permission).filter(
-            UserTeamRoleLink.user_id == user.id,
-            Permission.resource == 'Project',
-            Permission.action == 'read',
-            UserTeamRoleLink.team_id == Project.team_id,
-            or_(Role.team_id == Project.team_id, Role.team_id.is_(None))
-        ).exists()
-        
-        owned_project_ids_q = db.session.query(Project.id).filter(has_permission_for_project_team)
-        
-        # 2. Projects shared with user's teams
-        team_shared_project_ids_q = db.session.query(ProjectTeamShare.project_id).filter(
-            ProjectTeamShare.team_id.in_(team_ids) if team_ids else False,
-            ProjectTeamShare.can_view_project == True
-        )
-        
-        # 3. Projects shared directly with user
-        user_shared_project_ids_q = db.session.query(ProjectUserShare.project_id).filter(
-            ProjectUserShare.user_id == user.id,
-            ProjectUserShare.can_view_project == True
-        )
-        
-        # Union all accessible project IDs
-        accessible_project_ids_q = owned_project_ids_q.union(team_shared_project_ids_q).union(user_shared_project_ids_q)
-        
-        # Build the main query
-        base_query = self.model.query.filter(self.model.id.in_(accessible_project_ids_q))
-        
-        if not show_archived:
-            base_query = base_query.filter(self.model.is_archived == False)
+        if show_archived:
+            # Show all (archived and active)
+            pass
+        else:
+            # Filter out archived projects
+            base_query = base_query.active()
         
         if search_term:
-            search_pattern = f"%{search_term}%"
-            base_query = base_query.filter(
-                or_(
-                    self.model.name.ilike(search_pattern),
-                    self.model.description.ilike(search_pattern),
-                    self.model.slug.ilike(search_pattern)
-                )
-            )
+            base_query = base_query.search(search_term)
         
         # Execute query with pagination
-        # Use flask-sqlalchemy's paginate for cleaner logic
-        pagination = base_query.order_by(self.model.name).paginate(page=page, per_page=per_page, error_out=False)
+        pagination = base_query.order_by(Project.name).paginate(page=page, per_page=per_page, error_out=False)
         return pagination.items, pagination.total
 
     def update_ethical_approvals(self, project, new_approval_ids):

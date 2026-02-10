@@ -32,6 +32,14 @@ def main():
     release_parser = subparsers.add_parser("build-release", help="Create a publishable Docker package")
     release_parser.add_argument("--tag", type=str, help="Version tag (e.g. v1.0.0)")
     
+    populate_parser = subparsers.add_parser("populate-demo", help="Seed DB with scalable simulation data")
+    populate_parser.add_argument("--teams", type=int, default=1, help="Number of teams (default: 1)")
+    populate_parser.add_argument("--projects", type=int, default=1, help="Number of projects per team (default: 1)")
+    populate_parser.add_argument("--groups", type=int, default=1, help="Groups per project (default: 1)")
+    populate_parser.add_argument("--animals", type=int, default=5, help="Animals per subgroup (default: 5)")
+    populate_parser.add_argument("--reps", type=int, default=1, help="Number of repetitions per protocol (default: 1)")
+    populate_parser.add_argument("--interval", type=int, default=1, help="Interval in days between repetitions (default: 1)")
+    
     args = parser.parse_args()
     
     if args.command == "setup":
@@ -85,7 +93,18 @@ def main():
         config = ConfigManager.load_env()
         mode = config.get('DEPLOYMENT_MODE', 'docker')
         deployer = DockerDeployer() if mode == 'docker' else NativeDeployer()
-        deployer.run_flask("setup populate-simulation")
+        
+        # Construct command with arguments
+        flask_cmd = (
+            f"setup populate-simulation "
+            f"--teams {args.teams} "
+            f"--projects {args.projects} "
+            f"--groups {args.groups} "
+            f"--animals {args.animals} "
+            f"--repetitions {args.reps} "
+            f"--repetition-interval {args.interval}"
+        )
+        deployer.run_flask(flask_cmd)
 
     elif args.command == "build-release":
         deployer = DockerDeployer()

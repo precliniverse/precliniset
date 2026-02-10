@@ -633,7 +633,10 @@ def list_groups_for_ethical_approval(ethical_approval_id):
             flash(_l("You do not have permission to view this ethical approval's details."), "danger")
             return redirect(url_for('ethical_approvals.list_ethical_approvals'))
 
-    linked_groups = approval.experimental_groups.order_by(ExperimentalGroup.name).all()
+    # Eager load animals to prevent N+1 queries when calculating length in template
+    linked_groups = approval.experimental_groups.options(
+        db.selectinload(ExperimentalGroup.animals)
+    ).order_by(ExperimentalGroup.name).all()
 
     # --- Statistics Calculation ---
     stats = {

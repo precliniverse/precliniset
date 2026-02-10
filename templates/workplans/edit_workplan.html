@@ -212,8 +212,8 @@
                         {% for dt in generated_datatables %}
                         <tr>
                             <td>
-                                <input type="date" class="form-control form-control-sm datatable-date-change" 
-                                       data-datatable-id="{{ dt.id }}" value="{{ dt.date }}">
+                                <input type="date" class="form-control form-control-sm datatable-date-change"
+                                    data-datatable-id="{{ dt.id }}" value="{{ dt.date }}">
                             </td>
                             <td>{{ dt.protocol.name if dt.protocol else 'N/A' }}</td>
                             <td>{{ dt.generated_from_event.event_name if dt.generated_from_event else '' }}</td>
@@ -687,8 +687,9 @@
     const restore_url = "{{ url_for('workplans.restore_workplan_version', workplan_id=workplan.id) }}";
     const bulk_assign_url = "{{ url_for('workplans.bulk_assign_events', workplan_id=workplan.id) }}";
     const history_url = "{{ url_for('workplans.workplan_history', workplan_id=workplan.id) }}";
-    const reassign_datatable_url = "{{ url_for('datatables.reassign_datatable', datatable_id=0) }}";
-    const move_datatable_url = "{{ url_for('datatables.move_datatable', datatable_id=0) }}";
+    const reassign_datatable_url = "/api/v1/groups/datatables/0/reassign";
+    const move_datatable_url = "/api/v1/groups/datatables/0/move";
+    const apiBaseUrl = "/api/v1";
     const select_protocol_text = {{ _("Select Protocol...") | tojson }};
     const unassigned_text = {{ _("Unassigned") | tojson }};
     const before_dob_text = {{ _("Before DOB") | tojson }};

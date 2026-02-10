@@ -102,18 +102,33 @@
         </div>
     </div>
 
-    <style>
-        /* Force consistency between standard inputs and Select2 */
-        .form-control, .select2-container--bootstrap-5 .select2-selection {
-            height: 38px !important;
-            min-height: 38px !important;
-        }
+    <style nonce="{{ csp_nonce }}">
+        /* Correction de l'alignement vertical du texte dans Select2 */
         .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
-            line-height: 36px !important; /* Center text vertically */
+            line-height: 36px !important;
+            /* Aligne le texte au centre du champ de 38px */
+            padding-left: 0.75rem !important;
+            color: var(--bs-body-color);
         }
-        .input-group > .form-control-sm {
-            height: 31px !important; /* Keep small inputs small if they are in an input-group-sm */
-            min-height: 31px !important;
+
+        /* Supprime le décalage de la croix de suppression */
+        .select2-container--bootstrap-5 .select2-selection--single .select2-selection__clear {
+            margin-top: 0.35rem !important;
+        }
+
+        /* Fix pour le décalage de la recherche dans le dropdown */
+        .select2-search__field {
+            margin-top: 5px !important;
+        }
+
+        /* Assure que le conteneur Selection est sous le modal backdrop (1050) */
+        .select2-container {
+            z-index: 1001;
+        }
+
+        /* Assure que le dropdown (la liste de résultats) est au dessus du modal (1055) */
+        .select2-dropdown {
+            z-index: 1070 !important;
         }
     </style>
 
@@ -132,7 +147,8 @@
                 <h5>{{ _('Group Details') }}</h5>
                 {% if group %}
                 <strong>{{ _('Project') }}:</strong>
-                <a href="{{ url_for('projects.view_edit_project', project_slug=group.project.slug) }}">{{ group.project.name }}</a>
+                <a href="{{ url_for('projects.view_edit_project', project_slug=group.project.slug) }}">{{
+                    group.project.name }}</a>
                 {% endif %}
             </div>
             <div class="card-body">
@@ -140,7 +156,8 @@
                     {% if not group %}
                     <!-- Project selector only for new groups -->
                     <div class="col-md-4">
-                        {{ render_field(form.project, id="project_select", placeholder=_('Select Project...'), readonly=is_read_only) }}
+                        {{ render_field(form.project, id="project_select", placeholder=_('Select Project...'),
+                        readonly=is_read_only) }}
                     </div>
                     <div class="col-md-4">
                         {{ render_field(form.name, readonly=is_read_only) }}
@@ -247,18 +264,19 @@
                             <input type="file" name="xlsx_upload" id="xlsx_upload" class="form-control form-control-sm"
                                 accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
                             <span class="input-group-text bg-body border-start-0">
-                                <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" 
-                                   title="{{ _('File must contain columns matching the selected Animal Model fields, including an ID column. Uploading will override manual entries.') }}"></i>
+                                <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip"
+                                    data-bs-placement="top"
+                                    title="{{ _('File must contain columns matching the selected Animal Model fields, including an ID column. Uploading will override manual entries.') }}"></i>
                             </span>
                         </div>
                         <div class="btn-group btn-group-sm">
-                            <button type="button" class="btn btn-primary" id="import-xlsx-btn" title="{{ _('Import and Save') }}">
+                            <button type="button" class="btn btn-primary" id="import-xlsx-btn"
+                                title="{{ _('Import and Save') }}">
                                 <i class="fas fa-file-import me-1"></i> {{ _('Import') }}
                             </button>
-                            <a href="{% if group %}{{ url_for('groups.download_group_data', group_id=group.id) }}{% else %}{{ url_for('groups.download_template', model_id=0) }}{% endif %}" 
-                               class="btn btn-secondary" 
-                               id="download-data-btn"
-                               title="{% if group %}{{ _('Download Current Data') }}{% else %}{{ _('Download Template') }}{% endif %}">
+                            <a href="{% if group %}{{ url_for('groups.download_group_data', group_id=group.id) }}{% else %}{{ url_for('groups.download_template', model_id=0) }}{% endif %}"
+                                class="btn btn-secondary" id="download-data-btn"
+                                title="{% if group %}{{ _('Download Current Data') }}{% else %}{{ _('Download Template') }}{% endif %}">
                                 <i class="fas fa-download"></i>
                             </a>
                         </div>
@@ -274,17 +292,21 @@
 
                                 <!-- Conditionally add Treatment/Blinded Group Header -->
                                 {% if group and group.randomization_details %}
-                                    {% if group.randomization_details.use_blinding %}
-                                    <th title="{{ _('Unique code assigned during blinding') }}">{{ _('Blinded Group') }}</th>
-                                    {% if can_view_unblinded %}
-                                    <th title="{{ _('Assigned experimental treatment group') }}">{{ _('Treatment Group') }}</th>
-                                    {% endif %}
-                                    {% else %}
-                                    <th title="{{ _('Assigned experimental treatment group') }}">{{ _('Treatment Group') }}</th>
-                                    {% endif %}
+                                {% if group.randomization_details.use_blinding %}
+                                <th title="{{ _('Unique code assigned during blinding') }}">{{ _('Blinded Group') }}
+                                </th>
+                                {% if can_view_unblinded %}
+                                <th title="{{ _('Assigned experimental treatment group') }}">{{ _('Treatment Group') }}
+                                </th>
+                                {% endif %}
+                                {% else %}
+                                <th title="{{ _('Assigned experimental treatment group') }}">{{ _('Treatment Group') }}
+                                </th>
+                                {% endif %}
                                 {% endif %}
 
-                                <th title="{{ _('Calculated automatically from Date of Birth') }}" data-field-name="age_days">{{ _('Age (Days)') }}</th>
+                                <th title="{{ _('Calculated automatically from Date of Birth') }}"
+                                    data-field-name="age_days">{{ _('Age (Days)') }}</th>
 
                                 {% if selected_model_analytes %}
                                 {% for analyte in selected_model_analytes %}
@@ -483,7 +505,8 @@
                             </div>
                         </div>
 
-                        <div id="minimization-options" class="p-3 border rounded bg-body-tertiary" style="display: none;">
+                        <div id="minimization-options" class="p-3 border rounded bg-body-tertiary"
+                            style="display: none;">
                             <h6>{{ _('Minimization Options') }}</h6>
                             <div class="mb-3">
                                 <label for="minimize-source" class="form-label">{{ _('Balance Groups Based on Data
@@ -545,7 +568,8 @@
             <!-- Actions Cell (will be populated in JS) -->
             <td class="action-cell">
                 <div class="btn-group btn-group-sm" role="group">
-                    <button type="button" class="btn btn-outline-primary duplicate-row-btn" title="{{ _('Duplicate') }}">
+                    <button type="button" class="btn btn-outline-primary duplicate-row-btn"
+                        title="{{ _('Duplicate') }}">
                         <i class="fa-solid fa-copy"></i>
                     </button>
                     <button type="button" class="btn btn-outline-danger remove-row-btn" title="{{ _('Delete') }}">
@@ -553,7 +577,7 @@
                     </button>
                 </div>
             </td>
-            
+
             <!-- Randomization Cells placeholders (if applicable) -->
             <td class="blinded-cell d-none">
                 <span class="badge bg-info blinded-value"></span>
@@ -673,16 +697,16 @@
         font-size: 0.875rem;
         line-height: 1.5;
     }
-    
+
     /* Ensure input-group-sm elements match */
-    .input-group-sm > .form-control,
-    .input-group-sm > .input-group-text {
+    .input-group-sm>.form-control,
+    .input-group-sm>.input-group-text {
         height: 31px;
         padding: 0.25rem 0.5rem;
         font-size: 0.875rem;
         line-height: 1.5;
     }
-    
+
     /* Compact file input styling */
     .form-control-sm[type="file"] {
         height: 31px;
@@ -696,68 +720,73 @@
 {% block scripts %}
 {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" nonce="{{ csp_nonce }}"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js" nonce="{{ csp_nonce }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"
+    nonce="{{ csp_nonce }}"></script>
 <script src="{{ url_for('static', filename='js/groups_common.js') }}" nonce="{{ csp_nonce }}"></script>
-    <!-- New Category Discovery Modal -->
-    <div class="modal fade" id="newCategoryModal" tabindex="-1" aria-labelledby="newCategoryModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content border-warning shadow">
-                <div class="modal-header bg-warning-subtle text-warning-emphasis">
-                    <h5 class="modal-title" id="newCategoryModalLabel"><i class="fas fa-exclamation-triangle me-2"></i>{{ _('New Category Values Found') }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- New Category Discovery Modal -->
+<div class="modal fade" id="newCategoryModal" tabindex="-1" aria-labelledby="newCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-warning shadow">
+            <div class="modal-header bg-warning-subtle text-warning-emphasis">
+                <h5 class="modal-title" id="newCategoryModalLabel"><i class="fas fa-exclamation-triangle me-2"></i>{{
+                    _('New Category Values Found') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ _('The following new values were found for categorical fields. Would you like to add them to the
+                    system and proceed?') }}</p>
+                <div id="new-categories-list" class="mt-3">
+                    <!-- Populated by JS -->
                 </div>
-                <div class="modal-body">
-                    <p>{{ _('The following new values were found for categorical fields. Would you like to add them to the system and proceed?') }}</p>
-                    <div id="new-categories-list" class="mt-3">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-                <div class="modal-footer bg-body-tertiary">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
-                    <button type="button" class="btn btn-warning" id="confirm-add-categories">
-                        <i class="fas fa-plus me-1"></i> {{ _('Add and Continue') }}
-                    </button>
-                </div>
+            </div>
+            <div class="modal-footer bg-body-tertiary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                <button type="button" class="btn btn-warning" id="confirm-add-categories">
+                    <i class="fas fa-plus me-1"></i> {{ _('Add and Continue') }}
+                </button>
             </div>
         </div>
     </div>
+</div>
 
 {% set config_dict = {
-    "isEditing": (group is not none),
-    "groupId": (group.id if group else none),
-    "prefilledProjectId": (prefilled_project_id if prefilled_project_id else none),
-    "hasRandomization": (group and group.randomization_details is not none),
-    "isBlinded": (group and group.randomization_details and group.randomization_details.get("use_blinding", false)),
-    "canViewUnblinded": can_view_unblinded,
-    "blindingKey": (group.randomization_details.blinding_key if group and group.randomization_details and group.randomization_details.get("use_blinding") else {}),
-    "existingAnimalData": animals_dataset,
-    "ethicalApprovalId": (group.ethical_approval_id if group else none),
-    "isReadOnly": is_read_only,
-    "modelFields": model_analytes_dataset,
-    "animalModels": animal_models_data,
-    "urls": {
-        "downloadTemplate": url_for("groups.download_template", model_id=0),
-        "downloadGroupData": url_for("groups.download_group_data", group_id=group.id if group else "GROUP_ID_PLACEHOLDER"),
-        "getModelFields": url_for("groups.get_animal_model_fields", model_id=0),
-        "getEthicalApprovalsForProject": url_for("groups.get_ethical_approvals_for_project", project_id=0),
-        "searchProjects": url_for("projects.search_projects_ajax"),
-        "randomizeGroup": url_for("groups.randomize_group", group_id=group.id) if group else "#",
-        "getRandomizationSummary": url_for("groups.get_randomization_summary", group_id=group.id) if group else "#",
-        "getGroupDatatablesForRandomization": url_for("groups.get_group_datatables_for_randomization", group_id=group.id) if group else "#",
-        "unblindGroup": url_for("groups.unblind_group", group_id=group.id) if group else "#",
-        "deleteRandomization": url_for("groups.delete_randomization", group_id=group.id) if group else "#"
-    },
-    "i18n": {
-        "loading": _("Loading..."),
-        "actions": _("Actions"),
-        "addAnimal": _("Add Animal"),
-        "downloadTemplate": _("Download Template (XLSX)"),
-        "downloadCurrent": _("Download Current Data (XLSX)"),
-        "confirmDelete": _("Are you sure you want to remove this animal?"),
-        "deceased": _("Deceased"),
-        "selectProject": _("Search for a project..."),
-        "deceasedLabel": js_strings.get("deceased_label", "")
-    }
+"isEditing": (group is not none),
+"groupId": (group.id if group else none),
+"prefilledProjectId": (prefilled_project_id if prefilled_project_id else none),
+"hasRandomization": (group and group.randomization_details is not none),
+"isBlinded": (group and group.randomization_details and group.randomization_details.get("use_blinding", false)),
+"canViewUnblinded": can_view_unblinded,
+"blindingKey": (group.randomization_details.blinding_key if group and group.randomization_details and
+group.randomization_details.get("use_blinding") else {}),
+"existingAnimalData": animals_dataset,
+"ethicalApprovalId": (group.ethical_approval_id if group else none),
+"isReadOnly": is_read_only,
+"modelFields": model_analytes_dataset,
+"animalModels": animal_models_data,
+"urls": {
+"downloadTemplate": url_for("groups.download_template", model_id=0),
+"downloadGroupData": url_for("groups.download_group_data", group_id=group.id if group else "GROUP_ID_PLACEHOLDER"),
+"getModelFields": url_for("groups.get_animal_model_fields", model_id=0),
+"getEthicalApprovalsForProject": url_for("groups.get_ethical_approvals_for_project", project_id=0),
+"searchProjects": url_for("projects.search_projects_ajax"),
+"randomizeGroup": url_for("groups.randomize_group", group_id=group.id) if group else "#",
+"getRandomizationSummary": url_for("groups.get_randomization_summary", group_id=group.id) if group else "#",
+"getGroupDatatablesForRandomization": url_for("groups.get_group_datatables_for_randomization", group_id=group.id) if
+group else "#",
+"unblindGroup": url_for("groups.unblind_group", group_id=group.id) if group else "#",
+"deleteRandomization": url_for("groups.delete_randomization", group_id=group.id) if group else "#"
+},
+"i18n": {
+"loading": _("Loading..."),
+"actions": _("Actions"),
+"addAnimal": _("Add Animal"),
+"downloadTemplate": _("Download Template (XLSX)"),
+"downloadCurrent": _("Download Current Data (XLSX)"),
+"confirmDelete": _("Are you sure you want to remove this animal?"),
+"deceased": _("Deceased"),
+"selectProject": _("Search for a project..."),
+"deceasedLabel": js_strings.get("deceased_label", "")
+}
 } %}
 <script id="group-config" type="application/json" data-config='{{ config_dict | tojson | safe }}'></script>
 

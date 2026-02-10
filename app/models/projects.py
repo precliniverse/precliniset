@@ -55,6 +55,8 @@ class ProjectEthicalApprovalAssociation(db.Model):
 
 class Project(db.Model):
     """Model for Projects."""
+    query_class = None  # Will be set after ProjectQuery is defined
+    
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(20), unique=True, nullable=True, index=True)
     name = db.Column(db.String(150), nullable=False, index=True)
@@ -86,6 +88,11 @@ class Project(db.Model):
 
     def __repr__(self):
         return f'<Project {self.name} (Slug: {self.slug})>'
+
+
+# Import ProjectQuery at the end to avoid circular imports
+from ..queries import ProjectQuery
+Project.query_class = ProjectQuery
 
 
 class ProjectTeamShare(db.Model, ProjectShareMixin):

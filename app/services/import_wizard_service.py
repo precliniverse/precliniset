@@ -149,13 +149,14 @@ class ImportWizardService:
         if animal_id_column not in df.columns:
             return {'valid': False, 'error': f"Column '{animal_id_column}' not found in file."}
 
-        file_animal_ids = set(df[animal_id_column].astype(str).unique())
+        # Normalize file IDs: strip whitespace and convert to string
+        file_animal_ids = set(df[animal_id_column].astype(str).str.strip().unique())
 
         group = db.session.get(ExperimentalGroup, group_id)
         if not group:
             return {'valid': False, 'error': "Experimental Group not found."}
 
-
+        # Normalize DB UIDs: strictly use the string UID field
         valid_animal_ids = {str(a.uid).strip() for a in group.animals}
 
 

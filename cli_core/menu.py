@@ -223,12 +223,32 @@ class InteractiveMenu:
         elif choice == "9":
             console.print("[bold red]WARNING: This generates extensive simulation data.[/bold red]")
             if confirm_action("Proceed?"):
+                if HAS_RICH:
+                    teams = Prompt.ask("Number of teams", default="1")
+                    projects = Prompt.ask("Projects per team", default="1")
+                    groups = Prompt.ask("Groups per project", default="1")
+                    animals = Prompt.ask("Animals per group", default="5")
+                    reps = Prompt.ask("Repetitions per protocol", default="1")
+                    interval = Prompt.ask("Interval in days between repetitions", default="1")
+                else:
+                    teams = input("Number of teams [1]: ").strip() or "1"
+                    projects = input("Projects per team [1]: ").strip() or "1"
+                    groups = input("Groups per project [1]: ").strip() or "1"
+                    animals = input("Animals per group [5]: ").strip() or "5"
+                    reps = input("Repetitions [1]: ").strip() or "1"
+                    interval = input("Interval (days) [1]: ").strip() or "1"
+
                 deployer = DockerDeployer() if self.mode == 'docker' else NativeDeployer()
-                # Populate demo isn't strictly in deployer, but we can access it via Flask CLI
-                # Or invoke utility directly. 
-                # Let's use the CLI command we standardized.
-                deployer = DockerDeployer() if self.mode == 'docker' else NativeDeployer()
-                deployer.run_flask("setup populate-simulation")
+                flask_cmd = (
+                    f"setup populate-simulation "
+                    f"--teams {teams} "
+                    f"--projects {projects} "
+                    f"--groups {groups} "
+                    f"--animals {animals} "
+                    f"--repetitions {reps} "
+                    f"--repetition-interval {interval}"
+                )
+                deployer.run_flask(flask_cmd)
         elif choice == "R":
             if HAS_RICH:
                 tag = Prompt.ask("Enter release tag (e.g. v1.0.0)", default=f"v{time.strftime('%Y.%m.%d')}")

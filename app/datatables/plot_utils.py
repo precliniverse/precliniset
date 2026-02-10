@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from flask import current_app
 from flask_babel import gettext as _  # Use gettext for immediate translation
-
+from flask_babel import lazy_gettext
 
 # --- Helper function for custom column ordering (used by generate_plot) ---
 # If this is used elsewhere (e.g. core_models), consider moving to app/helpers.py
@@ -68,7 +68,7 @@ def generate_plot(df, numerical_param_or_dv, grouping_params, graph_type, start_
         if param_to_check_for_outliers in df_plot.columns and pd.api.types.is_numeric_dtype(df_plot[param_to_check_for_outliers]):
             try:
                 from .analysis_utils import detect_outliers
-                outliers_mask, _ = detect_outliers(df_plot[param_to_check_for_outliers], method=outlier_method, threshold=outlier_threshold)
+                outliers_mask, outlier_info = detect_outliers(df_plot[param_to_check_for_outliers], method=outlier_method, threshold=outlier_threshold)
                 n_outliers_plot = outliers_mask.sum()
                 if n_outliers_plot > 0:
                     excluded_param_name_for_message = ""

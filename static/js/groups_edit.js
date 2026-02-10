@@ -3,7 +3,7 @@
  * Handles logic for creating and editing experimental groups.
  */
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // 1. Load Configuration from the DOM
     const configEl = document.getElementById('group-editor-config');
     if (!configEl) return;
@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteForm = document.getElementById('deleteGroupForm');
 
     if (deleteBtn && deleteForm) {
-        deleteBtn.addEventListener('click', function(e) {
+        deleteBtn.addEventListener('click', function (e) {
             e.preventDefault();
             const message = deleteForm.dataset.confirmMessage || 'Are you sure?';
             if (confirm(message)) {
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateDownloadButton() {
         if (!downloadBtn) return;
-        
+
         // Update button URL based on model selection (for new groups) or keep group download (for existing)
         if (!CONFIG.isEditing) {
             const modelId = $(modelSelect).val();
@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 blindedTh.textContent = "Blinded Group";
                 blindedTh.dataset.fieldName = "blinded_group";
                 headerRow.appendChild(blindedTh);
-                
+
                 // Only show treatment_group if user can view unblinded
                 if (CONFIG.canViewUnblinded) {
                     const treatmentTh = document.createElement('th');
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Logic: Show if editing/viewing AND (not randomized OR not sensitive OR user can view unblinded)
             const shouldShow = !CONFIG.isEditing || !CONFIG.hasRandomization || !field.is_sensitive || CONFIG.canViewUnblinded;
 
-            if (shouldShow && lowFieldName !== 'age_days' && lowFieldName !== 'age (days)' && 
+            if (shouldShow && lowFieldName !== 'age_days' && lowFieldName !== 'age (days)' &&
                 field.name !== 'blinded_group' && field.name !== 'treatment_group') {
                 const th = document.createElement('th');
                 th.textContent = field.name + (field.unit ? ` (${field.unit})` : '');
@@ -185,13 +185,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const actionsCell = document.createElement('td');
         const btnGroup = document.createElement('div');
         btnGroup.className = 'btn-group btn-group-sm';
-        
+
         const duplicateBtn = document.createElement('button');
         duplicateBtn.type = 'button';
         duplicateBtn.className = 'btn btn-outline-primary duplicate-row-btn';
         duplicateBtn.innerHTML = '<i class="fa-solid fa-copy"></i>';
         if (animalData.status === 'dead') duplicateBtn.disabled = true;
-        
+
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'btn btn-outline-danger remove-row-btn';
@@ -235,35 +235,35 @@ document.addEventListener('DOMContentLoaded', function() {
         // Field Cells
         fields.forEach(field => {
             const lowFieldName = field.name.toLowerCase();
-            if (lowFieldName === 'age_days' || lowFieldName === 'age (days)' || 
+            if (lowFieldName === 'age_days' || lowFieldName === 'age (days)' ||
                 field.name === 'blinded_group' || field.name === 'treatment_group') return;
 
             const shouldShow = !CONFIG.isEditing || !CONFIG.hasRandomization || !field.is_sensitive || CONFIG.canViewUnblinded;
-            
+
             if (shouldShow) {
                 const cell = document.createElement('td');
                 const input = document.createElement('input');
-                
+
                 input.type = field.type === 'date' ? 'date' : 'text';
                 input.name = `animal_${rowIndex}_field_${field.name}`;
                 input.className = 'form-control form-control-sm';
-                
+
                 // Try exact match, then lowercase
                 let fieldValue = animalData[field.name];
                 if (fieldValue === undefined || fieldValue === null) {
                     fieldValue = animalData[lowFieldName];
                 }
                 if (fieldValue === undefined || fieldValue === null) fieldValue = field.default_value || '';
-                
+
                 if (field.type === 'date' && fieldValue) {
                     input.value = formatDateToHTMLInput(fieldValue);
                 } else {
                     input.value = fieldValue;
                 }
-                
+
                 if (lowFieldName === 'id' || lowFieldName === 'uid') input.required = true;
                 if (animalData.status === 'dead') input.disabled = true;
-                
+
                 if (field.type === 'category' && field.allowed_values) {
                     input.setAttribute('list', `datalist-${field.name.replace(/\s+/g, '-')}-${rowIndex}`);
                     const datalist = document.createElement('datalist');
@@ -340,19 +340,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     updateTableHeader(data.fields);
                     tableBody.innerHTML = '';
-                    
+
                     // Populate existing data if available
                     if (CONFIG.existingAnimalData && CONFIG.existingAnimalData.length > 0 && CONFIG.isEditing) {
                         CONFIG.existingAnimalData.forEach((animal, index) => {
                             addAnimalRow(animal, index, data.fields);
                         });
                     }
-                    
+
                     createAddButton(data.fields);
                     updateDownloadButton();
-                    
+
                     // Store fields for duplication logic
-                    CONFIG.currentModelFields = data.fields; 
+                    CONFIG.currentModelFields = data.fields;
                 } else {
                     alert("Error: " + data.error);
                 }
@@ -378,7 +378,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return data.text.split(' - ')[0];
         },
         templateResult: function (data) {
-             return data.text;
+            return data.text;
         }
     });
 
@@ -437,7 +437,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const fullText = ea.text;
                     // Use full text for the option so it shows in the dropdown list
                     const newOption = new Option(fullText, ea.id, false, false);
-                    newOption.title = fullText; 
+                    newOption.title = fullText;
                     $(eaSelect).append(newOption);
                 });
 
@@ -462,13 +462,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Trigger for prefilled projects on new groups
         updateEADropdown(CONFIG.prefilledProjectId);
     }
-    
+
     if ($(modelSelect).val() && $(modelSelect).val() !== '0') {
         handleModelChange();
     }
 
     // Add change listener for model selection
-    $(modelSelect).on('change', function() {
+    $(modelSelect).on('change', function () {
         handleModelChange();
     });
 
@@ -487,52 +487,43 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function calculateRowAge(row) {
-        // Find date_of_birth input: match exactly
+        // Look for the field ending in _date_of_birth
         const dobInput = row.querySelector('input[name*="_field_date_of_birth"]');
         const ageDisplay = row.querySelector('.age-display');
-        if (!dobInput || !ageDisplay) return;
 
-        const dobValue = dobInput.value;
-        if (!dobValue) {
-            ageDisplay.textContent = '-';
-            return;
-        }
+        if (dobInput && dobInput.value) {
+            const dob = new Date(dobInput.value);
+            const today = new Date();
+            const diff = Math.floor((today - dob) / (1000 * 60 * 60 * 24));
 
-        const dob = new Date(dobValue);
-        const today = new Date();
-        
-        // Use death date if deceased
-        // Correct lookup for death-info (class name, not data attribute alone)
-        const deathInfo = row.querySelector('.death-info') || row.querySelector('.death-info-container');
-        let endDate = today;
-        if (deathInfo && deathInfo.dataset.deathDate) {
-            endDate = new Date(deathInfo.dataset.deathDate);
-        }
-
-        const diffTime = endDate - dob;
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (!isNaN(diffDays) && diffDays >= 0) {
-            const weeks = Math.floor(diffDays / 7);
-            ageDisplay.textContent = `${diffDays} days (${weeks} weeks)`;
+            if (!isNaN(diff) && diff >= 0) {
+                const weeks = Math.floor(diff / 7);
+                ageDisplay.textContent = `${diff} days (${weeks} weeks)`;
+            } else {
+                ageDisplay.textContent = '-';
+            }
         } else {
-            ageDisplay.textContent = '-';
+            if (ageDisplay) ageDisplay.textContent = '-';
         }
     }
 
     // Import Button
     const importBtn = document.getElementById('import-xlsx-btn');
     if (importBtn) {
-        importBtn.addEventListener('click', function() {
+        importBtn.addEventListener('click', function () {
             const fileInput = document.getElementById('xlsx_upload');
+
             if (!fileInput.files.length) {
-                showErrorModal("Please select an XLSX file to import.");
+                alert("Please select an XLSX file to import.");
                 return;
             }
+
+            // Validation of the rest of the form (Group Name, etc.)
             if (validateForm()) {
-                if (CONFIG.isEditing) {
-                    $('#saveConfirmationModal').modal('show');
-                } else {
+                // For imports, we usually want to confirm because it overwrites the table
+                if (confirm("Importing this file will replace or update the current animal list. Continue?")) {
+                    // We call performAjaxSave. The FormData(groupForm) will 
+                    // automatically include the file from the 'xlsx_upload' input.
                     performAjaxSave(false);
                 }
             }
@@ -547,12 +538,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 reindexTableRows();
                 updateDownloadButton();
             }
-        } 
+        }
         // Handle Duplicate
         else if (e.target.closest('.duplicate-row-btn')) {
             const sourceRow = e.target.closest('tr');
             const inputs = sourceRow.querySelectorAll('input');
-            
+
             // 1. Extract data from the source row
             let rowData = {};
             inputs.forEach(input => {
@@ -574,12 +565,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // We need to pass the current model fields to ensure columns match
             // If we loaded via handleModelChange, we have them. 
             // If page just loaded, we need to scrape headers or use the config.
-            
+
             // Fallback: If we don't have the fields list in memory, we can't easily use addAnimalRow
             // BUT, we can just clone the DOM node like the old code did, which is safer for now.
-            
+
             const newRow = sourceRow.cloneNode(true);
-            
+
             // Reset the uid field in the clone
             const idInput = newRow.querySelector('input[name*="_field_uid"]');
             if (idInput) idInput.value = '';
@@ -633,7 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Save Button
     if (saveBtn) {
-        saveBtn.addEventListener('click', function(e) {
+        saveBtn.addEventListener('click', function (e) {
             e.preventDefault();
             if (validateForm()) {
                 // If editing, show confirmation modal about updating datatables
@@ -650,7 +641,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Confirmation modal logic
     const confirmSaveBtn = document.getElementById('confirm-save-group');
     if (confirmSaveBtn) {
-        confirmSaveBtn.addEventListener('click', function() {
+        confirmSaveBtn.addEventListener('click', function () {
             const dontUpdate = document.getElementById('dont-update-datatables').checked;
             performAjaxSave(dontUpdate);
         });
@@ -665,7 +656,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (allowNewCategories) {
             formData.append('allow_new_categories', 'true');
         }
-        
+
         // Collect dynamically added animal data
         const animalData = [];
         animalTable.querySelectorAll('tbody tr').forEach(row => {
@@ -693,38 +684,38 @@ document.addEventListener('DOMContentLoaded', function() {
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                if (!CONFIG.isEditing && data.redirect_url) {
-                    window.location.href = data.redirect_url;
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (!CONFIG.isEditing && data.redirect_url) {
+                        window.location.href = data.redirect_url;
+                    } else {
+                        window.location.reload();
+                    }
+                } else if (data.type === 'new_categories') {
+                    handleNewCategoriesDiscovered(data.data, dontUpdateDataTables);
                 } else {
-                    window.location.reload();
+                    showErrorModal(data.message);
                 }
-            } else if (data.type === 'new_categories') {
-                handleNewCategoriesDiscovered(data.data, dontUpdateDataTables);
-            } else {
-                showErrorModal(data.message);
-            }
-            // Hide modals
-            ['saveConfirmationModal', 'newCategoryModal'].forEach(id => {
-                const modalEl = document.getElementById(id);
-                if (modalEl) {
-                    const inst = bootstrap.Modal.getInstance(modalEl);
-                    if (inst) inst.hide();
-                }
+                // Hide modals
+                ['saveConfirmationModal', 'newCategoryModal'].forEach(id => {
+                    const modalEl = document.getElementById(id);
+                    if (modalEl) {
+                        const inst = bootstrap.Modal.getInstance(modalEl);
+                        if (inst) inst.hide();
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error during AJAX save:', error);
+                showErrorModal(CONFIG.i18n.ajaxError || "An error occurred while saving.");
             });
-        })
-        .catch(error => {
-            console.error('Error during AJAX save:', error);
-            showErrorModal(CONFIG.i18n.ajaxError || "An error occurred while saving.");
-        });
     }
 
     function handleNewCategoriesDiscovered(categoriesMap, dontUpdateDataTables) {
         const listContainer = document.getElementById('new-categories-list');
         listContainer.innerHTML = '';
-        
+
         // Map of analyteId -> analyteName for better display
         // We can get this from the table headers or just use IDs for now
         // Let's scrape the table headers for a quick map
@@ -751,11 +742,11 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             confirmBtn.style.display = 'inline-block';
             modalBody.textContent = "The following new values were found for categorical fields. Would you like to add them to the system and proceed?";
-            
+
             // Setup confirm button
             const newConfirmBtn = confirmBtn.cloneNode(true);
             confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-            
+
             newConfirmBtn.addEventListener('click', () => {
                 performAjaxSave(dontUpdateDataTables, true);
             });
@@ -964,7 +955,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Apply to Selected Button Logic
                     const applyToSelectedBtn = modalEl.querySelector('#applyToSelectedBtn');
                     if (applyToSelectedBtn) {
-                        applyToSelectedBtn.addEventListener('click', function() {
+                        applyToSelectedBtn.addEventListener('click', function () {
                             const globalReason = modalEl.querySelector('#global_euthanasia_reason').value;
                             const globalSeverity = modalEl.querySelector('#global_severity').value;
 
@@ -995,7 +986,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     // Ensure modal is properly disposed when hidden
-                    modalEl.addEventListener('hidden.bs.modal', function() {
+                    modalEl.addEventListener('hidden.bs.modal', function () {
                         // Reset form and clear dynamic content
                         const form = modalEl.querySelector('#declareDeadForm');
                         if (form) form.reset();
@@ -1188,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (showConcatenationBtn && concatenationCard) {
-        showConcatenationBtn.addEventListener('click', function() {
+        showConcatenationBtn.addEventListener('click', function () {
             concatenationCard.style.display = 'block';
             showConcatenationBtn.style.display = 'none';
             loadAnalytes();
@@ -1198,7 +1189,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Hide concatenation card
     const toggleConcatenationBtn = document.getElementById('toggle-concatenation-btn');
     if (toggleConcatenationBtn) {
-        toggleConcatenationBtn.addEventListener('click', function() {
+        toggleConcatenationBtn.addEventListener('click', function () {
             concatenationCard.style.display = 'none';
             if (showConcatenationBtn) showConcatenationBtn.style.display = 'inline-block';
         });
@@ -1237,7 +1228,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load concatenated data
     const loadConcatenationBtn = document.getElementById('load-concatenation-btn');
     if (loadConcatenationBtn) {
-        loadConcatenationBtn.addEventListener('click', function() {
+        loadConcatenationBtn.addEventListener('click', function () {
             const selectedAnalyteIds = Array.from(document.getElementById('analyte-selector').selectedOptions).map(opt => opt.value);
             if (selectedAnalyteIds.length === 0) {
                 alert('Please select at least one analyte.');
@@ -1301,7 +1292,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Run global measurement
     const runGlobalMeasurementBtn = document.getElementById('run-global-measurement-btn');
     if (runGlobalMeasurementBtn) {
-        runGlobalMeasurementBtn.addEventListener('click', function() {
+        runGlobalMeasurementBtn.addEventListener('click', function () {
             const analyteName = document.getElementById('global-analyte-select').value;
             const measurementType = document.getElementById('measurement-type-select').value;
             const value = parseFloat(document.getElementById('measurement-value').value);
@@ -1371,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generate graph
     const generateGraphBtn = document.getElementById('generate-graph-btn');
     if (generateGraphBtn) {
-        generateGraphBtn.addEventListener('click', function() {
+        generateGraphBtn.addEventListener('click', function () {
             const analyteName = document.getElementById('graph-analyte-select').value;
             if (!analyteName) {
                 alert('Please select an analyte.');
@@ -1418,7 +1409,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: {
                         tooltip: {
                             callbacks: {
-                                title: function(context) {
+                                title: function (context) {
                                     return `Animal: ${context[0].dataset.label}`;
                                 }
                             }
@@ -1460,7 +1451,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Export concatenated data
     const exportConcatenatedBtn = document.getElementById('export-concatenated-btn');
     if (exportConcatenatedBtn) {
-        exportConcatenatedBtn.addEventListener('click', function() {
+        exportConcatenatedBtn.addEventListener('click', function () {
             // Send concatenated data to backend for XLSX generation
             fetch(`/groups/export_concatenated/${CONFIG.groupId}`, {
                 method: 'POST',
@@ -1470,21 +1461,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({ concatenated_data: concatenatedData })
             })
-            .then(response => response.blob())
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `concatenated_analytes_${CONFIG.groupId}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            })
-            .catch(err => {
-                console.error('Export error:', err);
-                alert('Export failed.');
-            });
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `concatenated_analytes_${CONFIG.groupId}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                })
+                .catch(err => {
+                    console.error('Export error:', err);
+                    alert('Export failed.');
+                });
         });
     }
 
@@ -1518,7 +1509,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const minimizeDatatableSelect = document.getElementById('minimize-datatable-select');
         const minimizeAnalyteDtSelect = document.getElementById('minimize-analyte-dt');
         const randomizationSummaryDiv = document.getElementById('randomization-summary');
-        
+
         const animalModelsDataEl = document.getElementById('animal-models-data');
         const animalModelsData = animalModelsDataEl ? JSON.parse(animalModelsDataEl.textContent) : [];
         const csrfToken = document.querySelector('input[name="csrf_token"]')?.value;
@@ -1536,7 +1527,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const unitType = randomizeBySelect.value;
             const animalData = CONFIG.existingAnimalData.filter(animal => animal.status !== 'dead');
             let count = 0;
-            
+
             if (allowSplittingCheckbox.checked || unitType === '__individual__') {
                 count = animalData.length;
             } else {
@@ -1552,7 +1543,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             totalUnitsAvailableSpan.textContent = count;
             totalUnitsAvailableStep2Span.textContent = count;
-            
+
             if (unitType === '__individual__') {
                 allowSplittingCheckbox.checked = false;
                 allowSplittingCheckbox.disabled = true;
@@ -1703,7 +1694,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // --- Event Listeners ---
         randModalEl.addEventListener('show.bs.modal', () => {
             showRandStep('step1');
-            
+
             const selectedModelId = $(modelSelect).val();
             const selectedModel = animalModelsData.find(m => String(m.id) === selectedModelId);
 
@@ -1726,7 +1717,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
             }
-            
+
             updateAvailableUnits();
             treatmentGroupsContainer.innerHTML = '';
             addTreatmentGroup('', 'Group A', 0);
@@ -1748,7 +1739,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        minimizeSourceSelect.addEventListener('change', function() {
+        minimizeSourceSelect.addEventListener('change', function () {
             const isAM = this.value === 'animal_model';
             minimizeAnimalModelParams.style.display = isAM ? 'block' : 'none';
             minimizeDatatableParams.style.display = isAM ? 'none' : 'block';
@@ -1757,7 +1748,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        minimizeDatatableSelect.addEventListener('change', function() {
+        minimizeDatatableSelect.addEventListener('change', function () {
             const dtId = this.value;
             minimizeAnalyteDtSelect.innerHTML = '';
             if (dtId) {
@@ -1773,7 +1764,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Navigation
         document.getElementById('rand-next-to-step-2')?.addEventListener('click', () => showRandStep('step2'));
         document.getElementById('rand-back-to-step-1')?.addEventListener('click', () => showRandStep('step1'));
-        
+
         document.getElementById('rand-next-to-step-3')?.addEventListener('click', () => {
             const totalAssigned = parseInt(totalUnitsAssignedSpan.textContent, 10);
             const totalAvailable = parseInt(totalUnitsAvailableStep2Span.textContent, 10);
@@ -1784,7 +1775,7 @@ document.addEventListener('DOMContentLoaded', function() {
             showRandStep('step3');
         });
         document.getElementById('rand-back-to-step-2')?.addEventListener('click', () => showRandStep('step2'));
-        
+
         document.getElementById('rand-next-to-step-4')?.addEventListener('click', () => {
             let summary = [];
             let unitText;
@@ -1794,7 +1785,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 unitText = `<strong>${randomizeBySelect.options[randomizeBySelect.selectedIndex].text}</strong>`;
             }
-            
+
             summary.push(`You are randomizing <strong>${totalUnitsAvailableStep2Span.textContent}</strong> ${unitText}.`);
 
             if (stratificationFactorSelect.value) {
@@ -1812,14 +1803,14 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 summary.push(`Groups will be assigned using a <strong>Simple</strong> randomization method.`);
             }
-            
+
             randomizationSummaryDiv.innerHTML = summary.join('<br>');
             showRandStep('step4');
         });
         document.getElementById('rand-back-to-step-3')?.addEventListener('click', () => showRandStep('step3'));
 
         // Final confirmation
-        document.getElementById('rand-confirm-btn')?.addEventListener('click', function() {
+        document.getElementById('rand-confirm-btn')?.addEventListener('click', function () {
             randomizationState = {
                 randomization_unit: randomizeBySelect.value,
                 allow_splitting: allowSplittingCheckbox.checked,
@@ -1855,43 +1846,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                 body: JSON.stringify(randomizationState)
             })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    fetch(CONFIG.urls.getRandomizationSummary)
-                        .then(res => res.json())
-                        .then(summaryData => {
-                            populateSummaryModal(summaryData);
-                
-                            const randModal = bootstrap.Modal.getInstance(randModalEl);
-                            randModal.hide();
-                            const summaryModal = new bootstrap.Modal(document.getElementById('randomizationSummaryModal'));
-                            summaryModal.show();
-                        })
-                        .catch(error => {
-                            console.error('Error fetching randomization summary:', error);
-                            alert("Randomization was successful, but failed to load the summary. Please reload the page to see the results.");
-                            window.location.reload();
-                        });
-                } else {
-                    alert("Error: " + data.message);
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        fetch(CONFIG.urls.getRandomizationSummary)
+                            .then(res => res.json())
+                            .then(summaryData => {
+                                populateSummaryModal(summaryData);
+
+                                const randModal = bootstrap.Modal.getInstance(randModalEl);
+                                randModal.hide();
+                                const summaryModal = new bootstrap.Modal(document.getElementById('randomizationSummaryModal'));
+                                summaryModal.show();
+                            })
+                            .catch(error => {
+                                console.error('Error fetching randomization summary:', error);
+                                alert("Randomization was successful, but failed to load the summary. Please reload the page to see the results.");
+                                window.location.reload();
+                            });
+                    } else {
+                        alert("Error: " + data.message);
+                        this.disabled = false;
+                        this.innerHTML = `Confirm & Randomize`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during randomization:', error);
+                    alert("An unexpected error occurred during randomization.");
                     this.disabled = false;
                     this.innerHTML = `Confirm & Randomize`;
-                }
-            })
-            .catch(error => {
-                console.error('Error during randomization:', error);
-                alert("An unexpected error occurred during randomization.");
-                this.disabled = false;
-                this.innerHTML = `Confirm & Randomize`;
-            });
+                });
         });
     }
 
     // --- Randomization UI Actions ---
     const viewSummaryBtn = document.getElementById('view-randomization-summary-btn-dropdown');
     if (viewSummaryBtn) {
-        viewSummaryBtn.addEventListener('click', function() {
+        viewSummaryBtn.addEventListener('click', function () {
             fetch(CONFIG.urls.getRandomizationSummary)
                 .then(res => res.json())
                 .then(summaryData => {
@@ -1905,7 +1896,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const unblindBtn = document.getElementById('unblind-randomization-btn-dropdown');
     if (unblindBtn) {
-        unblindBtn.addEventListener('click', function() {
+        unblindBtn.addEventListener('click', function () {
             if (confirm("Are you sure you want to unblind this group? This will keep the randomization and groups, but make assignments visible.")) {
                 fetch(CONFIG.urls.unblindGroup, {
                     method: 'POST',
@@ -1920,7 +1911,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const deleteRandomizationBtn = document.getElementById('delete-randomization-btn-dropdown') || document.getElementById('delete-randomization-btn');
     if (deleteRandomizationBtn) {
-        deleteRandomizationBtn.addEventListener('click', function() {
+        deleteRandomizationBtn.addEventListener('click', function () {
             if (confirm("Are you sure you want to delete the randomization? This will remove randomization details and assigned groups, reverting to a pre-randomized state.")) {
                 fetch(CONFIG.urls.deleteRandomization, {
                     method: 'POST',

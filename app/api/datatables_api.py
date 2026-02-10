@@ -1,13 +1,17 @@
 # app/api/datatables_api.py
+from datetime import datetime
 from flask import g, request, render_template_string, current_app, url_for
 from flask_restx import Resource, fields
+from pydantic import ValidationError
 
 from app.extensions import db
-from app.models import DataTable, ExperimentalGroup, ExperimentDataRow, ProtocolModel, Project
+from app.models import DataTable, ExperimentalGroup, ExperimentDataRow, ProtocolModel, Project, User
 from app.permissions import (can_create_datatable_for_group,
                              check_datatable_permission,
                              check_group_permission)
 from app.services.datatable_service import DataTableService
+from app.services.tm_connector import TrainingManagerConnector
+from app.schemas.datatable import DataTableMoveSchema, DataTableReassignSchema
 
 from . import api
 from .auth import token_required
@@ -16,6 +20,18 @@ ns = api.namespace('groups', description='Experimental Group and DataTable opera
 server_side_ns = api.namespace('server_side_datatables', description='Server-side DataTables endpoints for DataTables')
 
 datatable_service = DataTableService()
+
+# Response models for RPC-style endpoints
+datatable_move_response_model = ns.model('DataTableMoveResponse', {
+    'success': fields.Boolean,
+    'message': fields.String
+})
+
+datatable_reassign_response_model = ns.model('DataTableReassignResponse', {
+    'success': fields.Boolean,
+    'message': fields.String,
+    'warning': fields.String
+})
 
 group_for_datatable_model = ns.model('GroupForDataTable', {
     'model_id': fields.Integer,
@@ -279,3 +295,120 @@ class ServerSideDataTableList(Resource):
             "recordsFiltered": result['filtered_records'],
             "data": data
         }
+
+
+# ============================================================================
+# RPC-style endpoints migrated from datatables/routes_crud.py
+# ============================================================================
+
+@ns.route('/datatables/<int:datatable_id>/move')
+class DataTableMove(Resource):
+    """Move a DataTable to a new date.
+    
+    Migrated from datatables/routes_crud.py move_datatable.
+    Updates the date of a DataTable and syncs with workplan events if applicable.
+    """
+    decorators = [token_required]
+    
+    @ns.doc('move_datatable')
+    @ns.expect(ns.model('DataTableMovePayload', {'new_date': fields.String(required=True)}))
+    @ns.marshal_with(datatable_move_response_model)
+    def post(self, datatable_id):
+        """Move a DataTable to a new date."""
+        dt = db.session.get(DataTable, datatable_id)
+        if not dt:
+            return {'success': False, 'message': 'DataTable not found'}, 404
+        if not check_datatable_permission(dt, 'edit_datatable'):
+            return {'success': False, 'message': 'Permission denied'}, 403
+        
+        data = request.get_json()
+        
+        # Validate with Pydantic schema
+        try:
+            validated_data = DataTableMoveSchema(**data)
+        except ValidationError as e:
+            return {'success': False, 'message': str(e)}, 400
+        
+        new_date_str = validated_data.new_date
+        
+        try:
+            new_date_obj = datetime.strptime(new_date_str, '%Y-%m-%d').date()
+            new_date = new_date_obj.strftime('%Y-%m-%d')
+            dt.date = new_date
+            
+            # If linked to a workplan event, update the event offset to keep calendar in sync
+            if dt.generated_from_event and dt.generated_from_event.workplan and dt.generated_from_event.workplan.study_start_date:
+                wp_start_date = dt.generated_from_event.workplan.study_start_date
+                if isinstance(wp_start_date, datetime):
+                    wp_start_date = wp_start_date.date()
+                    
+                delta = new_date_obj - wp_start_date
+                dt.generated_from_event.offset_days = delta.days
+
+            db.session.commit()
+            return {'success': True, 'message': 'DataTable date updated.'}
+        except ValueError:
+            return {'success': False, 'message': 'Invalid date format.'}, 400
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error moving datatable {datatable_id}: {e}", exc_info=True)
+            return {'success': False, 'message': str(e)}, 500
+
+
+@ns.route('/datatables/<int:datatable_id>/reassign')
+class DataTableReassign(Resource):
+    """Reassign a DataTable to a different user.
+    
+    Migrated from datatables/routes_crud.py reassign_datatable.
+    Updates the assigned user for a DataTable.
+    """
+    decorators = [token_required]
+    
+    @ns.doc('reassign_datatable')
+    @ns.expect(ns.model('DataTableReassignPayload', {'assignee_id': fields.Integer}))
+    @ns.marshal_with(datatable_reassign_response_model)
+    def post(self, datatable_id):
+        """Reassign a DataTable to a user."""
+        dt = db.session.get(DataTable, datatable_id)
+        if not dt:
+            return {'success': False, 'message': 'DataTable not found'}, 404
+        if not check_datatable_permission(dt, 'edit_datatable'):
+            return {'success': False, 'message': 'Permission denied'}, 403
+        
+        data = request.get_json()
+        
+        # Validate with Pydantic schema
+        try:
+            validated_data = DataTableReassignSchema(**data)
+        except ValidationError as e:
+            return {'success': False, 'message': str(e)}, 400
+        
+        new_assignee_id = validated_data.assignee_id
+        
+        try:
+            dt.assigned_to_id = int(new_assignee_id) if new_assignee_id else None
+            
+            warning_message = None
+            # Skill Validation Integration (Reassign API)
+            if dt.assigned_to_id and dt.protocol.external_skill_ids:
+                 user = db.session.get(User, dt.assigned_to_id)
+                 if user:
+                    try:
+                        connector = TrainingManagerConnector()
+                        skill_ids = dt.protocol.external_skill_ids
+                        if skill_ids:
+                            result = connector.check_competency([user.email], skill_ids)
+                            if result and user.email in result:
+                                user_result = result[user.email]
+                                if not user_result.get('valid', True):
+                                    details = user_result.get('details', [])
+                                    warning_message = f"Warning: The user '{user.email}' may not be qualified. Issues: {', '.join(details)}"
+                    except Exception as e:
+                        current_app.logger.error(f"Error validating skills on reassign: {e}")
+
+            db.session.commit()
+            return {'success': True, 'message': 'Assignee updated.', 'warning': warning_message}
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error reassigning datatable {datatable_id}: {e}", exc_info=True)
+            return {'success': False, 'message': str(e)}, 500

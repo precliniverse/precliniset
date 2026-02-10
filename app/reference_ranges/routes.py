@@ -274,13 +274,18 @@ def download_reference_range_data(range_id):
         experiment_row_map[er.data_table_id][er.row_index] = er
 
     for group_id_str, animal_indices in ref_range.included_animals.items():
-        # Get animals sorted by ID to maintain index compatibility
-        animals = sorted(group.animals, key=lambda a: a.id)
-        if not group or not animals:
-            continue
+        group = group_map.get(group_id_str)
+        if not group: continue
 
+        # STRICT SORTING: Must match the index stored in JSON
+        # Ideally we would store Animal IDs, but for legacy compat we strictly sort by PK
+        animals = sorted(group.animals, key=lambda a: a.id)
+        
         for animal_idx in animal_indices:
-            animal_info = animals[animal_idx].to_dict()
+            if animal_idx >= len(animals): continue # Safety check
+            
+            animal_obj = animals[animal_idx]
+            animal_info = animal_obj.to_dict()
             
             # Base row with animal and group/project info
             base_row = {

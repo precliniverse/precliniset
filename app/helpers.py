@@ -94,36 +94,12 @@ def get_ordered_analytes_for_model(model_id):
     final_ordered_analytes = []
     seen_analyte_names = set()
 
-    # uid and date_of_birth are mandatory and should come first
-    priority_field_names = ['uid', 'date_of_birth']
-    
-    for name in priority_field_names:
-        analyte = next((a for a in model_analytes_ordered_by_association if a.name == name), None)
-        if analyte and name not in seen_analyte_names:
-            final_ordered_analytes.append(analyte)
-            seen_analyte_names.add(name)
-
-    # Add other association-defined analytes
+    # Add association-defined analytes
     for analyte in model_analytes_ordered_by_association:
         if analyte.name not in seen_analyte_names:
             final_ordered_analytes.append(analyte)
             seen_analyte_names.add(analyte.name)
             
-    mock_analytes = {
-        'Death Date': Analyte(name='Death Date', data_type=AnalyteDataType.DATE, description='Date animal was declared dead'),
-    }
-
-    # uid and date_of_birth must exist as analytes for validation logic
-    if 'uid' not in seen_analyte_names:
-        final_ordered_analytes.insert(0, Analyte(name='uid', data_type=AnalyteDataType.TEXT, description='Unique animal identifier', is_mandatory=True))
-        seen_analyte_names.add('uid')
-    
-    if 'date_of_birth' not in seen_analyte_names:
-        # Insert after uid
-        idx = 1 if final_ordered_analytes[0].name == 'uid' else 0
-        final_ordered_analytes.insert(idx, Analyte(name='date_of_birth', data_type=AnalyteDataType.DATE, description="Animal's date of birth", is_mandatory=True))
-        seen_analyte_names.add('date_of_birth')
-
     # Add any other analytes from the model not already included
     for analyte in model.analytes:
         low_name = analyte.name.lower()
@@ -146,8 +122,13 @@ def get_ordered_columns_for_single_datatable_download(animal_model_field_defs, p
 
     if animal_model_field_defs:
         for field_def in animal_model_field_defs:
-            if isinstance(field_def, (list, tuple)) and len(field_def) > 0:
+            field_name = None
+            if hasattr(field_def, 'name'):
+                field_name = field_def.name
+            elif isinstance(field_def, (list, tuple)) and len(field_def) > 0:
                 field_name = field_def[0]
+            
+            if field_name:
                 if field_name not in {'uid', 'id', 'ID', 'display_id'}: # Exclude technical UIDs and already added display_id
                     animal_fields_temp_ordered.append(field_name)
 
@@ -162,8 +143,13 @@ def get_ordered_columns_for_single_datatable_download(animal_model_field_defs, p
 
     if protocol_model_field_defs:
         for field_def in protocol_model_field_defs:
-            if isinstance(field_def, (list, tuple)) and len(field_def) > 0:
+            field_name = None
+            if hasattr(field_def, 'name'):
+                field_name = field_def.name
+            elif isinstance(field_def, (list, tuple)) and len(field_def) > 0:
                 field_name = field_def[0]
+
+            if field_name:
                 if field_name not in seen_columns:
                     ordered_columns.append(field_name)
                     seen_columns.add(field_name)
@@ -212,7 +198,7 @@ def validate_and_convert(value, analyte_obj, field_name, row_identifier=None):
             return value_str
         elif analyte_obj.data_type == AnalyteDataType.CATEGORY:
             if analyte_obj.allowed_values:
-                allowed_list = [v.strip() for v in analyte.allowed_values.split(';')]
+                allowed_list = [v.strip() for v in analyte_obj.allowed_values.split(';')]
                 if value_str not in allowed_list:
                     raise ValueError(
                         f"Value '{original_value}' for field '{field_name}' is not in the allowed list: "
@@ -318,15 +304,26 @@ def generate_xlsx_template(analytes, base_fields=None):
     ws = wb.active
     
     # Header logic
-    if base_fields:
-        headers = base_fields
-    else:
-        headers = [a.name for a in analytes]
+    headers = ['uid', 'ID'] # uid est technique, ID est métier
+    seen_headers = {'uid', 'id', 'display_id'}
+    
+    source_fields = base_fields or [a.name for a in analytes]
+    for f in source_fields:
+        low_f = f.lower()
+        if low_f not in seen_headers:
+            headers.append(f)
+            seen_headers.add(low_f)
     
     ws.append(headers)
+    
+    # On masque la colonne A (uid) pour ne pas perturber l'utilisateur
+    ws.column_dimensions['A'].hidden = True
 
     # Create a mapping for quick lookup during validation setup
+    # We map both 'ID' and 'uid' to the analyte if it exists
     analyte_map = {a.name: a for a in analytes}
+    if 'uid' in analyte_map:
+        analyte_map['ID'] = analyte_map['uid']
 
     for col_idx, field_name in enumerate(headers, 1):
         col_letter = openpyxl.utils.get_column_letter(col_idx)
@@ -343,7 +340,8 @@ def generate_xlsx_template(analytes, base_fields=None):
             comment_lines.append(f"Unit: {analyte.unit}")
 
         if analyte.data_type == AnalyteDataType.CATEGORY and analyte.allowed_values:
-            allowed_list = [v.strip() for v in analyte.allowed_values.split(';')]
+            allowed_list = [v.strip() for v in analyte.allowed_values.split(';') if v.strip()]
+            # FIX: openpyxl wants a comma regardless of Excel locale
             formula = f'"{",".join(allowed_list)}"'
             dv = DataValidation(type="list", formula1=formula, allow_blank=True)
             ws.add_data_validation(dv)

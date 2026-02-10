@@ -2,10 +2,34 @@
 {% extends "base.html" %}
 {% import "datatables/analysis/_macros.html" as macros %}
 
-{% block title %}{{ _('Analysis') }}{% if data_table %} - {{ data_table.group.name }} - {{ data_table.protocol.name }}{% endif %}{% endblock %}
+{% block title %}{{ _('Analysis') }}{% if data_table %} - {{ data_table.group.name }} - {{ data_table.protocol.name }}{%
+endif %}{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
+{# Alpine.js Config Container #}
+{% set numerical_json = numerical_columns | tojson | safe %}
+{% set categorical_json = categorical_columns | tojson | safe %}
+<div id="analysis-config" data-form-data='{{ form_data | tojson | safe }}' data-numerical-columns='{{ numerical_json }}'
+    data-categorical-columns='{{ categorical_json }}' data-numerical-debug='{{ numerical_columns | list | length }}'
+    data-categorical-debug='{{ categorical_columns | list | length }}' style="display: none;">
+</div>
+
+<script nonce="{{ csp_nonce }}">
+    window.CONFIG = {
+        datatableId: {{ data_table.id if data_table else 'null' }},
+    analysisStage: '{{ analysis_stage }}',
+        formData: {{ form_data | tojson | safe }},
+    urls: {
+        analysisStatus: "{{ url_for('datatables.analysis_status', task_id='TASK_ID') }}",
+            availableRanges: "{{ url_for('reference_ranges.available_reference_ranges', datatable_id=data_table.id) if data_table else '' }}"
+    },
+    numericalColumns: {{ numerical_json }},
+    categoricalColumns: {{ categorical_json }}
+    };
+</script>
+
+<div class="container-fluid py-4" x-data="analysisManager()" x-cloak
+    data-has-analysis-results="{% if analysis_results %}true{% else %}false{% endif %}">
     {# Page Header #}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -31,9 +55,6 @@
             <h1 class="h3 mb-0">{{ _('Analysis') }}</h1>
             {% endif %}
         </div>
-        <div>
-            {# <span class="badge bg-primary">{{ data_table.status.value }}</span> #}
-        </div>
     </div>
 
     {# Main Form #}
@@ -46,46 +67,21 @@
         {% endfor %}
         {% endif %}
 
+        {# Global Stage Input (Fixes Step 2 loop loop) #}
+        <input type="hidden" name="analysis_stage" id="analysis_stage" value="{{ analysis_stage }}">
+
         {# Partials #}
         {% include "datatables/analysis/_form_stage1.html" %}
-
         {% include "datatables/analysis/_form_stage2.html" %}
-
         {% include "datatables/analysis/_results_stage3.html" %}
     </form>
 </div>
-
-{# Hidden configurations passed to JS #}
-<script nonce="{{ csp_nonce }}">
-    const CONFIG = {
-        datatableId: {{ data_table.id if data_table else 'null' }},
-        analysisStage: '{{ analysis_stage }}',
-        categoricalColumns: {{ categorical_columns | tojson }},
-        numericalColumns: {{ numerical_columns | tojson }},
-        columnTypes: {{ column_types | tojson }},
-        formData: {{ form_data | tojson }},
-        urls: {
-            performAnalysisTask: "{{ url_for('datatables.analyze_datatable', datatable_id=data_table.id) if data_table else url_for('datatables.analyze_selected_datatables') }}",
-            analysisStatus: "{{ url_for('datatables.analysis_status', task_id='TASK_ID') }}",
-            availableRanges: "{{ url_for('reference_ranges.available_reference_ranges', datatable_id=data_table.id) if data_table else '' }}"
-        },
-        i18n: {
-            selectGrouping: "{{ _('Select grouping parameter...') }}",
-            noSplit: "{{ _('Do not split analysis') }}",
-            analyzingString: "{{ _('Analyzing...') }}",
-            exporting: "{{ _('Exporting...') }}",
-            errorString: "{{ _('Error') }}",
-            confirmReset: "{{ _('Reset analysis selection?') }}"
-        }
-    };
-</script>
 {% endblock %}
 
 {% block scripts %}
-{# New Modular Scripts #}
-<script src="{{ url_for('static', filename='js/analysis/ui_interactions.js') }}?v=42" nonce="{{ csp_nonce }}"></script>
-<script src="{{ url_for('static', filename='js/analysis/plots.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+{# Alpine.js Components loaded in base.html #}
 <script src="{{ url_for('static', filename='js/analysis/api.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/analysis/manager.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='js/analysis/plots.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
 <script src="{{ url_for('static', filename='js/analysis/export.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
-<script src="{{ url_for('static', filename='js/analysis/main.js') }}?v=1" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

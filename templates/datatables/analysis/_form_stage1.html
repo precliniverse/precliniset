@@ -1,151 +1,250 @@
 {# templates/datatables/analysis/_form_stage1.html #}
-<div id="initial-selection-stage" {% if analysis_stage !='initial_selection' %}style="display: none;" {% endif %}>
+{# Alpine.js Refactored Version - Uses parent analysisManager component #}
+{# Use x-show instead of x-if to avoid template nesting issues #}
+<div id="initial-selection-stage" x-show="currentStage === 'initial_selection'" style="display: none;" x-transition>
     <div class="row mb-4 justify-content-center">
-        <div class="col-md-9 col-lg-8"> {# Increased width for better layout #}
+        <div class="col-md-9 col-lg-8">
             <div class="card shadow-sm">
-                <div class="card-header bg-primary-subtle text-primary-emphasis">{{ _('Step 1: Select Parameters & Design') }}</div>
-                <input type="hidden" name="analysis_stage" id="analysis_stage" value="propose_workflow">
+                <div class="card-header bg-primary-subtle text-primary-emphasis">{{ _('Step 1: Select Parameters &
+                    Design') }}</div>
                 <div class="card-body">
-
-                    {# --- Grouping Parameters (New Checkbox Grid) --- #}
+                    {# --- Grouping Parameters (Alpine.js x-for) --- #}
                     <div class="mb-4">
                         <label class="form-label fw-bold">{{ _('Grouping Parameters:') }}</label>
-                        {# Hidden select for form submission compatibility #}
-                        <select name="grouping_params" id="grouping_params" class="form-select grouping-select d-none" multiple></select>
-
+                        <select name="grouping_params" id="grouping_params" class="form-select grouping-select d-none"
+                            multiple>
+                            <template x-for="param in selectedGroupings" :key="param">
+                                <option :value="param" x-text="param" selected></option>
+                            </template>
+                        </select>
                         <div class="card bg-body-tertiary">
-                             <div class="card-header py-1 d-flex justify-content-between align-items-center">
-                                <span class="small text-muted" id="grouping-selected-count">0 {{ _('selected') }}</span>
-                                <small class="text-muted fst-italic">{{ _('Factors defining your groups (e.g. Treatment, Genotype)') }}</small>
+                            <div class="card-header py-1 d-flex justify-content-between align-items-center">
+                                <span class="small text-muted"
+                                    x-text="groupingSelectedCount + ' {{ _('selected') }}'"></span>
+                                <small class="text-muted fst-italic">{{ _('Factors defining your groups (e.g. Treatment,
+                                    Genotype)') }}</small>
                             </div>
                             <div class="card-body py-2" style="max-height: 150px; overflow-y: auto;">
-                                <div id="grouping-params-checkboxes" class="row row-cols-2 row-cols-md-3 g-2">
-                                    <div class="text-muted small p-2">{{ _('Loading parameters...') }}</div>
+                                <div class="row row-cols-2 row-cols-md-3 g-2">
+                                    <template x-for="param in allGroupingParams" :key="param">
+                                        <div class="col">
+                                            <div class="form-check d-flex align-items-center p-2 border rounded h-100 position-relative transition-all"
+                                                :class="isGroupingSelected(param) ? 'bg-primary-subtle border-primary text-primary-emphasis' : ''"
+                                                style="cursor: pointer;">
+                                                <input type="checkbox" class="form-check-input me-2"
+                                                    :id="'grpParam_' + param" :value="param"
+                                                    :checked="isGroupingSelected(param)"
+                                                    @change="toggleGrouping(param)">
+                                                <label
+                                                    class="form-check-label small text-break cursor-pointer stretched-link"
+                                                    :for="'grpParam_' + param" x-text="param"></label>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="allGroupingParams.length === 0">
+                                        <div class="col-12 text-muted small p-2">{{ _('No grouping parameters
+                                            available.') }}</div>
+                                    </template>
                                 </div>
                             </div>
                         </div>
-                        <div id="grouping-params-error" class="invalid-feedback d-block" style="display:none;">{{ _('Select at least one grouping parameter.') }}</div>
+                        <div id="grouping-params-error" class="invalid-feedback d-block"
+                            x-show="selectedGroupings.length === 0" x-cloak>
+                            {{ _('Select at least one grouping parameter.') }}
+                        </div>
                     </div>
 
-                    {# --- Numerical Parameters (Existing Checkbox Grid) --- #}
+                    {# --- Numerical Parameters (Alpine.js x-for) --- #}
                     <div class="mb-4">
-                         <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
                             <label class="form-label fw-bold mb-0">{{ _('Parameters to Analyze:') }}</label>
                             <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary py-0" id="select-all-numerical" title="{{ _('Select All') }}">{{ _('All') }}</button>
-                                <button type="button" class="btn btn-outline-secondary py-0" id="deselect-all-numerical" title="{{ _('Clear All') }}">{{ _('Clear') }}</button>
+                                <button type="button" class="btn btn-outline-primary py-0" @click="selectAllNumerical()"
+                                    title="{{ _('Select All') }}">{{ _('All') }}</button>
+                                <button type="button" class="btn btn-outline-secondary py-0"
+                                    @click="clearAllNumerical()" title="{{ _('Clear All') }}">{{ _('Clear') }}</button>
                             </div>
                         </div>
-                        {# Hidden select #}
-                        <select name="numerical_params" id="numerical_params" class="form-select numerical-select d-none" multiple required></select>
-
+                        <select name="numerical_params" id="numerical_params"
+                            class="form-select numerical-select d-none" multiple required>
+                            <template x-for="param in selectedNumericals" :key="param">
+                                <option :value="param" x-text="param" selected></option>
+                            </template>
+                        </select>
                         <div class="card">
                             <div class="card-body py-2" style="max-height: 300px; overflow-y: auto;">
-                                <div id="numerical-params-checkboxes" class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-2">
-                                    <div class="text-muted small p-2">{{ _('Loading parameters...') }}</div>
+                                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-2">
+                                    <template x-for="(param, index) in allSelectableParams" :key="param.name">
+                                        <div class="col">
+                                            <div class="form-check d-flex align-items-center p-2 border rounded h-100 position-relative transition-all"
+                                                :class="isNumericalSelected(param.name) ? 'bg-primary-subtle border-primary text-primary-emphasis' : ''"
+                                                style="cursor: pointer;">
+                                                <input type="checkbox" class="form-check-input me-2"
+                                                    :id="'numParam_' + index" :value="param.name"
+                                                    :checked="isNumericalSelected(param.name)"
+                                                    @change="toggleNumerical(param.name)">
+                                                <span class="me-1" style="font-size: 0.9em;"
+                                                    x-text="param.type === 'numerical' ? '📊' : '🔤'"></span>
+                                                <label
+                                                    class="form-check-label small text-break cursor-pointer stretched-link"
+                                                    :for="'numParam_' + index" :title="param.name"
+                                                    x-text="param.name.length > 25 ? param.name.substring(0, 23) + '...' : param.name"></label>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="allSelectableParams.length === 0">
+                                        <div class="col-12 text-muted small p-2">{{ _('Loading parameters...') }}</div>
+                                    </template>
                                 </div>
                             </div>
                         </div>
-                        <div id="numerical-params-error" class="invalid-feedback">{{ _('Select at least one numerical parameter.') }}</div>
+                        <div id="numerical-params-error" class="invalid-feedback"
+                            x-show="selectedNumericals.length === 0" x-cloak>
+                            {{ _('Select at least one numerical parameter.') }}
+                        </div>
                     </div>
 
                     {# --- Advanced Options Accordion --- #}
                     <div class="accordion mb-3" id="advancedOptionsAccordion">
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="headingAdvanced">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvanced" aria-expanded="false" aria-controls="collapseAdvanced">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseAdvanced" aria-expanded="false"
+                                    aria-controls="collapseAdvanced">
                                     <i class="fas fa-sliders-h me-2"></i> {{ _('Advanced Design Options') }}
                                 </button>
                             </h2>
-                            <div id="collapseAdvanced" class="accordion-collapse collapse" aria-labelledby="headingAdvanced" data-bs-parent="#advancedOptionsAccordion">
+                            <div id="collapseAdvanced" class="accordion-collapse collapse"
+                                aria-labelledby="headingAdvanced" data-bs-parent="#advancedOptionsAccordion">
                                 <div class="accordion-body bg-body-tertiary">
-                                    
                                     {# 1. Control Group & Split #}
                                     <div class="row g-3 mb-3">
                                         <div class="col-md-6">
-                                            <label for="control_group_param" class="form-label fw-bold small">{{ _('Control Group (for Comparisons)') }}
-                                                <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="{{ _('Select the group to serve as the baseline/control for post-hoc tests (e.g., Dunnett\'s).') }}"></i>
+                                            <label for="control_group_param" class="form-label fw-bold small">
+                                                {{ _('Control Group (for Comparisons)') }}
+                                                <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip"
+                                                    title="{{ _('Select the group to serve as the baseline/control for post-hoc tests.') }}"></i>
                                             </label>
-                                            <select name="control_group_param" id="control_group_param" class="form-select form-select-sm">
+                                            <select name="control_group_param" id="control_group_param"
+                                                class="form-select form-select-sm">
                                                 <option value="">{{ _('-- None / Auto --') }}</option>
                                             </select>
                                         </div>
-                                         <div class="col-md-6">
-                                            <label for="splitting_param" class="form-label fw-bold small">{{ _('Split Analysis By:') }}</label>
-                                            <select name="splitting_param" id="splitting_param" class="form-select form-select-sm splitting-select">
+                                        <div class="col-md-6">
+                                            <label for="splitting_param" class="form-label fw-bold small">{{ _('Split
+                                                Analysis By:') }}</label>
+                                            <select name="splitting_param" id="splitting_param"
+                                                class="form-select form-select-sm splitting-select">
                                                 <option id="no_split" value="">{{ _('Do not split analysis') }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="random_effect_param" class="form-label fw-bold small">
+                                                {{ _('Blocking Factor (Random Effect)') }}
+                                                <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip"
+                                                    title="{{ _('Select a variable (e.g., Cage, Batch) to treat as a random effect.') }}"></i>
+                                            </label>
+                                            <select name="random_effect_param" id="random_effect_param"
+                                                class="form-select form-select-sm">
+                                                <option value="">{{ _('-- None --') }}</option>
                                             </select>
                                         </div>
                                     </div>
 
                                     {# 2. Covariate (ANCOVA) #}
                                     <div class="mb-3">
-                                        <label for="covariate_param" class="form-label fw-bold small">{{ _('Covariate (for ANCOVA)') }}
-                                             <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip" title="{{ _('Select a source of variation to "control" for. If the slopes are parallel (Assumption passed), Precliniset runs ANCOVA. If not, it automatically switches to a robust Interaction Model.') }}"></i>
+                                        <label for="covariate_param" class="form-label fw-bold small">
+                                            {{ _('Covariate (for ANCOVA)') }}
+                                            <i class="fas fa-info-circle text-muted ms-1" data-bs-toggle="tooltip"
+                                                title="{{ _('Select a source of variation to control for.') }}"></i>
                                         </label>
-                                        <select name="covariate_param" id="covariate_param" class="form-select form-select-sm">
+                                        <select name="covariate_param" id="covariate_param"
+                                            class="form-select form-select-sm">
                                             <option value="">{{ _('-- None --') }}</option>
                                         </select>
-                                        <div class="form-text x-small"><i class="fas fa-magic me-1"></i> {{ _('Precliniset will automatically check statistical assumptions for you.') }}</div>
+                                        <div class="form-text x-small"><i class="fas fa-magic me-1"></i> {{
+                                            _('Precliniset will automatically check statistical assumptions for you.')
+                                            }}</div>
                                     </div>
 
                                     <hr>
 
-                                    {# 3. Survival Analysis Options ... (skipped for brevity) #}
-                                    
-                                    <hr>
-                                    
-                                    {# 4. Other Settings (Ref Range, Outliers, RM) #}
+                                    {# 3. Other Settings (Ref Range, Outliers, RM) #}
                                     <div class="row g-3">
-                                         <div class="col-md-6">
-                                            <label for="reference_range_id" class="form-label fw-bold small">{{ _('Reference Range') }}</label>
-                                            <select name="reference_range_id" id="reference_range_id" class="form-select form-select-sm reference-range-select">
+                                        <div class="col-md-6">
+                                            <label for="reference_range_id" class="form-label fw-bold small">{{
+                                                _('Reference Range') }}</label>
+                                            <select name="reference_range_id" id="reference_range_id"
+                                                class="form-select form-select-sm reference-range-select">
                                                 <option value="">{{ _('-- None --') }}</option>
                                             </select>
                                         </div>
                                         <div class="col-md-12">
-                                             <div class="row align-items-center">
-                                                 <div class="col-auto">
-                                                     <div class="form-check">
-                                                         <input type="checkbox" class="form-check-input" id="exclude_outliers" name="exclude_outliers" value="true" {% if form_data.get('exclude_outliers', false) %}checked{% endif %}>
-                                                         <label class="form-check-label small" for="exclude_outliers">{{ _('Exclude outliers') }}</label>
-                                                     </div>
-                                                 </div>
-                                                 <div id="outlier_method_container" class="col-auto" style="display: {% if form_data.get('exclude_outliers') %}block{% else %}none{% endif %};">
-                                                     <div class="d-flex align-items-center">
-                                                         <label for="outlier_method" class="form-label x-small mb-0 me-2">{{ _('Method:') }}</label>
-                                                         <select name="outlier_method" id="outlier_method" class="form-select form-select-sm" style="width: auto;">
-                                                             <option value="iqr" {% if form_data.get('outlier_method') == 'iqr' %}selected{% endif %} title="{{ _('Best for non-normal or large datasets.') }}">IQR (1.5x)</option>
-                                                             <option value="std" {% if form_data.get('outlier_method') == 'std' %}selected{% endif %} title="{{ _('Classic method for normal distributions.') }}">Std Dev (3x)</option>
-                                                             <option value="grubbs" {% if form_data.get('outlier_method') == 'grubbs' %}selected{% endif %} title="{{ _('Statistically rigorous for detecting a single outlier (N > 3).') }}">Grubbs' Test (α=0.05)</option>
-                                                         </select>
-                                                         <input type="hidden" name="outlier_threshold" id="outlier_threshold" value="{{ form_data.get('outlier_threshold', 1.5) }}">
-                                                     </div>
-                                                 </div>
-                                             </div>
-                                             <div class="form-text x-small ms-4 mt-0"><i class="fas fa-lightbulb me-1"></i> {{ _('Use Grubbs\' test for detecting single outliers in small, normally distributed groups.') }}</div>
+                                            <div class="row align-items-center">
+                                                <div class="col-auto">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input"
+                                                            id="exclude_outliers" name="exclude_outliers" value="true"
+                                                            x-model="excludeOutliers">
+                                                        <label class="form-check-label small" for="exclude_outliers">{{
+                                                            _('Exclude outliers') }}</label>
+                                                    </div>
+                                                </div>
+                                                <div id="outlier_method_container" class="col-auto"
+                                                    x-show="excludeOutliers">
+                                                    <div class="d-flex align-items-center">
+                                                        <label for="outlier_method"
+                                                            class="form-label x-small mb-0 me-2">{{ _('Method:')
+                                                            }}</label>
+                                                        <select name="outlier_method" id="outlier_method"
+                                                            class="form-select form-select-sm" style="width: auto;"
+                                                            x-model="outlierMethod">
+                                                            <option value="iqr">IQR (1.5x)</option>
+                                                            <option value="std">Std Dev (3x)</option>
+                                                            <option value="grubbs">Grubbs' Test (a=0.05)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-text x-small ms-4 mt-0">
+                                                <i class="fas fa-lightbulb me-1"></i> {{ _("Use Grubbs' test for
+                                                detecting single outliers in small, normally distributed groups.") }}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div class="mt-3 form-check border rounded p-2 bg-body" id="repeated-measures-container">
-                                        <input type="checkbox" class="form-check-input" id="is_repeated_measures" name="is_repeated_measures" value="on" {% if form_data.get('is_repeated_measures') %}checked{% endif %}>
-                                        <label class="form-check-label fw-bold small" for="is_repeated_measures">{{ _('Repeated Measures Design?') }}</label>
-                                        <div class="form-text x-small mt-0"><i class="fas fa-shield-alt me-1"></i> {{ _('Precliniset uses Linear Mixed Models (LMM) if any timepoints are missing.') }}</div>
-                                         {% if subject_id_col %}
-                                        <small class="d-block text-muted x-small">({{ _('Requires ID: "{col}"').format(col=subject_id_col) }})
-                                            {% if not subject_id_col_present %}<strong class="text-danger">({{ _('MISSING') }})</strong>{% endif %}
+                                    <div class="mt-3 form-check border rounded p-2 bg-body"
+                                        :class="isRepeatedMeasures ? 'bg-primary-subtle border-primary text-primary-emphasis' : ''">
+                                        <input type="checkbox" class="form-check-input" id="is_repeated_measures"
+                                            name="is_repeated_measures" value="on" x-model="isRepeatedMeasures">
+                                        <label class="form-check-label fw-bold small" for="is_repeated_measures">
+                                            {{ _('Repeated Measures Design?') }}
+                                            <span x-show="showRepeatedMeasures" class="badge bg-info ms-1">{{
+                                                _('Multiple params selected') }}</span>
+                                        </label>
+                                        <div class="form-text x-small mt-0">
+                                            <i class="fas fa-shield-alt me-1"></i> {{ _('Precliniset uses Linear Mixed
+                                            Models (LMM) if any timepoints are missing.') }}
+                                        </div>
+                                        {% if subject_id_col %}
+                                        <small class="d-block text-muted x-small">
+                                            ({{ _('Requires ID: "%(col)s"', col=subject_id_col) }})
+                                            {% if not subject_id_col_present %}<strong class="text-danger">({{
+                                                _('MISSING') }})</strong>{% endif %}
                                         </small>
                                         {% endif %}
                                     </div>
-
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="d-flex justify-content-between mt-4">
-                        <a href="{{ request.referrer or url_for('datatables.create_data_table') }}" class="btn btn-outline-secondary">{{ _('Cancel') }}</a>
-                        <button type="button" class="btn btn-primary" id="btn-propose-workflow">{{ _('Next: Check Data & Propose Tests') }} <i class="fas fa-arrow-right ms-1"></i></button>
+                        <a href="{{ request.referrer or url_for('datatables.create_data_table') }}"
+                            class="btn btn-outline-secondary">{{ _('Cancel') }}</a>
+                        <button type="button" class="btn btn-primary" @click="submitForm()">
+                            {{ _('Next: Check Data & Propose Tests') }} <i class="fas fa-arrow-right ms-1"></i>
+                        </button>
                     </div>
                 </div>
             </div>

@@ -434,7 +434,7 @@ def clean_cmd(email, password, force):
 @click.option('--groups', default=2, help='Groups per project')
 @click.option('--animals', default=5, help='Animals per subgroup')
 @click.option('--repetitions', default=1, help='Number of times to repeat each protocol (for repetition analysis)')
-@click.option('--repetition-interval', default=2, help='Interval in weeks between repetitions')
+@click.option('--repetition-interval', default=1, help='Interval in days between repetitions')
 def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_interval):
     """Seed DB with scalable simulation data."""
     print("Initializing simulation...")
@@ -532,16 +532,17 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                 group_name = f"Group {g_idx + 1:03d}"
                 animal_data = []
                 counter = 1
-                for sex in ['Male', 'Female']:
-                    for geno in ['WT', 'KO']:
-                        for _ in range(animals):
-                              animal_data.append({
-                                  "uid": f"{proj.slug}-G{g_idx}-{counter}",
-                                  "date_of_birth": (date.today()-timedelta(weeks=12)).isoformat(),
-                                  "sex": sex, "genotype": geno, "treatment": "Vehicle",
-                                  "cage": f"C{math.ceil(counter/5)}", "status": "alive"
-                              })
-                              counter += 1
+                for a_idx in range(animals):
+                    # Distribute sex and genotype across the requested number of animals
+                    sex = 'Male' if (a_idx % 2 == 0) else 'Female'
+                    geno = 'WT' if ((a_idx // 2) % 2 == 0) else 'KO'
+                    
+                    animal_data.append({
+                        "uid": f"{proj.slug}-G{g_idx}-{a_idx+1}",
+                        "date_of_birth": (date.today()-timedelta(weeks=12)).isoformat(),
+                        "sex": sex, "genotype": geno, "treatment": "Vehicle",
+                        "cage": f"C{math.ceil((a_idx+1)/5)}", "status": "alive"
+                    })
 
                 # Include team (i), project (p_idx), and group (g_idx) indices for guaranteed uniqueness
                 group_id = f"{proj.slug}-G{g_idx:03d}"
@@ -557,6 +558,9 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                     animal_data=animal_data
                 )
 
+                # Create map of uid -> animal_id
+                uid_to_id_map = {a.uid: a.id for a in group.animals}
+
                 # Datatables
                 base_date = date.today() - timedelta(weeks=12)
 
@@ -568,12 +572,22 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                 ]
 
                 for w_offset, p_name in protocol_schedule:
-                    proto = next(p for p in protocols if p.name == p_name)
+                    # Find protocol manually to avoid next() StopIteration
+                    proto = None
+                    for p in protocols:
+                        if p.name == p_name:
+                            proto = p
+                            break
+                    
+                    if not proto:
+                        print(f"Warning: Protocol {p_name} not found, skipping.")
+                        continue
 
                     # Create multiple repetitions of the same protocol
                     for rep in range(repetitions):
                         # Calculate date for this repetition
-                        rep_date = base_date + timedelta(weeks=w_offset + (rep * repetition_interval))
+                        # Calculate date for this repetition (base protocol week + rep * day interval)
+                        rep_date = base_date + timedelta(weeks=w_offset) + timedelta(days=rep * repetition_interval)
 
                         # Create datatable for this repetition
                         dt = DataTable(
@@ -590,6 +604,13 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                             # Add some variation for repetitions to simulate learning effects or biological variation
                             age_weeks = 12 + w_offset + (rep * repetition_interval)
                             vals = generate_realistic_data(p_name, anim['sex'], anim['genotype'], "Vehicle", age_weeks)
+                            
+                            current_uid = anim['uid']
+                            if current_uid not in uid_to_id_map:
+                                print(f"Warning: Animal {current_uid} not found in DB mapping, skipping row.")
+                                continue
+
+                            animal_db_id = uid_to_id_map[current_uid]
 
                             # For rotarod, add learning effect across repetitions
                             if p_name == "Accelerating Rotarod" and rep > 0:
@@ -607,8 +628,9 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                                     if 'Glucose' in key and isinstance(vals[key], (int, float)):
                                         vals[key] = max(vals[key] * adaptation_factor, vals[key] - 20)  # Cap the improvement
 
-                            vals['uid'] = anim['uid']
-                            db.session.add(ExperimentDataRow(data_table_id=dt.id, row_index=r_idx, row_data=vals))
+                            vals['uid'] = current_uid
+                            # FIX: Use animal_id, remove row_index
+                            db.session.add(ExperimentDataRow(data_table_id=dt.id, animal_id=animal_db_id, row_data=vals))
 
     db.session.commit()
     print("Simulation complete.")

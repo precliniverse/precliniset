@@ -120,14 +120,14 @@ def test_setup_data(test_app):
 
         # Add Animals
         db.session.add_all([
-            Animal(uid='A1', group_id=g1.id, status='alive'),
-            Animal(uid='A2', group_id=g1.id, status='alive'),
-            Animal(uid='B1', group_id=g2.id, status='alive'),
-            Animal(uid='B2', group_id=g2.id, status='alive'),
-            Animal(uid='B3', group_id=g2.id, status='alive'),
-            Animal(uid='C1', group_id=g3.id, status='alive'),
-            Animal(uid='D1', group_id=g4.id, status='alive'),
-            Animal(uid='D2', group_id=g4.id, status='alive')
+            Animal(uid='A1', display_id='A1', group_id=g1.id, status='alive'),
+            Animal(uid='A2', display_id='A2', group_id=g1.id, status='alive'),
+            Animal(uid='B1', display_id='B1', group_id=g2.id, status='alive'),
+            Animal(uid='B2', display_id='B2', group_id=g2.id, status='alive'),
+            Animal(uid='B3', display_id='B3', group_id=g2.id, status='alive'),
+            Animal(uid='C1', display_id='C1', group_id=g3.id, status='alive'),
+            Animal(uid='D1', display_id='D1', group_id=g4.id, status='alive'),
+            Animal(uid='D2', display_id='D2', group_id=g4.id, status='alive')
         ])
         db.session.commit()
 

@@ -167,7 +167,7 @@ def get_age_range_from_df_view_helper(df_group_local):
         max_age = df_group_local['age_days'].max()
         if pd.notnull(min_age) and pd.notnull(max_age):
             if min_age == max_age:
-                age_range_str_local = f"{int(min_age)} {lazy_gettext('days')}"
+                age_range_str_local = f"{int(min_age)}d"
             else:
-                age_range_str_local = f"{int(min_age)} - {int(max_age)} {lazy_gettext('days')}"
+                age_range_str_local = f"{int(min_age)}-{int(max_age)}d"
     return age_range_str_local

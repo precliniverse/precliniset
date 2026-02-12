@@ -47,23 +47,39 @@ def test_user_cannot_view_other_team_group(team1_member_client, init_database):
 def test_edit_group_animal_data(team1_admin_client, db_session, init_database):
     group = init_database['group1']
     animal_model = init_database['animal_model']
-    ea1 = init_database['ea1']  # Get the ethical approval from the fixture
-    animal_data = [{'uid': 'Mouse-01', 'Genotype': 'WT', 'date_of_birth': '2023-01-01'}, {'uid': 'Mouse-02', 'Genotype': 'KO', 'date_of_birth': '2023-01-01'}]
+    ea1 = init_database['ea1']
+    
+    # FIX 1: Pass 'display_id' for the scientist's label
+    animal_data = [
+        {'display_id': 'Mouse-01', 'Genotype': 'WT', 'date_of_birth': '2023-01-01'}, 
+        {'display_id': 'Mouse-02', 'Genotype': 'KO', 'date_of_birth': '2023-01-01'}
+    ]
+    
     payload = {
         'name': group.name,
         'model': animal_model.id,
-        'ethical_approval': ea1.id,  # Use the ethical approval ID
+        'ethical_approval': ea1.id,
         'animal_data': json.dumps(animal_data),
         'update_data_tables': 'yes'
     }
+    
     response = team1_admin_client.post(f'/groups/edit/{group.id}', data=payload, follow_redirects=True)
+    
     assert response.status_code == 200
     assert b'Group saved successfully' in response.data
+    
     db_session.refresh(group)
     assert len(group.animals) == 2
-    uids = {a.uid for a in group.animals}
-    assert 'Mouse-01' in uids
-    assert 'Mouse-02' in uids
+    
+    # FIX 2: Assert against display_id (scientist use)
+    labels = {a.display_id for a in group.animals}
+    assert 'Mouse-01' in labels
+    assert 'Mouse-02' in labels
+    
+    # OPTIONAL: Verify that the app actually generated the uids automatically
+    for a in group.animals:
+        assert a.uid is not None
+        assert len(a.uid) == 24 # secrets.token_hex(12) results in 24 chars
 
 def test_archive_and_unarchive_group(team1_admin_client, db_session, init_database):
     group = init_database['group1']

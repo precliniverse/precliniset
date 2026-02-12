@@ -101,6 +101,10 @@ export class DeathManager {
                 selectAllCheckbox.id = 'selectAllAnimalsDeadModal_edit';
                 th.appendChild(selectAllCheckbox);
 
+                // Add ID column
+                th = headerRow.insertCell();
+                th.textContent = "ID";
+
                 // Add all model fields as columns
                 modelFields.forEach(field => {
                     th = headerRow.insertCell();
@@ -125,6 +129,10 @@ export class DeathManager {
                     checkbox.value = index;
                     if (animal.status === 'dead') checkbox.disabled = true;
                     cell.appendChild(checkbox);
+
+                    // ID Cell
+                    cell = row.insertCell();
+                    cell.textContent = animal['ID'] || animal['display_id'] || '';
 
                     // Add all model field values
                     modelFields.forEach(field => {

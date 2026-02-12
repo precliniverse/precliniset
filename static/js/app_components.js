@@ -177,6 +177,7 @@ document.addEventListener('alpine:init', () => {
         isLoading: false,
         urls: config.urls || {},
         i18n: config.i18n || {},
+        csrfToken: config.csrfToken || '',
 
         get canViewUnblinded() {
             return config.canViewUnblinded || false;
@@ -336,7 +337,7 @@ document.addEventListener('alpine:init', () => {
             const diff = Math.floor((today - dob) / (1000 * 60 * 60 * 24));
             if (isNaN(diff) || diff < 0) return '-';
             const weeks = Math.floor(diff / 7);
-            return `${diff} days (${weeks} weeks)`;
+            return `${diff}d (${weeks}w)`;
         },
 
         async saveGroup(dontUpdateDataTables = false, allowNewCategories = false) {
@@ -350,8 +351,14 @@ document.addEventListener('alpine:init', () => {
             formData.append('animal_data', JSON.stringify(this.animalData));
 
             try {
+                const headers = {};
+                if (this.csrfToken) {
+                    headers['X-CSRFToken'] = this.csrfToken;
+                }
+
                 const response = await fetch(form.action, {
                     method: 'POST',
+                    headers: headers,
                     body: formData
                 });
                 const data = await response.json();

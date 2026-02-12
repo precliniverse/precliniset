@@ -16,6 +16,7 @@ from app.services.group_service import GroupService
 
 from . import api
 from .auth import token_required
+from .datatables_api import ns as groups_ns
 
 # This namespace is for group operations WITHIN a project context
 ns = api.namespace("projects", description="Project related operations")
@@ -38,7 +39,7 @@ group_output_model = ns.model("ExperimentalGroupOutput", {
     "animal_data": fields.List(fields.Raw, description="List of animal dictionaries")
 })
 
-group_item_model = api.namespace("groups").model("ExperimentalGroupItem", {
+group_item_model = groups_ns.model("ExperimentalGroupItem", {
     "id": fields.String(readonly=True),
     "name": fields.String(required=True),
     "model_id": fields.Integer(required=True),
@@ -118,7 +119,7 @@ class GroupList(Resource):
             "animal_data": [a.to_dict() for a in new_group.animals]
         }, 201
 
-@api.namespace("groups").route("/<string:group_id>")
+@groups_ns.route("/<string:group_id>")
 class GroupItem(Resource):
     decorators = [token_required]
 
@@ -396,25 +397,25 @@ class ServerSideGroupList(Resource):
 # ============================================================================
 
 # Parser for group search query parameters
-search_parser = ns.parser()
-search_parser.add_argument('q', type=str, help='Search term for group name', location='args')
-search_parser.add_argument('project_id', type=str, help='Filter by project ID', location='args')
-search_parser.add_argument('page', type=int, help='Page number (default: 1)', location='args')
+group_search_parser = groups_ns.parser()
+group_search_parser.add_argument('q', type=str, help='Search term for group name', location='args')
+group_search_parser.add_argument('project_id', type=str, help='Filter by project ID', location='args')
+group_search_parser.add_argument('page', type=int, help='Page number (default: 1)', location='args')
 
-group_search_result_model = ns.model('GroupSearchResult', {
+group_search_result_model = groups_ns.model('GroupSearchResult', {
     'id': fields.String,
     'text': fields.String
 })
 
-group_search_response_model = ns.model('GroupSearchResponse', {
+group_search_response_model = groups_ns.model('GroupSearchResponse', {
     'results': fields.List(fields.Nested(group_search_result_model)),
     'total_count': fields.Integer,
-    'pagination': fields.Nested(ns.model('Pagination', {
+    'pagination': fields.Nested(groups_ns.model('Pagination', {
         'more': fields.Boolean
     }))
 })
 
-@ns.route("/groups/search")
+@groups_ns.route("/search")
 class GroupSearch(Resource):
     """Search experimental groups for autocompletion.
     
@@ -423,14 +424,14 @@ class GroupSearch(Resource):
     """
     decorators = [token_required]
     
-    @ns.doc("search_groups")
-    @ns.expect(search_parser)
-    @ns.marshal_with(group_search_response_model)
+    @groups_ns.doc("search_groups")
+    @groups_ns.expect(group_search_parser)
+    @groups_ns.marshal_with(group_search_response_model)
     def get(self):
         """Search groups by name or project."""
         from sqlalchemy import or_
         
-        args = search_parser.parse_args()
+        args = group_search_parser.parse_args()
         search_term = args.get('q', '').strip()
         project_id = args.get('project_id')
         page = args.get('page', 1)
@@ -478,7 +479,7 @@ class GroupSearch(Resource):
         }
 
 
-@api.namespace("groups").route("/<string:group_id>/assignable_users")
+@groups_ns.route("/<string:group_id>/assignable_users")
 class GroupAssignableUsers(Resource):
     """Get users who can be assigned to datatables for this group.
     

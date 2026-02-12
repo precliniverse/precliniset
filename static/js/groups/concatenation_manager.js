@@ -203,12 +203,26 @@ export class ConcatenationManager {
                 if (showBtn) showBtn.style.display = 'inline-block';
             });
         }
-        
+
         document.getElementById('load-concatenation-btn')?.addEventListener('click', () => this.loadConcatenatedData());
         document.getElementById('run-global-measurement-btn')?.addEventListener('click', () => this.runGlobalMeasurement());
         document.getElementById('generate-graph-btn')?.addEventListener('click', () => this.generateGraph());
         document.getElementById('calculate-stats-btn')?.addEventListener('click', () => this.calculateStats());
         document.getElementById('export-concatenated-btn')?.addEventListener('click', () => this.exportConcatenated());
+    }
+
+    showCard() {
+        const card = document.getElementById('analyte-concatenation-card');
+        const showBtn = document.getElementById('show-concatenation-btn');
+
+        if (card) {
+            card.style.display = 'block';
+            // Trigger load analytes immediately when shown
+            this.loadAnalytes();
+        }
+        if (showBtn) {
+            showBtn.style.display = 'none';
+        }
     }
 
     loadAnalytes() {
@@ -350,9 +364,9 @@ export class ConcatenationManager {
 
         const canvas = document.getElementById('evolution-chart');
         if (!canvas) return;
-        
+
         const ctx = canvas.getContext('2d');
-        
+
         // Destroy existing chart if any
         if (this.chart) {
             this.chart.destroy();
@@ -360,7 +374,7 @@ export class ConcatenationManager {
 
         const datasets = [];
         const colors = [
-            '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', 
+            '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b',
             '#fd7e14', '#6610f2', '#6f42c1', '#e83e8c', '#20c997'
         ];
         let colorIdx = 0;
@@ -439,10 +453,10 @@ export class ConcatenationManager {
 
         const mean = allValues.reduce((a, b) => a + b, 0) / allValues.length;
         const sorted = [...allValues].sort((a, b) => a - b);
-        const median = sorted.length % 2 === 0 
-            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 
+        const median = sorted.length % 2 === 0
+            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
             : sorted[Math.floor(sorted.length / 2)];
-        
+
         const variance = allValues.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / allValues.length;
         const stdDev = Math.sqrt(variance);
 
@@ -459,21 +473,21 @@ export class ConcatenationManager {
     }
 
     exportConcatenated() {
-         fetch(`/groups/export_concatenated/${this.config.groupId}`, {
+        fetch(`/groups/export_concatenated/${this.config.groupId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value },
             body: JSON.stringify({ concatenated_data: this.concatenatedData })
-         })
-         .then(response => response.blob())
-         .then(blob => {
-             const url = window.URL.createObjectURL(blob);
-             const a = document.createElement('a');
-             a.href = url;
-             a.download = `concatenated_analytes_${this.config.groupId}.xlsx`;
-             document.body.appendChild(a);
-             a.click();
-             window.URL.revokeObjectURL(url);
-             document.body.removeChild(a);
-         });
+        })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `concatenated_analytes_${this.config.groupId}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            });
     }
 }

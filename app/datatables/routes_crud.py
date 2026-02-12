@@ -59,6 +59,7 @@ from ..models import (
     HousingConditionSet,
     Project,
     ProjectTeamShare,
+    ProjectUserShare,
     ProtocolAnalyteAssociation,
     ProtocolModel,
     ProtocolMoleculeAssociation,
@@ -235,6 +236,19 @@ def edit_data_table(id):
                 for link in perm.team.user_roles:
                     if link.user:
                         assignable_users[link.user.id] = link.user
+
+        # 3. Direct user shares
+        shared_users = ProjectUserShare.query.filter(
+            ProjectUserShare.project_id == project.id,
+            or_(
+                ProjectUserShare.can_create_datatables == True,
+                ProjectUserShare.can_edit_datatables == True
+            )
+        ).all()
+        
+        for share in shared_users:
+            if share.user:
+                assignable_users[share.user.id] = share.user
         
         sorted_users = sorted(assignable_users.values(), key=lambda u: u.email)
         assignee_and_housing_form.assigned_to_id.choices = [('', lazy_gettext('Unassigned'))] + [(u.id, u.email) for u in sorted_users]
@@ -313,9 +327,9 @@ def edit_data_table(id):
             row_data = {}
             for col in all_columns_list:
                 low_col = col.lower()
-                # SPECIAL HANDLING FOR ID/uid: Map column 'uid' or legacy 'id' to animal 'display_id'
-                if low_col in {'id', 'uid', 'animal_id'}:
-                    row_data[col] = merged.get('display_id')
+                # SPECIAL HANDLING FOR ID/uid: Map column 'ID' or 'uid' to animal 'display_id'
+                if col == 'ID' or low_col in {'id', 'uid', 'animal_id'}:
+                    row_data[col] = merged.get('display_id') or merged.get('uid')
                 elif low_col == 'age_days':
                     row_data[col] = age_in_days
                 else:
@@ -558,83 +572,7 @@ def edit_data_table(id):
                            protocol_analytes_map=protocol_analytes_map)
 
 
-@datatables_bp.route('/<int:datatable_id>/move', methods=['POST'])
-@login_required
-def move_datatable(datatable_id):
-    dt = db.session.get(DataTable, datatable_id)
-    if not dt:
-        return jsonify({'success': False, 'message': 'DataTable not found'}), 404
-    if not check_datatable_permission(dt, 'edit_datatable'):
-        return jsonify({'success': False, 'message': 'Permission denied'}), 403
 
-    data = request.get_json()
-    new_date_str = data.get('new_date')
-    if not new_date_str:
-        return jsonify({'success': False, 'message': 'New date is required.'}), 400
-
-    try:
-        new_date_obj = datetime.strptime(new_date_str, '%Y-%m-%d').date()
-        new_date = new_date_obj.strftime('%Y-%m-%d')
-        dt.date = new_date
-        
-        # If linked to a workplan event, update the event offset to keep calendar in sync
-        if dt.generated_from_event and dt.generated_from_event.workplan and dt.generated_from_event.workplan.study_start_date:
-            wp_start_date = dt.generated_from_event.workplan.study_start_date
-            # Ensure we are comparing dates
-            if isinstance(wp_start_date, datetime):
-                wp_start_date = wp_start_date.date()
-                
-            delta = new_date_obj - wp_start_date
-            dt.generated_from_event.offset_days = delta.days
-
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'DataTable date updated.'})
-    except ValueError:
-        return jsonify({'success': False, 'message': 'Invalid date format.'}), 400
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error moving datatable {datatable_id}: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@datatables_bp.route('/<int:datatable_id>/reassign', methods=['POST'])
-@login_required
-def reassign_datatable(datatable_id):
-    dt = db.session.get(DataTable, datatable_id)
-    if not dt:
-        return jsonify({'success': False, 'message': 'DataTable not found'}), 404
-    if not check_datatable_permission(dt, 'edit_datatable'):
-        return jsonify({'success': False, 'message': 'Permission denied'}), 403
-
-    data = request.get_json()
-    new_assignee_id = data.get('assignee_id')
-
-    try:
-        dt.assigned_to_id = int(new_assignee_id) if new_assignee_id else None
-        
-        warning_message = None
-        # Skill Validation Integration (Reassign API)
-        if dt.assigned_to_id and dt.protocol.external_skill_ids:
-             user = db.session.get(User, dt.assigned_to_id)
-             if user:
-                try:
-                    connector = TrainingManagerConnector()
-                    skill_ids = dt.protocol.external_skill_ids
-                    if skill_ids:
-                        result = connector.check_competency([user.email], skill_ids)
-                        if result and user.email in result:
-                            user_result = result[user.email]
-                            if not user_result.get('valid', True):
-                                details = user_result.get('details', [])
-                                warning_message = _("Warning: The user '%(email)s' may not be qualified. Issues: %(issues)s", email=user.email, issues=", ".join(details))
-                except Exception as e:
-                    current_app.logger.error(f"Error validating skills on reassign: {e}")
-
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Assignee updated.', 'warning': warning_message})
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error reassigning datatable {datatable_id}: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @datatables_bp.route('/edit/<int:id>/delete_file/<int:file_id>', methods=['POST'])
@@ -1401,6 +1339,10 @@ def download_data_table(id):
         merged_row_data_dl['display_id'] = merged_row_data_dl.get('display_id', merged_row_data_dl.get('uid'))
         merged_row_data_dl['uid'] = animal_dl.uid # Always include actual uid
         
+        # Remove internal Database ID from export
+        if 'id' in merged_row_data_dl:
+            del merged_row_data_dl['id']
+            
         age_in_days_dl = None
         date_of_birth_str_dl = merged_row_data_dl.get('date_of_birth')
         if date_of_birth_str_dl and data_table_dl.date:
@@ -1506,6 +1448,10 @@ def download_transposed_data_table(id):
         merged_row_data_trans['display_id'] = merged_row_data_trans.get('display_id', merged_row_data_trans.get('uid'))
         merged_row_data_trans['uid'] = animal_trans.uid # Always include actual uid
         
+        # Remove internal Database ID from transposed export
+        if 'id' in merged_row_data_trans:
+            del merged_row_data_trans['id']
+            
         age_in_days_trans = None
         date_of_birth_str_trans = merged_row_data_trans.get('Date of Birth') or merged_row_data_trans.get('date_of_birth')
         if date_of_birth_str_trans and data_table_trans.date:
@@ -1717,6 +1663,24 @@ def view_data_table(datatable_id):
     # Also include potential metadata fields as they might be requested
     if metadata_fields: allowed_columns.update(metadata_fields)
 
+    base_headers = get_ordered_column_names(data_table_view)
+    
+    # Filter and preserve order of headers, respecting randomization blinding
+    has_randomization = bool(data_table_view.group.randomization_details)
+    is_blinded = data_table_view.group.randomization_details.get('use_blinding', False) if has_randomization else False
+
+    all_table_headers_view = []
+    for h in base_headers:
+        if h == 'Blinded Group':
+            if has_randomization and is_blinded:
+                all_table_headers_view.append(h)
+        elif h == 'Treatment Group':
+            if has_randomization:
+                if not is_blinded or can_view_unblinded:
+                    all_table_headers_view.append(h)
+        else:
+            all_table_headers_view.append(h)
+            
     for i_view, animal_info_view in enumerate(animal_data_list_view):
         animal_db_id = animal_info_view.get('id')
         exp_row_data_view = experiment_rows_dict_view.get(animal_db_id, {})
@@ -1724,9 +1688,11 @@ def view_data_table(datatable_id):
         
         # Filter and Fix ID
         clean_row = {}
-        for k, v in merged_raw.items():
-            if k in allowed_columns:
-                clean_row[k] = v
+        for col in all_table_headers_view:
+            if col == 'ID':
+                clean_row[col] = merged_raw.get('display_id') or merged_raw.get('uid')
+            else:
+                clean_row[col] = merged_raw.get(col)
 
         processed_data_for_df_view.append(clean_row)
 
@@ -1750,12 +1716,12 @@ def view_data_table(datatable_id):
             birth_dates = pd.to_datetime(df_processed_orig_view[dob_col], errors='coerce')
             datatable_date = pd.to_datetime(data_table_view.date)
             age_deltas = datatable_date - birth_dates
-            df_processed_orig_view['Age (Days)'] = age_deltas.dt.days
+            df_processed_orig_view['age_days'] = age_deltas.dt.days
         except Exception as e_age_view:
             current_app.logger.warning(f"Could not calculate age for datatable {datatable_id} in view mode: {e_age_view}")
-            df_processed_orig_view['Age (Days)'] = None
-    elif 'Age (Days)' not in df_processed_orig_view.columns:
-        df_processed_orig_view['Age (Days)'] = None
+            df_processed_orig_view['age_days'] = None
+    elif 'age_days' not in df_processed_orig_view.columns:
+        df_processed_orig_view['age_days'] = None
     
     animal_model_analytes_view = []
     if animal_model_view and animal_model_view.analytes:
@@ -1778,32 +1744,6 @@ def view_data_table(datatable_id):
                     df_processed_orig_view[analyte.name] = pd.to_numeric(df_processed_orig_view[analyte.name], errors='coerce')
                     if not df_processed_orig_view[analyte.name].isnull().all():
                         numerical_protocol_cols_view.append(analyte.name)
-
-    base_headers = get_ordered_column_names(data_table_view)
-    final_headers = []
-
-    # Only use base headers (which are ordered correctly)
-    final_headers = []
-    for header in base_headers:
-        if header in df_processed_orig_view.columns:
-            final_headers.append(header)
-            
-    # Do NOT append other columns automatically. This prevents 'created_at', 'group_id' etc from showing up.
-    # Filter and preserve order of headers, respecting randomization blinding
-    has_randomization = bool(data_table_view.group.randomization_details)
-    is_blinded = data_table_view.group.randomization_details.get('use_blinding', False) if has_randomization else False
-
-    all_table_headers_view = []
-    for h in final_headers:
-        if h == 'Blinded Group':
-            if has_randomization and is_blinded:
-                all_table_headers_view.append(h)
-        elif h == 'Treatment Group':
-            if has_randomization:
-                if not is_blinded or can_view_unblinded:
-                    all_table_headers_view.append(h)
-        else:
-            all_table_headers_view.append(h)
     selected_grouping_params_view = []
     exclude_outliers_view = request.form.get('exclude_outliers') == 'on' if request.method == 'POST' else request.args.get('exclude_outliers') == 'true'
     

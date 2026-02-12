@@ -71,7 +71,7 @@ def test_datatable_view_columns_and_id(authenticated_client, app):
         
         animal = Animal(
             uid="A001", 
-            display_id="Animal 1",
+            display_id="A001",
             group_id=group.id, 
             date_of_birth=date(2023, 1, 1),
             measurements={"Weight": 100},

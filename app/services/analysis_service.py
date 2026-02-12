@@ -7,127 +7,131 @@ from flask import current_app
 from flask_babel import lazy_gettext as _l
 
 from app.extensions import db
-from app.models import DataTable, ExperimentDataRow, ExperimentalGroup
-from app.datatables.data_prepper import perform_data_checks
-from app.datatables.plot_utils import generate_plot, get_custom_ordered_columns
-from app.datatables.test_suggester import suggest_statistical_tests
+from app.models import DataTable, ExperimentDataRow, ExperimentalGroup, Animal
 from app.helpers import replace_undefined
-from app.services.statistics_service import StatisticsService
 from app.permissions import check_datatable_permission
 
 class AnalysisService:
     def __init__(self):
+        from app.services.statistics_service import StatisticsService
         self.stats_service = StatisticsService()
 
     def prepare_dataframe(self, data_table):
-        """Convert DataTable to DataFrame using Animal model (V2 refactored).
-        
-        Queries the Animal table directly using JSON extraction for better performance.
         """
-        from app.models import Animal
+        Extracts data from SQL and JSON columns.
+        Compatible with all database engines.
+        """
+        # 1. Identify all columns we need
+        # We need core columns + Protocol Analytes + Animal Model Analytes
         
-        # 1. Get all animals for the group
-        animals = data_table.group.animals
-        if not animals:
-            return None, [], []
-            
-        # 2. Get all ExperimentDataRows for the data_table
-        exp_rows = ExperimentDataRow.query.filter_by(data_table_id=data_table.id).all()
-        exp_rows_by_animal_id = {row.animal_id: row.row_data for row in exp_rows}
+        json_paths = []
         
-        # 3. Merge data
-        animal_data = []
-        for animal in animals:
-            animal_dict = animal.to_dict()
-            if animal.id in exp_rows_by_animal_id:
-                animal_dict.update(exp_rows_by_animal_id[animal.id])
-            animal_data.append(animal_dict)
-            
-        # 4. Calculate Age (Days)
-        dt_date = None
-        if data_table.date:
-            try:
-                dt_date = datetime.strptime(data_table.date, '%Y-%m-%d').date()
-            except (ValueError, TypeError):
-                pass
+        # A. Animal Model Fields (e.g., 'Genotype', 'Cage')
+        if data_table.group.model:
+            for analyte in data_table.group.model.analytes:
+                json_paths.append({
+                    'name': analyte.name,
+                    'source': 'animal', # Stored in Animal.measurements
+                    'type': analyte.data_type.value
+                })
 
-        for row in animal_data:
-            age_in_days = None
-            dob_str = row.get('date_of_birth')
-            if dob_str and dt_date:
-                try:
-                    dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
-                    age_in_days = (dt_date - dob).days
-                except (ValueError, TypeError):
-                    pass
-            row['age_days'] = age_in_days
-        
-        # 5. Create DataFrame
-        df = pd.DataFrame(animal_data)
-        
+        # B. Protocol Fields (e.g., 'Weight', 'Tumor Size')
+        if data_table.protocol:
+             for assoc in data_table.protocol.analyte_associations:
+                analyte = assoc.analyte
+                json_paths.append({
+                    'name': analyte.name,
+                    'source': 'experiment', # Stored in ExperimentDataRow.row_data
+                    'type': analyte.data_type.value
+                })
+
+        # 2. Fetch data from database
+        query = db.session.query(
+            Animal.id,
+            Animal.uid,
+            Animal.display_id,
+            Animal.sex,
+            Animal.status,
+            Animal.date_of_birth,
+            Animal.measurements,
+            ExperimentDataRow.row_data
+        ).outerjoin(
+            ExperimentDataRow,
+            (ExperimentDataRow.animal_id == Animal.id) & (ExperimentDataRow.data_table_id == data_table.id)
+        ).filter(
+            Animal.group_id == data_table.group_id
+        )
+
+        results = query.all()
+
+        # 3. Convert to list of dictionaries
+        data = []
+        for row in results:
+            row_dict = {
+                'id': row.id,
+                'uid': row.uid,
+                'display_id': row.display_id,
+                'sex': row.sex,
+                'status': row.status,
+                'date_of_birth': row.date_of_birth
+            }
+
+            # Extract animal measurements
+            if row.measurements:
+                for field in [f for f in json_paths if f['source'] == 'animal']:
+                    if field['name'] in row.measurements:
+                        row_dict[field['name']] = row.measurements[field['name']]
+
+            # Extract experiment data
+            if row.row_data:
+                for field in [f for f in json_paths if f['source'] == 'experiment']:
+                    if field['name'] in row.row_data:
+                        row_dict[field['name']] = row.row_data[field['name']]
+
+            data.append(row_dict)
+
+        # 4. Convert to DataFrame
+        df = pd.DataFrame(data)
+
         if df.empty:
             return None, [], []
 
-        # Ensure uid is present (fallback to display_id or stringified int ID if missing)
-        if 'uid' not in df.columns:
-            if 'display_id' in df.columns:
-                df['uid'] = df['display_id']
-            elif 'id' in df.columns:
-                df['uid'] = df['id'].astype(str)
-        
-        # 7. Add Housing Conditions
-        if data_table.housing_condition:
-            housing_defaults = {}
-            for item_assoc in data_table.housing_condition.item_associations:
-                housing_defaults[item_assoc.item.name] = item_assoc.default_value
+        # 5. Post-Processing (Python side)
+        # Handle Date of Birth age calculation
+        if data_table.date and 'date_of_birth' in df.columns:
+            # Convert string dates to datetime objects
+            df['date_of_birth'] = pd.to_datetime(df['date_of_birth'], errors='coerce')
+            dt_date = pd.to_datetime(data_table.date)
             
-            for col_name, val in housing_defaults.items():
-                if col_name not in df.columns:
-                    df[col_name] = val
+            # Vectorized calculation
+            df['age_days'] = (dt_date - df['date_of_birth']).dt.days
 
-        # 8. Add Treatment Group Mapping if blinded
-        if data_table.group.randomization_details:
-             details = data_table.group.randomization_details
-             if details.get('use_blinding') and 'Blinded Group' in df.columns:
-                 blinding_key = details.get('blinding_key', {})
-                 # We create Treatment Group by mapping Blinded Group
-                 df['Treatment Group'] = df['Blinded Group'].map(blinding_key)
-             elif not details.get('use_blinding') and 'Treatment Group' not in df.columns:
-                 # If not blinded, maybe Treatment Group is already in measurements?
-                 # If not, it might be in randomization_details.animal_groups
-                 animal_groups = details.get('animal_groups', {})
-                 df['Treatment Group'] = df['uid'].map(animal_groups)
-
-        # 9. Type Conversion based on Analyte definitions
-        all_field_defs = (
-            (data_table.group.model.analytes if data_table.group.model else []) +
-            (data_table.protocol.analytes if data_table.protocol else [])
-        )
+        # 6. Type Casting (Numeric columns might come back as strings from JSON)
+        numerical_cols = []
+        categorical_cols = []
         
-        for field_def in all_field_defs:
-            if field_def:
-                field_name, field_type = field_def.name, field_def.data_type.value
-                if field_name in df.columns and field_type in ['int', 'float']:
-                    df[field_name] = pd.to_numeric(df[field_name], errors='coerce')
-        
+        all_analyte_names = [f['name'] for f in json_paths]
+        # Add Age
         if 'age_days' in df.columns:
-            df['age_days'] = pd.to_numeric(df['age_days'], errors='coerce')
-        
-        # 10. Identify Column Types (Clean deduplication)
-        numerical_columns = []
-        categorical_columns = []
-        seen = set()
-        for col in df.columns:
-            low_col = col.lower()
-            if low_col in seen: continue
-            seen.add(low_col)
+            all_analyte_names.append('age_days')
 
-            if pd.api.types.is_numeric_dtype(df[col]):
-                numerical_columns.append(col)
-            else:
-                categorical_columns.append(col)
-        
-        return df, numerical_columns, categorical_columns
+        for col in all_analyte_names:
+            if col in df.columns:
+                # Try to convert to numeric, if fail, keep as is
+                try:
+                    df[col] = pd.to_numeric(df[col])
+                    numerical_cols.append(col)
+                except (ValueError, TypeError):
+                    categorical_cols.append(col)
+
+        # 7. Metadata cleanup
+        # Ensure ID columns are not treated as numerical data for analysis
+        if 'id' in numerical_cols:
+            numerical_cols.remove('id')
+        if 'animal_id' in numerical_cols:
+            numerical_cols.remove('animal_id')
+            
+        return df, numerical_cols, categorical_cols
 
     def _get_flattened_animal_data(self, group_ids, json_fields):
         """Helper to fetch animal data in bulk with JSON extraction.
@@ -146,7 +150,7 @@ class AnalysisService:
             Animal.date_of_birth,
             Animal.sex,
             Animal.status,
-            *[func.json_extract(Animal.measurements, f'$.{field}').label(field) for field in json_fields]
+            *[func.json_extract(Animal.measurements, f'$."{field}"').label(field) for field in json_fields]
         ).filter(Animal.group_id.in_(group_ids)).order_by(Animal.group_id, Animal.id)
         
         results = query.all()
@@ -188,7 +192,7 @@ class AnalysisService:
         # We explicitly skip fields that are handled as core columns or internal metadata
         # NOTE: 'id' (int) is skipped for analysis columns, but 'uid' is kept as subject identifier
         seen_lower = {
-            'id', 'animal_id', 'date_of_birth', 'date of birth', 
+            'id', 'animal_id', 'uid', 'date_of_birth', 'date of birth', 
             'sex', 'status', 'created_at', 'updated_at', 'group_id',
             'blinded group', 'treatment group'
         }
@@ -427,6 +431,7 @@ class AnalysisService:
         start_y_at_zero = form_data.get('start_y_at_zero', False)
 
         # 1. Data Checks & Suggestions
+        from app.datatables.data_prepper import perform_data_checks
         checks = perform_data_checks(df.copy(), grouping_params, numerical_params, is_repeated, subject_id_col, exclude_outliers)
         results['checks_by_parameter'] = checks
         
@@ -447,6 +452,7 @@ class AnalysisService:
         for col in available_categorical:
             column_types[col] = 'categorical'
 
+        from app.datatables.test_suggester import suggest_statistical_tests
         suggestions = suggest_statistical_tests(
             len(grouping_params), len(numerical_params), is_repeated, 
             checks, subject_id_col, subject_id_col_present, available_numerical,
@@ -603,6 +609,7 @@ class AnalysisService:
         }
 
     def _analyze_repeated(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None, suggestions=None):
+        from app.datatables.plot_utils import generate_plot
         # Handle Splitting (Must be done before id_vars def)
         splitting_param = form_data.get('splitting_param')
         
@@ -721,6 +728,7 @@ class AnalysisService:
              self._check_cage_effect(df_long, '_MeasurementValue_', results)
 
     def _analyze_independent(self, df, grouping, numerical, tests, graph_type, start_y_zero, subject_id, exclude_outliers, results, form_data, reference_range_summary=None, suggestions=None):
+        from app.datatables.plot_utils import generate_plot
         # Handle Splitting
         splitting_param = form_data.get('splitting_param')
         random_effect = form_data.get('random_effect_param')

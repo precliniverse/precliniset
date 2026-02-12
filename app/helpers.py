@@ -241,14 +241,14 @@ def get_ordered_column_names(data_table):
         protocol_analytes_ordered = [assoc.analyte for assoc in associations]
 
     ordered_columns = ['ID']
-    seen_columns = {'id'}
+    seen_columns = {'id', 'uid', 'display_id', 'animal id'}
 
     for analyte in animal_analytes_ordered:
         low_name = analyte.name.lower()
-        col_name = 'ID' if low_name in {'animal id', 'id', 'uid', 'display_id'} else analyte.name
-        if col_name not in seen_columns:
-            ordered_columns.append(col_name)
-            seen_columns.add(col_name)
+        if low_name in seen_columns:
+            continue
+        ordered_columns.append(analyte.name)
+        seen_columns.add(low_name)
 
     if 'age_days' not in seen_columns:
         ordered_columns.append('age_days')
@@ -256,17 +256,18 @@ def get_ordered_column_names(data_table):
 
     for analyte in protocol_analytes_ordered:
         low_name = analyte.name.lower()
-        col_name = 'ID' if low_name in {'animal id', 'id', 'uid', 'display_id'} else analyte.name
-        if col_name not in seen_columns:
-            ordered_columns.append(col_name)
-            seen_columns.add(col_name)
+        if low_name in seen_columns:
+            continue
+        ordered_columns.append(analyte.name)
+        seen_columns.add(low_name)
 
     if data_table.housing_condition:
         housing_items_ordered = sorted(data_table.housing_condition.item_associations, key=lambda x: x.item.name)
         for item_assoc in housing_items_ordered:
-            if item_assoc.item.name not in seen_columns:
+            low_name = item_assoc.item.name.lower()
+            if low_name not in seen_columns:
                 ordered_columns.append(item_assoc.item.name)
-                seen_columns.add(item_assoc.item.name)
+                seen_columns.add(low_name)
 
     return ordered_columns
 

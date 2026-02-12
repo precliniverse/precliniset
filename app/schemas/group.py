@@ -81,3 +81,23 @@ class GroupCreateSchema(BaseModel):
             )
         
         return v
+
+
+class GroupSearchSchema(BaseModel):
+    """Schema for searching experimental groups.
+    
+    Attributes:
+        q: Search query string
+        project_id: Optional project ID filter
+        page: Page number (default 1)
+        per_page: Items per page (default 15)
+    """
+    q: Optional[str] = Field(None, description="Search term")
+    project_id: Optional[str] = Field(None, description="Project ID to filter by")
+    page: int = Field(1, ge=1, description="Page number")
+    per_page: int = Field(15, ge=1, le=100, description="Items per page")
+
+    model_config = {
+        "str_strip_whitespace": True,
+    }
+

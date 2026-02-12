@@ -722,7 +722,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" nonce="{{ csp_nonce }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"
     nonce="{{ csp_nonce }}"></script>
-<script src="{{ url_for('static', filename='js/groups_common.js') }}" nonce="{{ csp_nonce }}"></script>
 <!-- New Category Discovery Modal -->
 <div class="modal fade" id="newCategoryModal" tabindex="-1" aria-labelledby="newCategoryModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -786,7 +785,8 @@ group else "#",
 "deceased": _("Deceased"),
 "selectProject": _("Search for a project..."),
 "deceasedLabel": js_strings.get("deceased_label", "")
-}
+},
+"csrfToken": "{{ csrf_token() }}"
 } %}
 <script id="group-config" type="application/json" data-config='{{ config_dict | tojson | safe }}'></script>
 

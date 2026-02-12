@@ -59,131 +59,7 @@ def get_group(group_id):
     if not check_group_permission(group, 'read'): return jsonify({'error': 'Permission denied'}), 403
     return jsonify({'id': group.id, 'name': group.name, 'is_archived': group.is_archived})
 
-@groups_bp.route('/search_ajax', methods=['GET'])
-@login_required
-def search_groups_ajax():
-    search_term = request.args.get('q', '').strip()
-    project_id = request.args.get('project_id')
-    page = request.args.get('page', 1, type=int)
-    per_page = 15
 
-    query = ExperimentalGroup.query.join(Project)
-    
-    # Filter by project if provided
-    if project_id and project_id != '0':
-        query = query.filter(ExperimentalGroup.project_id == project_id)
-        
-    # Permission check: Only groups from projects accessible to the user
-    accessible_projects = current_user.get_accessible_projects()
-    project_ids = [p.id for p in accessible_projects]
-    query = query.filter(ExperimentalGroup.project_id.in_(project_ids)).options(joinedload(ExperimentalGroup.animals))
-    
-    # Only active groups and projects
-    query = query.filter(ExperimentalGroup.is_archived == False)
-    query = query.filter(Project.is_archived == False)
-
-    if search_term:
-        query = query.filter(
-            or_(
-                ExperimentalGroup.name.ilike(f'%{search_term}%'),
-                Project.name.ilike(f'%{search_term}%'),
-                Project.slug.ilike(f'%{search_term}%')
-            )
-        )
-
-    total_count = query.count()
-    groups = query.order_by(ExperimentalGroup.name).offset((page - 1) * per_page).limit(per_page).all()
-
-    results = []
-    for g in groups:
-        results.append({
-            'id': g.id,
-            'text': f"{g.name} ({g.project.name})"
-        })
-
-    return jsonify({
-        'results': results,
-        'total_count': total_count,
-        'pagination': {'more': (page * per_page) < total_count}
-    })
-
-@groups_bp.route('/<string:group_id>/assignable_users', methods=['GET'])
-@login_required
-def get_assignable_users_ajax(group_id):
-    """
-    Returns a list of users who can be assigned to a DataTable for this group.
-    Includes members of the project's owning team and members of teams with shared permissions.
-    """
-    from app.models import ProjectTeamShare, ProjectUserShare
-    group = db.session.get(ExperimentalGroup, group_id)
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-        
-    if not check_group_permission(group, 'read'):
-        return jsonify({'error': 'Permission denied'}), 403
-        
-    project = group.project
-    assignable_users = {}
-    
-    # 1. Members of the owning team
-    if project.team:
-        for membership in project.team.memberships:
-            if membership.user:
-                assignable_users[membership.user.id] = {
-                    'id': membership.user.id,
-                    'email': membership.user.email
-                }
-        for link in project.team.user_roles:
-            if link.user:
-                assignable_users[link.user.id] = {
-                    'id': link.user.id,
-                    'email': link.user.email
-                }
-                
-    # 2. Members of shared teams who have 'create_datatables' or 'edit_datatables' perms
-    shared_permissions = ProjectTeamShare.query.filter(
-        ProjectTeamShare.project_id == project.id,
-        or_(
-            ProjectTeamShare.can_create_datatables == True,
-            ProjectTeamShare.can_edit_datatables == True
-        )
-    ).all()
-    
-    for perm in shared_permissions:
-        if perm.team:
-            for membership in perm.team.memberships:
-                if membership.user:
-                    assignable_users[membership.user.id] = {
-                        'id': membership.user.id,
-                        'email': membership.user.email
-                    }
-            for link in perm.team.user_roles:
-                if link.user:
-                    assignable_users[link.user.id] = {
-                        'id': link.user.id,
-                        'email': link.user.email
-                    }
-                    
-    # 3. Direct user shares
-    shared_users = ProjectUserShare.query.filter(
-        ProjectUserShare.project_id == project.id,
-        or_(
-            ProjectUserShare.can_create_datatables == True,
-            ProjectUserShare.can_edit_datatables == True
-        )
-    ).all()
-    
-    for share in shared_users:
-        if share.user:
-            assignable_users[share.user.id] = {
-                'id': share.user.id,
-                'email': share.user.email
-            }
-            
-    # Sort by email
-    results = sorted(assignable_users.values(), key=lambda x: x['email'])
-    
-    return jsonify(results)
 
 @groups_bp.route('/', methods=['GET'])
 @login_required
@@ -1458,10 +1334,21 @@ def get_group_animal_data(group_id):
         # 2. Genotype (si présent en minuscule, on le duplique avec la majuscule)
         if 'genotype' in d:
             d['Genotype'] = d['genotype']
+        elif 'Genotype' not in d:
+            # If genotype is not present, add it with an empty string
+            d['genotype'] = ''
+            d['Genotype'] = ''
             
-        # 3. Cage
+        # 3. Treatment (if not present, add it with an empty string)
+        if 'treatment' not in d:
+            d['treatment'] = ''
+            
+        # 4. Cage
         if 'cage' in d:
             d['Cage'] = d['cage']
+        elif 'Cage' not in d:
+            d['cage'] = ''
+            d['Cage'] = ''
         
         # 4. Model - Ajouter le nom du modèle animal
         if group.model:

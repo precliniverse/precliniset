@@ -22,6 +22,7 @@ class AnimalSchema(BaseModel):
         measurements: Dynamic scientific measurements (weight, tumor size, etc.)
     """
     
+    id: Optional[int] = Field(None, description="Internal DB ID (Ignored during creation)")
     uid: str = Field(..., description="Unique animal identifier")
     display_id: str = Field(..., description="User-facing animal identifier")
     date_of_birth: date = Field(..., description="Date of birth")
@@ -52,7 +53,7 @@ class AnimalSchema(BaseModel):
         
         # Canonical fields that are NOT measurements
         known_fields = {
-            'uid', 'display_id', 'date_of_birth', 'sex', 'status', 
+            'id', 'uid', 'display_id', 'date_of_birth', 'sex', 'status', 
             'measurements', 'age_days', 'blinded_group', 'treatment_group'
         }
         

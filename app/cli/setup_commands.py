@@ -9,7 +9,7 @@ from faker import Faker
 
 from app import db
 from app.models import (
-    User, Team, Role, Permission, Project, ExperimentalGroup,
+    User, Team, Role, Permission, Project, ExperimentalGroup, Animal,
     DataTable, ExperimentDataRow, Sample, SampleType, SampleStatus,
     Analyte, AnalyteDataType, Organ, TissueCondition, Anticoagulant,
     ProtocolModel, AnimalModel, ProtocolAnalyteAssociation, AnimalModelAnalyteAssociation,
@@ -467,13 +467,14 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
         get_or_create_analyte('Fat Mass', AnalyteDataType.FLOAT, unit='g'),
         get_or_create_analyte('Free Water', AnalyteDataType.FLOAT, unit='g')
     ]
-
+    a_cage = get_or_create_analyte('cage', AnalyteDataType.TEXT, is_meta=True)
+    
     model = AnimalModel.query.filter_by(name="Metabolic Mouse Model").first()
     if not model:
         model = AnimalModel(name="Metabolic Mouse Model")
         db.session.add(model)
         db.session.flush()
-        for i, a in enumerate([a_id, a_dob, a_sex, a_geno, a_treat]):
+        for i, a in enumerate([a_id, a_dob, a_sex, a_geno, a_treat, a_cage]):
             db.session.add(AnimalModelAnalyteAssociation(animal_model=model, analyte=a, order=i))
 
     protocols = []
@@ -557,9 +558,11 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                     ethical_approval_id=ea.id,
                     animal_data=animal_data
                 )
-
-                # Create map of uid -> animal_id
-                uid_to_id_map = {a.uid: a.id for a in group.animals}
+                
+                # RE-FETCH to ensure we have IDs
+                db.session.commit() # Ensure animals are persisted
+                group_animals = Animal.query.filter_by(group_id=group_id).all()
+                uid_to_id_map = {a.uid: a.id for a in group_animals}
 
                 # Datatables
                 base_date = date.today() - timedelta(weeks=12)

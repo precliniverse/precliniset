@@ -523,7 +523,7 @@
                             <td data-column-name="{{ col_name }}"
                                 class="{% if col_name in metadata_fields %}metadata-col{% endif %}">
                                 {% set is_readonly_structural = col_name in animal_model_field_names or col_name == 'Age
-                                (Days)' %}
+                                (Days)' or col_name == 'Blinded Group' or col_name == 'Treatment Group' %}
                                 {% set is_calculated = col_name in calculated_fields %}
 
                                 <div class="position-relative h-100">

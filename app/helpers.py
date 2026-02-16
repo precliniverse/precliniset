@@ -243,6 +243,12 @@ def get_ordered_column_names(data_table):
     ordered_columns = ['ID']
     seen_columns = {'id', 'uid', 'display_id', 'animal id'}
 
+    # Add randomization columns if present (for view/edit modes)
+    if data_table.group and data_table.group.randomization_details:
+        ordered_columns.append('Blinded Group')
+        ordered_columns.append('Treatment Group')
+        seen_columns.update({'blinded_group', 'treatment_group', 'Blinded Group', 'Treatment Group'})
+
     for analyte in animal_analytes_ordered:
         low_name = analyte.name.lower()
         if low_name in seen_columns:

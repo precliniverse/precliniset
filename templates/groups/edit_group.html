@@ -4,6 +4,11 @@
 
 {% block title %}{{ _('Edit') if group else _('Create') }} {{ _('Experimental Group') }}{% endblock %}
 
+{% block head_extra %}
+{{ super() }}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
 
@@ -189,8 +194,7 @@
                 <h5 class="mb-0">{{ _('Animal Data') }}</h5>
                 <div class="d-flex flex-wrap gap-2">
                     {% if group and group.animals and not group.randomization_details and not is_read_only %}
-                    <button type="button" class="btn btn-info" id="randomize-btn" data-bs-toggle="modal"
-                        data-bs-target="#randomizationModal">
+                    <button type="button" class="btn btn-info" id="randomize-btn">
                         <i class="fas fa-random me-1"></i> {{ _('Randomize & Assign Groups') }}
                     </button>
                     {% elif group and group.randomization_details %}
@@ -208,8 +212,7 @@
                             </li>
                             {% if not is_read_only %}
                             <li>
-                                <button type="button" class="dropdown-item" id="rerun-randomization-btn-dropdown"
-                                    data-bs-toggle="modal" data-bs-target="#randomizationModal">
+                                <button type="button" class="dropdown-item" id="rerun-randomization-btn-dropdown">
                                     <i class="fas fa-redo fa-fw me-2"></i> {{ _('Re-run Randomization') }}
                                 </button>
                             </li>
@@ -235,9 +238,10 @@
                     {% if group and not is_read_only %}
 
                     <!-- Concatenate button -->
-                    <button type="button" class="btn btn-secondary" id="show-concatenation-btn">
+                    <a href="{{ url_for('groups.concatenate_group_data', group_id=group.id) if group else '#' }}"
+                        class="btn btn-secondary" title="{{ _('Concatenate & Analyze') }}">
                         <i class="fas fa-chart-line me-1"></i> {{ _('Concatenate') }}
-                    </button>
+                    </a>
 
                     <!-- Declare Death button moved here -->
                     <button type="button" class="btn btn-danger declare-dead-btn" data-group-id="{{ group.id }}"
@@ -392,7 +396,7 @@
 
     <!-- REFACTORED Randomization Modal -->
     <div class="modal fade" id="randomizationModal" tabindex="-1" aria-labelledby="randomizationModalLabel"
-        aria-hidden="true" data-bs-backdrop="static">
+        data-bs-backdrop="static">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
@@ -507,23 +511,8 @@
 
                         <div id="minimization-options" class="p-3 border rounded bg-body-tertiary"
                             style="display: none;">
-                            <h6>{{ _('Minimization Options') }}</h6>
-                            <div class="mb-3">
-                                <label for="minimize-source" class="form-label">{{ _('Balance Groups Based on Data
-                                    From:') }}</label>
-                                <select id="minimize-source" class="form-select">
-                                    <option value="animal_model">{{ _('Animal Model Field') }}</option>
-                                    <option value="datatable">{{ _('DataTable Measurement') }}</option>
-                                </select>
-                            </div>
-                            <div id="minimize-animal-model-params" class="mb-3">
-                                <label for="minimize-analyte-am" class="form-label">{{ _('Continuous Baseline
-                                    Parameter:') }}</label>
-                                <select id="minimize-analyte-am" class="form-select">
-                                    {# Options populated by JS #}
-                                </select>
-                            </div>
-                            <div id="minimize-datatable-params" style="display: none;">
+                            <h6>{{ _('Minimization Options (using Baseline DataTable)') }}</h6>
+                            <div id="minimize-datatable-params">
                                 <div class="mb-3">
                                     <label for="minimize-datatable-select" class="form-label">{{ _('Select Baseline
                                         DataTable:') }}</label>
@@ -630,7 +619,7 @@
 
     <!-- Randomization Summary Modal -->
     <div class="modal fade" id="randomizationSummaryModal" tabindex="-1"
-        aria-labelledby="randomizationSummaryModalLabel" aria-hidden="true">
+        aria-labelledby="randomizationSummaryModalLabel">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
@@ -662,6 +651,20 @@
                     <div id="summary-minimization-results" style="display: none;">
                         <h6 class="mt-3">{{ _('Minimization Results (Mean ± SEM)') }}</h6>
                         <ul id="summary-minimization-list"></ul>
+                    </div>
+
+                    <div id="summary-unit-distribution" style="display: none;">
+                        <h6 class="mt-3">{{ _('Unit (Cage) Distribution:') }}</h6>
+                        <div id="summary-unit-distribution-content" class="table-responsive">
+                            <!-- Table will be injected here by JS -->
+                        </div>
+                    </div>
+
+                    <div id="summary-stratification-distribution" style="display: none;">
+                        <h6 class="mt-3" id="summary-stratification-title">{{ _('Stratification Distribution:') }}</h6>
+                        <div id="summary-stratification-content" class="table-responsive">
+                            <!-- Table will be injected here by JS -->
+                        </div>
                     </div>
 
                     <div id="summary-blinding-key" style="display: none;">
@@ -719,9 +722,12 @@
 
 {% block scripts %}
 {{ super() }}
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" nonce="{{ csp_nonce }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"
     nonce="{{ csp_nonce }}"></script>
+
 <!-- New Category Discovery Modal -->
 <div class="modal fade" id="newCategoryModal" tabindex="-1" aria-labelledby="newCategoryModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -786,11 +792,22 @@ group else "#",
 "selectProject": _("Search for a project..."),
 "deceasedLabel": js_strings.get("deceased_label", "")
 },
-"csrfToken": "{{ csrf_token() }}"
+"csrfToken": csrf_token()
 } %}
 <script id="group-config" type="application/json" data-config='{{ config_dict | tojson | safe }}'></script>
 
 <!-- Load the external JS file -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" nonce="{{ csp_nonce }}"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+
 <!-- Load the external JS file -->
 <script type="module" src="{{ url_for('static', filename='js/groups/main.js') }}" nonce="{{ csp_nonce }}"></script>
 

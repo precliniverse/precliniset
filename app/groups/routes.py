@@ -17,6 +17,7 @@ from flask import (abort, current_app, flash, jsonify, redirect,
                    render_template, request, send_file, url_for)
 from flask_babel import lazy_gettext as _l
 from flask_login import current_user, login_required
+from flask_wtf.csrf import generate_csrf
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import flag_modified
@@ -40,7 +41,7 @@ from ..helpers import (generate_unique_name, generate_xlsx_template,
                        sort_analytes_list_by_name,
                        validate_and_convert)
 from app.utils.files import dataframe_to_excel_bytes
-from ..models import (Analyte, AnalyteDataType, AnimalModel, DataTable,
+from ..models import (Analyte, AnalyteDataType, Animal, AnimalModel, AnimalModelAnalyteAssociation, DataTable,
                       DataTableMoleculeUsage, ControlledMolecule,
                       EthicalApproval, ExperimentalGroup, ExperimentDataRow,
                       Project, Team, TeamMembership, User, UserTeamRoleLink, Workplan)
@@ -408,8 +409,25 @@ def edit_group(id: Optional[str] = None):
     can_view_unblinded = (can_view_unblinded_data(group) or is_unblinded) if group else False
 
     # Prepare datasets for frontend JSON serialization
-    animals_dataset = [a.to_dict() for a in group.animals] if group else []
-    
+    animals_dataset = []
+    if group:
+        for a in group.animals:
+            d = a.to_dict()
+            # PATCH: Ensure keys match Capitalized Analyte names for JS Randomization
+            if group.model:
+                for analyte in group.model.analytes:
+                    # If capitalized name not in dict but lowercase is, copy it
+                    if analyte.name not in d and analyte.name.lower() in d:
+                        d[analyte.name] = d[analyte.name.lower()]
+            
+            # Ensure standard fields are capitalized if needed by JS (e.g. Cage, Genotype)
+            if 'cage' in d and 'Cage' not in d: d['Cage'] = d['cage']
+            if 'genotype' in d and 'Genotype' not in d: d['Genotype'] = d['genotype']
+            if 'id' in d and 'ID' not in d: d['ID'] = a.display_id # Use display_id for ID
+            elif 'ID' not in d: d['ID'] = a.display_id
+
+            animals_dataset.append(d)
+
     # Handle model analytes - to_dict is now a method (was @property)
     if group and group.model:
         model_analytes = group.model.analytes
@@ -419,6 +437,23 @@ def edit_group(id: Optional[str] = None):
             model_analytes_dataset = []
     else:
         model_analytes_dataset = []
+
+    animal_models_list = [model.to_dict() for model in AnimalModel.query.order_by(AnimalModel.name).all()]
+
+    # Construct Configuration Dictionary for Frontend (Randomization & DataTables)
+    config_dict = {
+        'urls': {
+            'randomizeGroup': url_for('groups.randomize_group', group_id=group.id) if group else '#',
+            'unblindGroup': url_for('groups.unblind_group', group_id=group.id) if group else '#',
+            'deleteRandomization': url_for('groups.delete_randomization', group_id=group.id) if group else '#',
+            'getRandomizationSummary': url_for('groups.get_randomization_summary', group_id=group.id) if group else '#',
+            'getGroupDatatablesForRandomization': url_for('groups.get_group_datatables_for_randomization', group_id=group.id) if group else '#',
+        },
+        'csrfToken': generate_csrf(),
+        'hasRandomization': bool(group.randomization_details) if group else False,
+        'existingAnimalData': animals_dataset,
+        'animalModels': animal_models_list
+    }
 
     return render_template(
         'groups/edit_group.html',
@@ -430,7 +465,8 @@ def edit_group(id: Optional[str] = None):
         selected_model_analytes=selected_model_analytes,
         animals_dataset=animals_dataset,
         model_analytes_dataset=model_analytes_dataset,
-        animal_models_data=[model.to_dict() for model in AnimalModel.query.order_by(AnimalModel.name).all()],
+        animal_models_data=animal_models_list,
+        config_dict=config_dict,
         js_strings={'deceased_label': str(_l('Deceased:'))}
     )
 
@@ -889,7 +925,17 @@ def randomize_group(group_id):
         # Optionally, we could call delete_randomization logic here internally, 
         # but the following code will overwrite the keys anyway.
 
-    data = request.get_json()
+    try:
+        data = request.get_json()
+    except Exception as e:
+        current_app.logger.error(f"Failed to parse JSON in randomize_group: {e}")
+        return jsonify({'success': False, 'message': 'Invalid JSON format.'}), 400
+
+    current_app.logger.info(f"Randomization Payload: {data}")
+
+    if not data:
+        return jsonify({'success': False, 'message': 'No data provided.'}), 400
+
     use_blinding = data.get('use_blinding', True)
     
     # 1. Define the total pool of animals
@@ -898,7 +944,19 @@ def randomize_group(group_id):
     animals_sorted = sorted(group.animals, key=lambda a: a.id)
     for i, animal in enumerate(animals_sorted):
         if animal.status != 'dead':
-            all_animals.append({'index': i, **animal.to_dict()})
+            d = {'index': i, **animal.to_dict()}
+            # PATCH: Normalize keys for backend logic to match JS frontend (Capitalized)
+            if group.model:
+                for analyte in group.model.analytes:
+                    if analyte.name not in d and analyte.name.lower() in d:
+                        d[analyte.name] = d[analyte.name.lower()]
+            
+            # Ensure standard fields are capitalized if needed
+            if 'cage' in d and 'Cage' not in d: d['Cage'] = d['cage']
+            if 'genotype' in d and 'Genotype' not in d: d['Genotype'] = d['genotype']
+            if 'id' in d and 'ID' not in d: d['ID'] = str(d['id']) # Ensure ID is present as string if needed
+
+            all_animals.append(d)
     
     # 2. Apply primary stratification
     stratification_factor = data.get('stratification_factor')
@@ -929,9 +987,14 @@ def randomize_group(group_id):
                     baseline_values[animal['index']] = None
         else: # datatable source
             datatable_rows = ExperimentDataRow.query.filter_by(data_table_id=minimization_details['datatable_id']).all()
-            datatable_row_map = {row.row_index: row.row_data for row in datatable_rows}
+            # Map by animal_id since row_index doesn't exist on ExperimentDataRow
+            datatable_row_map = {row.animal_id: row.row_data for row in datatable_rows}
+            
             for animal in all_animals:
-                row_data = datatable_row_map.get(animal['index'])
+                # all_animals contains dicts from the frontend, ensure we have the integer id
+                a_id = animal.get('id')
+                row_data = datatable_row_map.get(a_id)
+                
                 if row_data and analyte_name in row_data:
                     try:
                         baseline_values[animal['index']] = float(row_data[analyte_name])
@@ -1123,13 +1186,41 @@ def randomize_group(group_id):
             values = stats['values']
             if len(values) > 0:
                 minimization_summary[group_name] = {
-                    'mean': np.mean(values),
-                    'sem': np.std(values, ddof=1) / np.sqrt(len(values)) if len(values) > 1 else 0,
+                    'mean': float(np.mean(values)),
+                    'sem': float(np.std(values, ddof=1) / np.sqrt(len(values))) if len(values) > 1 else 0.0,
                     'n': len(values)
                 }
 
-    # 5. Apply assignments
+    # 4b. Calculate Unit (Cage) Distribution
+    unit_distribution = {}
+    unit_key = data['randomization_unit']
     sorted_animals = sorted(group.animals, key=lambda a: a.id)
+    if unit_key != '__individual__':
+        # Map of Group -> {Cage: Count}
+        dist = defaultdict(lambda: defaultdict(int))
+        for index, info in final_assignments.items():
+            assignment = info['blinded' if use_blinding else 'actual']
+            if index < len(sorted_animals):
+                animal_data = sorted_animals[index].to_dict()
+                cage_val = animal_data.get(unit_key, 'Unknown')
+                dist[assignment][str(cage_val)] += 1
+        
+        # Convert defaultdict to regular dict for JSON
+        unit_distribution = {k: dict(v) for k, v in dist.items()}
+
+    # 4c. Calculate Stratification Distribution
+    stratification_distribution = {}
+    if stratification_factor:
+        dist = defaultdict(lambda: defaultdict(int))
+        for index, info in final_assignments.items():
+            assignment = info['blinded' if use_blinding else 'actual']
+            if index < len(sorted_animals):
+                animal_data = sorted_animals[index].to_dict()
+                strat_val = animal_data.get(stratification_factor, 'Unknown')
+                dist[assignment][str(strat_val)] += 1
+        stratification_distribution = {k: dict(v) for k, v in dist.items()}
+
+    # 5. Apply assignments
     for index, info in final_assignments.items():
         if 0 <= index < len(sorted_animals):
             animal = sorted_animals[index]
@@ -1140,7 +1231,6 @@ def randomize_group(group_id):
             if use_blinding:
                 measurements["blinded_group"] = info['blinded']
             elif "blinded_group" in measurements:
-                # Clean up if we re-randomized without blinding
                 del measurements["blinded_group"]
             
             animal.measurements = measurements
@@ -1154,13 +1244,15 @@ def randomize_group(group_id):
     
     group.randomization_details = {
         "use_blinding": use_blinding,
-        "unit_of_randomization": data['randomization_unit'],
+        "unit_of_randomization": unit_key,
         "allow_splitting": data.get('allow_splitting', False),
         "min_subgroup_size": data.get('min_subgroup_size'),
         "stratification_factor": stratification_factor,
         "assignment_method": assignment_method,
         "minimization_details": minimization_details,
         "minimization_summary": minimization_summary,
+        "unit_distribution": unit_distribution,
+        "stratification_distribution": stratification_distribution,
         "requested_group_sizes": {tg['blinded_name' if use_blinding else 'actual_name']: tg['count'] for tg in data['treatment_groups']},
         "blinding_key": {tg['blinded_name']: tg['actual_name'] for tg in data['treatment_groups']} if use_blinding else None,
         "randomized_at": datetime.now(current_app.config['UTC_TZ']).isoformat(),
@@ -1376,6 +1468,16 @@ def get_concatenated_analytes_for_group(group_id):
     except Exception as e:
         current_app.logger.error(f"Error fetching concatenated analytes for group {group_id}: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
+
+@groups_bp.route('/<string:group_id>/concatenate', methods=['GET'])
+@login_required
+def concatenate_group_data(group_id):
+    group = db.session.get(ExperimentalGroup, group_id)
+    if not group:
+        abort(404)
+    if not check_group_permission(group, 'read'):
+        abort(403)
+    return render_template('groups/concatenate.html', group=group)
 
 @groups_bp.route('/export_concatenated/<string:group_id>', methods=['POST'])
 @login_required

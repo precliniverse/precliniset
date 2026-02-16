@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: d310ca89b36e
+Revision ID: b5c0ee68a663
 Revises: 
-Create Date: 2026-02-09 10:11:02.719948
+Create Date: 2026-02-12 17:53:41.275227
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'd310ca89b36e'
+revision = 'b5c0ee68a663'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -330,6 +330,7 @@ def upgrade():
     sa.Column('animal_model_id', sa.Integer(), nullable=False),
     sa.Column('analyte_id', sa.Integer(), nullable=False),
     sa.Column('order', sa.Integer(), nullable=False),
+    sa.Column('is_grouping', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['analyte_id'], ['analyte.id'], ),
     sa.ForeignKeyConstraint(['animal_model_id'], ['animal_model.id'], ),
     sa.PrimaryKeyConstraint('animal_model_id', 'analyte_id')
@@ -440,6 +441,7 @@ def upgrade():
     sa.Column('is_metadata', sa.Boolean(), nullable=False),
     sa.Column('order', sa.Integer(), nullable=False),
     sa.Column('calculation_formula', sa.Text(), nullable=True),
+    sa.Column('is_grouping', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['analyte_id'], ['analyte.id'], ),
     sa.ForeignKeyConstraint(['protocol_model_id'], ['protocol_model.id'], ),
     sa.PrimaryKeyConstraint('protocol_model_id', 'analyte_id')

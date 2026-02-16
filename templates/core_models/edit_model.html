@@ -158,6 +158,12 @@
                             analyte.is_sensitive %}checked{% endif %}>
                         <label class="form-check-label" for="is_sensitive_{{ analyte.id }}">{{ _('Sensitive') }}</label>
                     </div>
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                            name="is_grouping_{{ analyte.id }}" id="is_grouping_{{ analyte.id }}" {% if
+                            analyte.is_grouping %}checked{% endif %}>
+                        <label class="form-check-label" for="is_grouping_{{ analyte.id }}">{{ _('Grouping') }}</label>
+                    </div>
                     {% elif model_type == 'animal' %}
                     <div class="input-group input-group-sm me-2" style="width: 150px;">
                         <span class="input-group-text">{{ _('Default') }}</span>
@@ -201,6 +207,12 @@
                             name="is_sensitive_{{ analyte.id }}" id="is_sensitive_{{ analyte.id }}" {% if
                             analyte.is_sensitive %}checked{% endif %}>
                         <label class="form-check-label" for="is_sensitive_{{ analyte.id }}">{{ _('Sensitive') }}</label>
+                    </div>
+                    <div class="form-check form-switch me-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                            name="is_grouping_{{ analyte.id }}" id="is_grouping_{{ analyte.id }}" {% if
+                            analyte.is_grouping %}checked{% endif %}>
+                        <label class="form-check-label" for="is_grouping_{{ analyte.id }}">{{ _('Grouping') }}</label>
                     </div>
                     {% endif %}
                     {% endif %}
@@ -509,6 +521,10 @@
                     <input class="form-check-input" type="checkbox" role="switch" name="is_sensitive_${analyteId}" id="is_sensitive_${analyteId}">
                     <label class="form-check-label" for="is_sensitive_${analyteId}}">{{ _('Sensitive') }}</label>
                 </div>
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" role="switch" name="is_grouping_${analyteId}" id="is_grouping_${analyteId}">
+                    <label class="form-check-label" for="is_grouping_${analyteId}}">{{ _('Grouping') }}</label>
+                </div>
             `;
             } else if (modelType === 'animal') {
                 let categoryButton = '';
@@ -545,6 +561,10 @@
                 <div class="form-check form-switch me-2">
                     <input class="form-check-input" type="checkbox" role="switch" name="is_sensitive_${analyteId}" id="is_sensitive_${analyteId}">
                     <label class="form-check-label" for="is_sensitive_${analyteId}}">{{ _('Sensitive') }}</label>
+                </div>
+                <div class="form-check form-switch me-2">
+                    <input class="form-check-input" type="checkbox" role="switch" name="is_grouping_${analyteId}" id="is_grouping_${analyteId}">
+                    <label class="form-check-label" for="is_grouping_${analyteId}}">{{ _('Grouping') }}</label>
                 </div>
             `;
             }

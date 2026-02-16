@@ -260,7 +260,26 @@ def edit_data_table(id):
         d['id'] = a.id
         group_animal_data.append(d)
     
-    column_names = get_ordered_column_names(data_table)
+    from ..permissions import can_view_unblinded_data
+    is_unblinded = data_table.group.randomization_details.get('unblinded_at') if data_table.group.randomization_details else False
+    can_view_unblinded = (can_view_unblinded_data(data_table.group) or is_unblinded)
+    
+    base_headers = get_ordered_column_names(data_table)
+    has_randomization = bool(data_table.group.randomization_details)
+    is_blinded = data_table.group.randomization_details.get('use_blinding', False) if has_randomization else False
+
+    column_names = []
+    for h in base_headers:
+        if h == 'Blinded Group':
+            if has_randomization and is_blinded:
+                column_names.append(h)
+        elif h == 'Treatment Group':
+            if has_randomization:
+                if not is_blinded or can_view_unblinded:
+                    column_names.append(h)
+        else:
+            column_names.append(h)
+
     field_types = get_field_types(data_table)
 
     animal_model_analytes_ordered = []
@@ -330,6 +349,10 @@ def edit_data_table(id):
                 # SPECIAL HANDLING FOR ID/uid: Map column 'ID' or 'uid' to animal 'display_id'
                 if col == 'ID' or low_col in {'id', 'uid', 'animal_id'}:
                     row_data[col] = merged.get('display_id') or merged.get('uid')
+                elif col == 'Blinded Group':
+                    row_data[col] = merged.get('blinded_group')
+                elif col == 'Treatment Group':
+                    row_data[col] = merged.get('treatment_group')
                 elif low_col == 'age_days':
                     row_data[col] = age_in_days
                 else:
@@ -1331,7 +1354,7 @@ def download_data_table(id):
     data_for_df_dl = []
     all_actual_data_keys_dl = set()
     
-    for animal_dl in animals_dl:
+    for i_dl, animal_dl in enumerate(animals_dl):
         merged_row_data_dl = animal_dl.to_dict()
         merged_row_data_dl.update(existing_data_rows_dict_dl.get(animal_dl.id, {}))
         
@@ -1339,6 +1362,12 @@ def download_data_table(id):
         merged_row_data_dl['display_id'] = merged_row_data_dl.get('display_id', merged_row_data_dl.get('uid'))
         merged_row_data_dl['uid'] = animal_dl.uid # Always include actual uid
         
+        # Map randomization fields to Title Case for export consistency
+        if 'blinded_group' in merged_row_data_dl:
+            merged_row_data_dl['Blinded Group'] = merged_row_data_dl.pop('blinded_group')
+        if 'treatment_group' in merged_row_data_dl:
+            merged_row_data_dl['Treatment Group'] = merged_row_data_dl.pop('treatment_group')
+
         # Remove internal Database ID from export
         if 'id' in merged_row_data_dl:
             del merged_row_data_dl['id']
@@ -1382,7 +1411,13 @@ def download_data_table(id):
             if can_view_unblinded_dl and blinding_mode == 'unblinded':
                 # Map blinded names to actual names if requested and permitted
                 blinding_key = data_table_dl.group.randomization_details.get('blinding_key', {})
-                df_dl['Treatment Group'] = df_dl['Blinded Group'].map(blinding_key)
+                if 'Blinded Group' in df_dl.columns:
+                    df_dl['Treatment Group'] = df_dl['Blinded Group'].map(blinding_key)
+                else: 
+                     # Fallback if the expected column name is somehow different (e.g. still snake_case)
+                     col_to_use = 'blinded_group' if 'blinded_group' in df_dl.columns else None
+                     if col_to_use:
+                         df_dl['Treatment Group'] = df_dl[col_to_use].map(blinding_key)
             else:
                 # Keep blinded group, but hide treatment group
                 if 'Treatment Group' in df_dl.columns:
@@ -1396,6 +1431,7 @@ def download_data_table(id):
         cols_to_drop = [c for c in ['Blinded Group', 'Treatment Group'] if c in df_dl.columns]
         if cols_to_drop:
             df_dl = df_dl.drop(columns=cols_to_drop)
+
 
     if data_table_dl.housing_condition:
         housing_conditions_data = {}
@@ -1463,6 +1499,12 @@ def download_transposed_data_table(id):
             except (ValueError, TypeError): 
                 age_in_days_trans = None
         
+        # Map randomization fields to Title Case for export consistency
+        if 'blinded_group' in merged_row_data_trans:
+            merged_row_data_trans['Blinded Group'] = merged_row_data_trans.pop('blinded_group')
+        if 'treatment_group' in merged_row_data_trans:
+            merged_row_data_trans['Treatment Group'] = merged_row_data_trans.pop('treatment_group')
+
         merged_row_data_trans['Age (Days)'] = age_in_days_trans
         all_actual_data_keys_trans.update(merged_row_data_trans.keys())
         data_for_df_trans.append(merged_row_data_trans)
@@ -1477,6 +1519,7 @@ def download_transposed_data_table(id):
             final_columns_for_df_trans.append(col)        
             
     df_trans = pd.DataFrame(data_for_df_trans, columns=final_columns_for_df_trans)
+
     
     # Blinding logic for transposed download
     from ..permissions import can_view_unblinded_data
@@ -1689,8 +1732,15 @@ def view_data_table(datatable_id):
         # Filter and Fix ID
         clean_row = {}
         for col in all_table_headers_view:
+            low_col = col.lower()
             if col == 'ID':
                 clean_row[col] = merged_raw.get('display_id') or merged_raw.get('uid')
+            elif col == 'Blinded Group':
+                clean_row[col] = merged_raw.get('blinded_group')
+            elif col == 'Treatment Group':
+                clean_row[col] = merged_raw.get('treatment_group')
+            elif low_col == 'age_days':
+                clean_row[col] = merged_raw.get('age_days')
             else:
                 clean_row[col] = merged_raw.get(col)
 
@@ -1727,7 +1777,23 @@ def view_data_table(datatable_id):
     if animal_model_view and animal_model_view.analytes:
         animal_model_analytes_view = sort_analytes_list_by_name(animal_model_view.analytes)
 
-    animal_model_grouping_params_view = [a.name for a in animal_model_analytes_view]
+    # Build grouping params from analytes flagged as is_grouping=True
+    animal_model_grouping_params_view = []
+    if animal_model_view:
+        for assoc in AnimalModelAnalyteAssociation.query.filter_by(
+            animal_model_id=animal_model_view.id, is_grouping=True
+        ).all():
+            animal_model_grouping_params_view.append(assoc.analyte.name)
+    # Also check protocol associations for is_grouping
+    if data_table_view.protocol:
+        for assoc in ProtocolAnalyteAssociation.query.filter_by(
+            protocol_model_id=data_table_view.protocol_id, is_grouping=True
+        ).all():
+            if assoc.analyte.name not in animal_model_grouping_params_view:
+                animal_model_grouping_params_view.append(assoc.analyte.name)
+    # Fallback: if no analytes are flagged as grouping, show all animal model analytes
+    if not animal_model_grouping_params_view:
+        animal_model_grouping_params_view = [a.name for a in animal_model_analytes_view]
     
     if not animal_model_grouping_params_view and not df_processed_orig_view.empty and animal_model_view:
         flash(lazy_gettext("No animal model parameters defined for grouping."), "warning")
@@ -1756,6 +1822,9 @@ def view_data_table(datatable_id):
 
     if request.method == 'POST': selected_grouping_params_view = request.form.getlist('grouping_params')
     elif request.method == 'GET': selected_grouping_params_view = request.args.getlist('grouping_params')
+    # Auto-select grouping params on first visit if none are explicitly selected
+    if not selected_grouping_params_view and request.method == 'GET':
+        selected_grouping_params_view = list(animal_model_grouping_params_view)
     valid_grouping_params_view = [p for p in selected_grouping_params_view if p in df_processed_orig_view.columns]
     subgroup_summaries_view = {}
     all_display_rows_with_outlier_info_view = []

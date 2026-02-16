@@ -39,6 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
      * Lazy Load Randomization
      */
     const initRandomization = async (openModalImmediately = true) => {
+        // Sync Latest Data from Table to CONFIG
+        CONFIG.existingAnimalData = animalTable.getData();
+
         if (!randomizerInstance) {
             // Visual feedback
             const btn = document.getElementById('randomize-btn') || document.getElementById('rerun-randomization-btn-dropdown');
@@ -48,7 +51,6 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const module = await import('./randomization.js');
                 randomizerInstance = new module.Randomizer(CONFIG);
-                console.log("Randomizer module loaded.");
             } catch (err) {
                 console.error("Failed to load Randomizer:", err);
                 alert("Failed to load randomization module. Please refresh.");
@@ -85,41 +87,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const summaryBtn = document.getElementById('view-randomization-summary-btn-dropdown');
     if (summaryBtn) {
         summaryBtn.addEventListener('click', async (e) => {
-            e.preventDefault(); // Stop immediate action if any
-            await initRandomization(false); // Load class
-            // Manually trigger the logic that the class would have bound
-            // Since we lazy loaded, the event listener in constructor wasn't there for THIS click.
-            // We manually call the method on the instance.
+            e.preventDefault();
+            await initRandomization(false);
             if (randomizerInstance) randomizerInstance.openSummary();
         });
     }
 
-
-    /**
-     * Lazy Load Concatenation
-     */
-    const showConcatenationBtn = document.getElementById('show-concatenation-btn');
-    if (showConcatenationBtn) {
-        showConcatenationBtn.addEventListener('click', async (e) => {
+    const unblindBtn = document.getElementById('unblind-randomization-btn-dropdown');
+    if (unblindBtn) {
+        unblindBtn.addEventListener('click', async (e) => {
             e.preventDefault();
+            await initRandomization(false);
+            if (randomizerInstance) randomizerInstance.unblindRandomization();
+        });
+    }
 
-            if (!concatenationManagerInstance) {
-                showConcatenationBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
-                try {
-                    const module = await import('./concatenation_manager.js');
-                    concatenationManagerInstance = new module.ConcatenationManager(CONFIG);
-                    // The constructor injects the UI. 
-                    // We need to trigger the "show" logic manually now that it's loaded.
-                    concatenationManagerInstance.showCard();
-                } catch (err) {
-                    console.error("Failed to load Concatenation:", err);
-                } finally {
-                    // Button might be hidden by the manager, but reset just in case
-                    showConcatenationBtn.innerHTML = '<i class="fas fa-chart-line me-1"></i> Concatenate';
-                }
-            } else {
-                concatenationManagerInstance.showCard();
-            }
+    const deleteBtn = document.getElementById('delete-randomization-btn-dropdown');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await initRandomization(false);
+            if (randomizerInstance) randomizerInstance.deleteRandomization();
         });
     }
 
@@ -322,5 +310,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             })
             .catch(e => console.error(e));
+    }
+
+    // Auto-open summary if redirected after randomization
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('randomized')) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('randomized');
+        window.history.replaceState({}, '', url.toString());
+
+        initRandomization(false).then(() => {
+            if (randomizerInstance) randomizerInstance.openSummary();
+        });
     }
 });

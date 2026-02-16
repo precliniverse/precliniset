@@ -926,6 +926,7 @@ def edit_model(model_type, id=None):
                 calculation_formula = request.form.get(f'calculation_formula_{original_id_str}')
                 is_metadata = f'is_metadata_{original_id_str}' in request.form
                 is_sensitive = f'is_sensitive_{original_id_str}' in request.form
+                is_grouping = f'is_grouping_{original_id_str}' in request.form
                 
                 analyte = db.session.get(Analyte, analyte_id)
                 if not analyte:
@@ -958,6 +959,7 @@ def edit_model(model_type, id=None):
                     association.default_value = default_value
                     association.calculation_formula = calculation_formula
                     association.is_metadata = is_metadata
+                    association.is_grouping = is_grouping
                     association.order = i
                 else:
                     new_assoc = ProtocolAnalyteAssociation(
@@ -966,6 +968,7 @@ def edit_model(model_type, id=None):
                         default_value=default_value,
                         calculation_formula=calculation_formula,
                         is_metadata=is_metadata,
+                        is_grouping=is_grouping,
                         order=i
                     )
                     db.session.add(new_assoc)
@@ -1024,6 +1027,7 @@ def edit_model(model_type, id=None):
             for i, analyte_id in enumerate(final_analyte_ids):
                 original_id_str = submitted_analyte_ids_str[i]
                 is_metadata = f'is_metadata_{original_id_str}' in request.form
+                is_grouping = f'is_grouping_{original_id_str}' in request.form
                 default_value = request.form.get(f'default_value_{original_id_str}')
 
                 analyte = db.session.get(Analyte, analyte_id)
@@ -1058,7 +1062,8 @@ def edit_model(model_type, id=None):
                 new_assoc = AnimalModelAnalyteAssociation(
                     animal_model_id=model.id,
                     analyte_id=analyte_id,
-                    order=i
+                    order=i,
+                    is_grouping=is_grouping
                 )
                 db.session.add(new_assoc)
 
@@ -1088,7 +1093,8 @@ def edit_model(model_type, id=None):
                     'allowed_values': assoc.analyte.allowed_values,
                     'default_value': assoc.analyte.default_value,
                     'is_metadata': assoc.analyte.is_metadata,
-                    'is_sensitive': assoc.analyte.is_sensitive
+                    'is_sensitive': assoc.analyte.is_sensitive,
+                    'is_grouping': assoc.is_grouping
                 })
         elif model_type == 'protocol':
             associations = ProtocolAnalyteAssociation.query.filter_by(protocol_model_id=model.id).order_by(ProtocolAnalyteAssociation.order).all()
@@ -1103,7 +1109,8 @@ def edit_model(model_type, id=None):
                     'default_value': assoc.default_value,
                     'calculation_formula': assoc.calculation_formula,
                     'is_metadata': assoc.is_metadata,
-                    'is_sensitive': assoc.analyte.is_sensitive
+                    'is_sensitive': assoc.analyte.is_sensitive,
+                    'is_grouping': assoc.is_grouping
                 })
 
     return render_template('core_models/edit_model.html', model=model, model_type=model_type, form=form, data_types=list(AnalyteDataType), all_analytes_data=all_analytes_data, selected_analytes_data=selected_analytes_data)
@@ -1222,6 +1229,7 @@ def duplicate_model(model_type, id):
                 default_value=assoc.default_value,
                 calculation_formula=assoc.calculation_formula,
                 is_metadata=assoc.is_metadata,
+                is_grouping=assoc.is_grouping,
                 order=assoc.order
             )
             db.session.add(new_assoc)
@@ -1231,7 +1239,8 @@ def duplicate_model(model_type, id):
             new_assoc = AnimalModelAnalyteAssociation(
                 animal_model=new_model,
                 analyte=assoc.analyte,
-                order=assoc.order
+                order=assoc.order,
+                is_grouping=assoc.is_grouping
             )
             db.session.add(new_assoc)
 

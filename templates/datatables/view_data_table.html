@@ -8,6 +8,8 @@
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" />
 <style>
     .outlier {
         background-color: var(--bs-danger-bg-subtle) !important;
@@ -415,6 +417,12 @@
 {% block scripts %}
 {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" nonce="{{ csp_nonce }}"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <script nonce="{{ csp_nonce }}">
     $(document).ready(function () {
@@ -435,25 +443,38 @@
             allowClear: true
         });
 
-        const toggleButtonView = document.getElementById('toggle-metadata-view');
-        const mainTable = document.getElementById('mainDataTable');
-        let metadataVisibleView = false;
+        // Initialize DataTables
+        var table = $('#mainDataTable').DataTable({
+            dom: 'Brtip', // Removed 'f' for searching
+            buttons: [
+                'copy', 'csv', 'excel'
+            ],
+            paging: true,
+            ordering: false, // Disabled ordering
+            searching: false, // Disabled searching
+            scrollX: true,
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+            columnDefs: [
+                { targets: '.metadata-col', visible: false } // Hide metadata by default
+            ]
+        });
 
-        if (toggleButtonView && mainTable) {
+        const toggleButtonView = document.getElementById('toggle-metadata-view');
+        let metadataVisibleView = false;
+        const metadataLabels = {
+            show: "{{ _('Show Metadata') }}",
+            hide: "{{ _('Hide Metadata') }}"
+        };
+
+        if (toggleButtonView) {
             toggleButtonView.addEventListener('click', function () {
                 metadataVisibleView = !metadataVisibleView;
-                const headers = mainTable.querySelectorAll('th.metadata-col');
-                const cells = mainTable.querySelectorAll('td.metadata-col');
 
-                if (metadataVisibleView) {
-                    headers.forEach(th => th.style.display = 'table-cell');
-                    cells.forEach(td => td.style.display = 'table-cell');
-                    toggleButtonView.textContent = 'Hide Metadata';
-                } else {
-                    headers.forEach(th => th.style.display = 'none');
-                    cells.forEach(td => td.style.display = 'none');
-                    toggleButtonView.textContent = 'Show Metadata';
-                }
+                // Toggle visibility using DataTables API
+                table.columns('.metadata-col').visible(metadataVisibleView);
+
+                toggleButtonView.textContent = metadataVisibleView ? metadataLabels.hide : metadataLabels.show;
             });
         }
 

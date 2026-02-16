@@ -118,6 +118,7 @@ class AnimalModelAnalyteAssociation(db.Model):
     animal_model_id = db.Column(db.Integer, db.ForeignKey('animal_model.id'), primary_key=True)
     analyte_id = db.Column(db.Integer, db.ForeignKey('analyte.id'), primary_key=True)
     order = db.Column(db.Integer, nullable=False, default=0)
+    is_grouping = db.Column(db.Boolean, default=False, nullable=False)
 
     animal_model = db.relationship('AnimalModel', back_populates='analyte_associations')
     analyte = db.relationship('Analyte', back_populates='animal_model_associations')
@@ -135,6 +136,7 @@ class ProtocolAnalyteAssociation(db.Model):
     is_metadata = db.Column(db.Boolean, default=False, nullable=False)
     order = db.Column(db.Integer, nullable=False, default=0)
     calculation_formula = db.Column(db.Text, nullable=True) # Stores formula e.g. "[Weight] / [Height]"
+    is_grouping = db.Column(db.Boolean, default=False, nullable=False)
 
     protocol_model = db.relationship('ProtocolModel', back_populates='analyte_associations')
     analyte = db.relationship('Analyte', back_populates='protocol_associations')

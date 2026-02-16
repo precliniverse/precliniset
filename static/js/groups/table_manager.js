@@ -4,6 +4,7 @@ export class AnimalTable {
         this.tbody = this.table.querySelector('tbody');
         this.config = config;
         this.nextRowIndex = 0;
+        this.dt = null; // DataTables instance
         this.init();
     }
 
@@ -13,7 +14,12 @@ export class AnimalTable {
             if (!btn) return;
 
             if (btn.classList.contains('remove-row-btn')) {
-                btn.closest('tr').remove();
+                const tr = btn.closest('tr');
+                if (this.dt) {
+                    this.dt.row(tr).remove().draw(false);
+                } else {
+                    tr.remove();
+                }
             } else if (btn.classList.contains('duplicate-row-btn')) {
                 this.duplicateRow(btn.closest('tr'));
             }
@@ -26,9 +32,39 @@ export class AnimalTable {
         });
     }
 
+    initDataTable() {
+        if (this.dt) {
+            this.dt.destroy();
+        }
+        // Initialize DataTables
+        this.dt = $(this.table).DataTable({
+            paging: false,
+            searching: false, // Disabled searching
+            info: false,
+            ordering: false, // Disabled ordering
+            order: [], // No initial sort
+            columnDefs: [
+                { orderable: false, targets: 0 } // Disable sorting on Actions column
+            ],
+            dom: "<'row'<'col-sm-12'tr>>", // Removed search field row
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Filter animals..."
+            }
+        });
+    }
+
     updateTableHeader(fields) {
+        if (this.dt) {
+            this.dt.destroy();
+            this.dt = null;
+        }
+
         this.currentFields = fields;
         const headerRow = this.table.querySelector('thead tr');
+
+        // Clear existing headers
+        headerRow.innerHTML = '';
 
         // Reset header to base columns
         // 1. Actions, 2. ID, 3. Randomization (Conditional), 4. Age
@@ -78,9 +114,16 @@ export class AnimalTable {
             th.textContent = field.name + (field.unit ? ` (${field.unit})` : '');
             headerRow.appendChild(th);
         });
+
+        // Re-initialize DataTable with new columns
+        this.initDataTable();
     }
 
     addAnimalRow(animalData = {}, fields = this.currentFields || []) {
+        // Temporarily destroy DT to modify DOM directly? 
+        // No, use row.add().node() to get the TR, then modify it, then draw()
+        // BUT row.add() expects data array (if columns defined) or node.
+
         const row = document.createElement('tr');
         if (animalData.status === 'dead') row.classList.add('table-danger');
 
@@ -223,7 +266,13 @@ export class AnimalTable {
             cell.appendChild(input);
         });
 
-        this.tbody.appendChild(row);
+        // Add to DataTable if initialized
+        if (this.dt) {
+            this.dt.row.add(row).draw(false);
+        } else {
+            this.tbody.appendChild(row);
+        }
+
         this.nextRowIndex++;
         this.calculateRowAge(row);
     }
@@ -258,7 +307,12 @@ export class AnimalTable {
         });
 
         const ageDisplay = row.querySelector('.age-display');
-        if (!dobInput || !ageDisplay || !dobInput.value) return;
+        if (!dobInput || !ageDisplay) return; // Allow running without value to reset if needed
+
+        if (!dobInput.value) {
+            ageDisplay.textContent = '-';
+            return;
+        }
 
         const dob = new Date(dobInput.value);
         const today = new Date();
@@ -272,23 +326,38 @@ export class AnimalTable {
     }
 
     clearRows() {
-        this.tbody.innerHTML = '';
+        if (this.dt) {
+            this.dt.clear().draw();
+        } else {
+            this.tbody.innerHTML = '';
+        }
         this.nextRowIndex = 0;
     }
 
     getData() {
         const data = [];
-        this.tbody.querySelectorAll('tr').forEach(row => {
+        // Use DataTables API to get all nodes (including those not currently in DOM if paginated/filtered)
+        // Since we use paging: false, usually they are in DOM, but filtered rows are detached.
+        // dt.rows().nodes() returns standard JS array of TR elements (or NodeList)
+
+        const rows = this.dt ? this.dt.rows().nodes().to$() : this.tbody.querySelectorAll('tr');
+
+        rows.each((index, row) => {
+            // If strictly using jQuery for 'each', arguments are (index, element)
+            // If standard NodeList, they are different. creating jQuery object avoids ambiguity if $.each used.
+            // But dt.rows().nodes() returns API instance. .to$() returns jQuery object.
+
+            const tr = $(row);
             const rowData = {};
-            row.querySelectorAll('input, select').forEach(input => {
+            tr.find('input, select').each((i, input) => {
                 if (input.name && input.name.includes('_field_')) {
                     const parts = input.name.split('_field_');
                     if (parts.length === 2) rowData[parts[1]] = input.value;
                 }
             });
             // Capture age if computed
-            const ageSpan = row.querySelector('.age-display');
-            if (ageSpan) rowData['age_days'] = ageSpan.innerText;
+            const ageSpan = tr.find('.age-display');
+            if (ageSpan.length) rowData['age_days'] = ageSpan.text();
 
             data.push(rowData);
         });

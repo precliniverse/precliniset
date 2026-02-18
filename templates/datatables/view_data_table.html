@@ -443,22 +443,30 @@
             allowClear: true
         });
 
-        // Initialize DataTables
-        var table = $('#mainDataTable').DataTable({
-            dom: 'Brtip', // Removed 'f' for searching
-            buttons: [
-                'copy', 'csv', 'excel'
-            ],
-            paging: true,
-            ordering: false, // Disabled ordering
-            searching: false, // Disabled searching
-            scrollX: true,
-            pageLength: 25,
-            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
-            columnDefs: [
-                { targets: '.metadata-col', visible: false } // Hide metadata by default
-            ]
-        });
+        // Initialize DataTables only if there are actual data rows
+        // (avoid _DT_CellIndex error when tbody has a colspan "no data" row)
+        var tableEl = document.getElementById('mainDataTable');
+        var hasDataRows = tableEl && tableEl.querySelectorAll('tbody tr:not(.group-separator)').length > 0
+            && !tableEl.querySelector('tbody tr td[colspan]');
+        var table = null;
+
+        if (hasDataRows) {
+            table = $('#mainDataTable').DataTable({
+                dom: 'Brtip', // Removed 'f' for searching
+                buttons: [
+                    'copy', 'csv', 'excel'
+                ],
+                paging: true,
+                ordering: false, // Disabled ordering
+                searching: false, // Disabled searching
+                scrollX: true,
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+                columnDefs: [
+                    { targets: '.metadata-col', visible: false } // Hide metadata by default
+                ]
+            });
+        }
 
         const toggleButtonView = document.getElementById('toggle-metadata-view');
         let metadataVisibleView = false;
@@ -471,8 +479,15 @@
             toggleButtonView.addEventListener('click', function () {
                 metadataVisibleView = !metadataVisibleView;
 
-                // Toggle visibility using DataTables API
-                table.columns('.metadata-col').visible(metadataVisibleView);
+                if (table) {
+                    // Toggle visibility using DataTables API
+                    table.columns('.metadata-col').visible(metadataVisibleView);
+                } else {
+                    // Fallback for empty table (no DataTables initialized)
+                    document.querySelectorAll('#mainDataTable .metadata-col').forEach(el => {
+                        el.style.display = metadataVisibleView ? '' : 'none';
+                    });
+                }
 
                 toggleButtonView.textContent = metadataVisibleView ? metadataLabels.hide : metadataLabels.show;
             });

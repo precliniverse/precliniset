@@ -263,14 +263,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('confirm-save-group')?.addEventListener('click', () => {
-        performAjaxSave(document.getElementById('dont-update-datatables').checked);
+        performAjaxSave();
     });
 
     // Import Logic
     document.getElementById('import-xlsx-btn')?.addEventListener('click', () => {
         const fileInput = document.getElementById('xlsx_upload');
         if (!fileInput.files.length) { alert("Please select a file."); return; }
-        if (validateForm() && confirm("Overwrite current list?")) performAjaxSave(false);
+        if (validateForm() && confirm("Overwrite current list?")) performAjaxSave();
     });
 
     function validateForm() {
@@ -287,11 +287,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return isValid;
     }
 
-    function performAjaxSave(dontUpdateDataTables, allowNewCategories = false) {
+    function performAjaxSave(allowNewCategories = false) {
         const groupForm = document.getElementById('group-form');
         const formData = new FormData(groupForm);
         formData.append('is_ajax', 'true');
-        if (dontUpdateDataTables) formData.append('update_data_tables', 'no');
+        // update_data_tables is now always True on backend, but we can explicitely send 'yes' if needed 
+        // Or just let the backend handle the default. Given backend change, we don't need to append 'no'.
         if (allowNewCategories) formData.append('allow_new_categories', 'true');
         formData.append('animal_data', JSON.stringify(animalTable.getData()));
 

@@ -113,48 +113,84 @@ def test_datatable_view_columns_and_id(authenticated_client, app):
     # Verify strict template data content if possible (mocking render_template would be better but this is functional)
 
 def test_datatable_timestamp_update(authenticated_client, app):
+    """
+    GIVEN un animal avec un updated_at ancien
+    WHEN une cellule de la datatable est modifiée via l'API
+    THEN le champ updated_at de l'animal doit être mis à jour
+    """
     with app.app_context():
         db.session.remove()
-        
-        # Setup User, Team, Project
+
         user = User.query.filter_by(email='test@example.com').first()
         team = Team(name="Test Team 2")
         db.session.add(team)
         db.session.commit()
-        
+
         from app.models import TeamMembership
         db.session.add(TeamMembership(user=user, team=team))
-        
+
         project = Project(name="Test Project 2", team=team, owner=user, slug="TESTPROJ2")
         db.session.add(project)
         db.session.commit()
 
-        # Setup Protocol and Model
         protocol = ProtocolModel(name="Test Protocol 2")
+        analyte = Analyte(name="Weight2", data_type=AnalyteDataType.FLOAT)
+        db.session.add(analyte)
+        db.session.flush()
+
+        from app.models import ProtocolAnalyteAssociation
+        assoc = ProtocolAnalyteAssociation(
+            protocol_model_id=protocol.id, analyte_id=analyte.id, order=1
+        )
+        protocol.analyte_associations.append(assoc)
         db.session.add(protocol)
+
         model = AnimalModel(name="Test Model 2")
         db.session.add(model)
         db.session.flush()
-        
-        group = ExperimentalGroup(name="Test Group 2", model_id=model.id, project_id=project.id, team_id=team.id, owner_id=user.id)
+
+        group = ExperimentalGroup(
+            name="Test Group 2", model_id=model.id,
+            project_id=project.id, team_id=team.id, owner_id=user.id,
+        )
         db.session.add(group)
         db.session.flush()
-        
-        animal = Animal(uid="A002", display_id="Animal 2", group_id=group.id, updated_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+
+        old_ts = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        animal = Animal(
+            uid="A002", display_id="Animal 2",
+            group_id=group.id, updated_at=old_ts,
+        )
         db.session.add(animal)
-        
+
         dt = DataTable(group_id=group.id, protocol_id=protocol.id, date="2024-01-01")
         db.session.add(dt)
         db.session.commit()
-        
-        dt_id = dt.id
-        original_updated_at = animal.updated_at
 
-    # Perform Edit
-    # We need to simulate the POST to save_manual_edits route or similar
-    # The route is likely in routes_crud.py: update_cell or save_table
-    
-    # Finding the route... Assuming '/datatables/update_cell' or similar based on previous context.
-    # Let's inspect routes_crud.py if needed, but for now assuming we can fix this test later if route is wrong.
-    # Actually, the user wants me to fix code, testing is secondary but good.
-    pass
+        dt_id = dt.id
+        animal_id = animal.id
+
+    # Simuler la mise à jour d'une cellule via l'API
+    import json
+    response = authenticated_client.post(
+        f'/datatables/{dt_id}/save',
+        data=json.dumps({
+            'rows': [{'animal_id': animal_id, 'Weight2': 25.5}]
+        }),
+        content_type='application/json',
+    )
+
+    # La route doit retourner 200 (succès ou données sauvegardées)
+    assert response.status_code in (200, 201), (
+        f"La sauvegarde de la datatable a échoué avec le status {response.status_code}"
+    )
+
+    # Vérifier que updated_at a été mis à jour
+    with app.app_context():
+        db.session.remove()
+        from app.models import Animal as AnimalModel2
+        updated_animal = db.session.get(AnimalModel2, animal_id)
+        if updated_animal:
+            assert updated_animal.updated_at > old_ts, (
+                "Le champ updated_at de l'animal doit être mis à jour après modification"
+            )

@@ -5,8 +5,29 @@ from flask_mail import Message
 from .celery_utils import celery_app
 from .extensions import db, mail
 from .models import Project, User, Workplan, DataTable
+from .models.notifications import Notification, NotificationType
 from .services.tm_connector import TrainingManagerConnector
 from requests.exceptions import RequestException
+
+
+def _create_in_app_notification(user_id, message, notif_type=NotificationType.EMAIL_FALLBACK, link=None):
+    """
+    Crée une notification in-app pour un utilisateur.
+    Utilisé comme fallback quand SMTP n'est pas configuré.
+    """
+    try:
+        notif = Notification(
+            user_id=user_id,
+            message=message,
+            type=notif_type,
+            link=link,
+        )
+        db.session.add(notif)
+        db.session.commit()
+        current_app.logger.info(f"In-app notification created for user {user_id}: {message[:60]}")
+    except Exception as e:
+        current_app.logger.error(f"Failed to create in-app notification for user {user_id}: {e}", exc_info=True)
+        db.session.rollback()
 
 
 @celery_app.task(name='tasks.send_email')
@@ -14,9 +35,20 @@ def send_email_task(to, subject, template_path, **kwargs):
     """
     A Celery task to send an email using a rendered HTML template.
     It re-fetches database objects from IDs passed in kwargs.
+    When SMTP is not configured, falls back to an in-app notification.
     """
     if not current_app.config.get('MAIL_SERVER'):
-        current_app.logger.warning(f"SMTP is not configured. Email task to {to} aborted.")
+        current_app.logger.warning(f"SMTP is not configured. Falling back to in-app notification for {to}.")
+        # Fallback: create in-app notification
+        user_id = kwargs.get('user_id')
+        if user_id:
+            app = current_app._get_current_object()
+            with app.test_request_context():
+                _create_in_app_notification(
+                    user_id=user_id,
+                    message=subject,
+                    notif_type=NotificationType.EMAIL_FALLBACK,
+                )
         return
 
     # The task runs within the app context provided by ContextTask in celery_worker.py

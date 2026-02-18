@@ -1,21 +1,26 @@
 # tests/test_models.py
+"""
+Tests unitaires des modèles SQLAlchemy.
+Chaque test vérifie la création, les contraintes et les relations d'un modèle.
+"""
 from datetime import datetime
 
-from app.models import (Analyte, AnalyteDataType, Animal, AnimalModel, Anticoagulant,
-                        APIToken, Attachment, DataTable, DataTableFile,
-                        DerivedSampleType, EthicalApproval,
-                        EthicalApprovalProcedure, ExperimentalGroup,
-                        ExperimentDataRow, HousingConditionItem,
-                        HousingConditionSet, HousingSetItemAssociation, Organ,
-                        Partner, Permission, Project, ProjectTeamShare,
-                        ProjectUserShare, ProtocolAttachment, ProtocolModel,
-                        ReferenceRange, Role, Sample, SampleStatus, SampleType,
-                        Severity, Staining, Storage, Team, TeamMembership,
-                        TissueCondition, User, UserTeamRoleLink, Workplan,
-                        WorkplanEvent, WorkplanEventStatus, WorkplanStatus,
-                        WorkplanVersion)
+from app.models import (
+    Analyte, AnalyteDataType, Animal, AnimalModel, Anticoagulant,
+    APIToken, Attachment, DataTable, DataTableFile,
+    DerivedSampleType, EthicalApproval,
+    EthicalApprovalProcedure, ExperimentalGroup,
+    ExperimentDataRow, HousingConditionItem,
+    HousingConditionSet, HousingSetItemAssociation, Organ,
+    Partner, Permission, Project, ProjectTeamShare,
+    ProjectUserShare, ProtocolAttachment, ProtocolModel,
+    ReferenceRange, Role, Sample, SampleStatus, SampleType,
+    Severity, Staining, Storage, Team, TeamMembership,
+    TissueCondition, User, UserTeamRoleLink, Workplan,
+    WorkplanEvent, WorkplanEventStatus, WorkplanStatus,
+    WorkplanVersion,
+)
 from app.permissions import AVAILABLE_PERMISSIONS, user_has_permission
-# CHANGED: Import Service
 from app.services.admin_service import AdminService
 
 

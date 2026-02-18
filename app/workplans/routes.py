@@ -357,24 +357,52 @@ def get_finalize_info(workplan_id):
         if p.severity and p.severity.level > max_severity.level:
             max_severity = p.severity
 
-    eligible_eas_from_service = get_eligible_ethical_approvals(workplan.project_id, workplan.project.team_id)
+    # EAs directly linked to the project (always shown, regardless of other criteria)
+    project_linked_eas = list(workplan.project.ethical_approvals.all())
+    project_linked_ea_ids = {ea.id for ea in project_linked_eas}
+
+    # EAs eligible via team ownership/sharing
+    team_id = workplan.project.team_id if workplan.project.team_id else -1
+    eligible_eas_from_service = get_eligible_ethical_approvals(workplan.project_id, team_id)
+
+    # Merge: project-linked EAs first, then team EAs not already included
+    all_eas_to_evaluate = list(project_linked_eas)
+    seen_ids = set(project_linked_ea_ids)
+    for ea in eligible_eas_from_service:
+        if ea.id not in seen_ids:
+            all_eas_to_evaluate.append(ea)
+            seen_ids.add(ea.id)
 
     valid_eas = []
-    for ea in eligible_eas_from_service:
-        # Filter by date range
-        if not (ea.start_date <= first_event_date and ea.end_date >= last_event_date):
-            continue
-        # Filter by overall severity
-        if ea.overall_severity.level < max_severity.level: 
-            continue
-        # Filter by animal capacity
+    for ea in all_eas_to_evaluate:
         animals_available_for_ea = get_animals_available_for_ea(ea)
-        if workplan.planned_animal_count > animals_available_for_ea:
+        is_project_linked = ea.id in project_linked_ea_ids
+
+        # Check each criterion
+        date_ok = (ea.start_date <= first_event_date and ea.end_date >= last_event_date)
+        severity_ok = (ea.overall_severity is None or ea.overall_severity.level >= max_severity.level)
+        capacity_ok = (workplan.planned_animal_count is None or workplan.planned_animal_count == 0 or
+                       workplan.planned_animal_count <= animals_available_for_ea)
+
+        # Build warning suffix for EAs that don't meet criteria
+        warnings = []
+        if not date_ok:
+            warnings.append(_l("date range mismatch"))
+        if not severity_ok:
+            warnings.append(_l("severity too low"))
+        if not capacity_ok:
+            warnings.append(_l("insufficient animal quota"))
+
+        # EAs linked to the project are ALWAYS shown (with warnings if needed).
+        # Non-project-linked EAs are excluded only if ALL criteria fail simultaneously.
+        if not is_project_linked and not date_ok and not severity_ok and not capacity_ok:
             continue
-        
+
+        warning_suffix = f" ⚠ {', '.join(str(w) for w in warnings)}" if warnings else ""
+
         valid_eas.append({
             'id': ea.id,
-            'text': f"{ea.reference_number} - {ea.title} ({ea.owner_team.name}) [Available: {animals_available_for_ea}]"
+            'text': f"{ea.reference_number} - {ea.title} ({ea.owner_team.name}) [Available: {animals_available_for_ea}]{warning_suffix}"
         })
 
     existing_groups = ExperimentalGroup.query.filter(

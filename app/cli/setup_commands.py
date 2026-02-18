@@ -209,7 +209,9 @@ def _populate_static_resources():
         {'name': 'Distance Travelled', 'data_type': AnalyteDataType.FLOAT, 'unit': 'cm/h'},
         {'name': 'Rearing', 'data_type': AnalyteDataType.INT, 'unit': 'counts/h'},
         {'name': 'Time Spent Mobile', 'data_type': AnalyteDataType.FLOAT, 'unit': '%'},
-        {'name': 'Time Spent Immobile', 'data_type': AnalyteDataType.FLOAT, 'unit': '%'}
+        {'name': 'Time Spent Immobile', 'data_type': AnalyteDataType.FLOAT, 'unit': '%'},
+        {'name': 'Food Consumption', 'data_type': AnalyteDataType.FLOAT, 'unit': 'g'},
+        {'name': 'Water Consumption', 'data_type': AnalyteDataType.FLOAT, 'unit': 'ml'}
     ]
     for a in analytes:
         if not Analyte.query.filter_by(name=a['name']).first():
@@ -290,6 +292,27 @@ def generate_realistic_data(protocol_name, sex, genotype, treatment, age_weeks):
         data['Lean Mass'] = round(lean_mass, 2)
         data['Fat Mass'] = round(fat_mass, 2)
         data['Free Water'] = round(random.uniform(1.5, 2.5), 2)
+
+    elif protocol_name == "Circadian Activity (35h)":
+        # Simulate 35h of data with 10min intervals (210 points per parameter)
+        # Mice are nocturnal: peak activity at night.
+        # We assume start at 7:00 AM (start of light phase)
+        for t_min in range(0, 35 * 60, 10):
+            hour = (t_min / 60.0)
+            
+            # Use a shifted cosine wave for circadian rhythm
+            # Peaks at night (mid-night is ~18h after 7 AM = 1 AM)
+            circadian_factor = 0.5 + 0.5 * math.cos(2 * math.pi * (hour - 18) / 24)
+            
+            # Phenotype: KO mice might be hyperactive or have shifted rhythm
+            phenotype_intensity = (geno_mod - 1.0) * treat_mod
+            base_activity = 100 * (1 + phenotype_intensity) * sex_mod
+            
+            # Values with noise
+            data[f'Activity T{t_min}'] = round(base_activity * circadian_factor + random.uniform(0, 20), 1)
+            data[f'Rearing T{t_min}'] = round(base_activity * 0.3 * circadian_factor + random.uniform(0, 5), 1)
+            data[f'Food T{t_min}'] = round(random.uniform(0, 0.5) * circadian_factor + random.uniform(0, 0.05), 2)
+            data[f'Water T{t_min}'] = round(random.uniform(0, 0.3) * circadian_factor + random.uniform(0, 0.03), 2)
 
     return data
 
@@ -467,6 +490,11 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
         get_or_create_analyte('Fat Mass', AnalyteDataType.FLOAT, unit='g'),
         get_or_create_analyte('Free Water', AnalyteDataType.FLOAT, unit='g')
     ]
+    circadian_analytes = []
+    for param in ['Activity', 'Rearing', 'Food', 'Water']:
+        unit = 'counts' if param in ['Activity', 'Rearing'] else 'g' if param == 'Food' else 'ml'
+        for t in range(0, 35 * 60, 10):
+            circadian_analytes.append(get_or_create_analyte(f'{param} T{t}', AnalyteDataType.FLOAT, unit=unit))
     a_cage = get_or_create_analyte('cage', AnalyteDataType.TEXT, is_meta=True)
     
     model = AnimalModel.query.filter_by(name="Metabolic Mouse Model").first()
@@ -495,6 +523,12 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
         db.session.add(p_mri); db.session.flush()
         for i, a in enumerate(bc_analytes): db.session.add(ProtocolAnalyteAssociation(protocol_model=p_mri, analyte=a, order=i))
     protocols.append(p_mri)
+
+    p_circ = ProtocolModel.query.filter_by(name="Circadian Activity (35h)").first() or ProtocolModel(name="Circadian Activity (35h)", severity=Severity.LIGHT)
+    if not p_circ.id:
+        db.session.add(p_circ); db.session.flush()
+        for i, a in enumerate(circadian_analytes): db.session.add(ProtocolAnalyteAssociation(protocol_model=p_circ, analyte=a, order=i))
+    protocols.append(p_circ)
 
     h_set = HousingConditionSet.query.filter_by(name="Metabolic Cages").first()
     if not h_set:
@@ -570,6 +604,7 @@ def simulation_cmd(teams, projects, groups, animals, repetitions, repetition_int
                 # Define protocol schedule: (week_offset, protocol_name)
                 protocol_schedule = [
                     (0, "Body Composition (MRI)"),
+                    (2, "Circadian Activity (35h)"),
                     (4, "Glucose Tolerance Test (IPGTT)"),
                     (6, "Accelerating Rotarod")
                 ]

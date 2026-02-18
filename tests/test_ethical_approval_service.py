@@ -43,11 +43,15 @@ def test_setup_data(test_app):
         # Create Users
         user1 = User(email='user1@example.com')
         user1.set_password('password')
-        user1.team_id = team1.id # Manually set for test fixture convenience
         user2 = User(email='user2@example.com')
         user2.set_password('password')
-        user2.team_id = team2.id # Manually set for test fixture convenience
         db.session.add_all([user1, user2])
+        db.session.commit()
+
+        # Associate users to teams via TeamMembership
+        from app.models.teams import TeamMembership
+        db.session.add(TeamMembership(user=user1, team=team1))
+        db.session.add(TeamMembership(user=user2, team=team2))
         db.session.commit()
 
         # Create AnimalModel

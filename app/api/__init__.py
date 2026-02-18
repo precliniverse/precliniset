@@ -103,3 +103,6 @@ api.add_namespace(import_wizard_ns)
 
 # Import controlled molecules API routes to register them with the blueprint
 from . import controlled_molecules
+
+# Import notifications API routes
+from . import notifications_api

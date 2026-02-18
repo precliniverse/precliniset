@@ -34,32 +34,7 @@ class WorkplanService(BaseService):
         - notes (str)
         - events (list of dicts with offset_days, protocol_id, event_name, assigned_to_id)
         """
-        # Create New Version
-        last_version_num = db.session.query(func.max(WorkplanVersion.version_number))\
-            .filter_by(workplan_id=workplan.id).scalar() or 0
-        
-        # Snapshot creation logic (could be extracted)
-        snapshot_events = sorted([{
-            'offset_days': item.get('offset_days'),
-            'protocol_id': item.get('protocol_id'),
-            'event_name': item.get('event_name') or "",
-            'assigned_to_id': item.get('assigned_to_id')
-        } for item in new_state.get('events', [])], key=lambda x: int(x['offset_days']))
-
-        new_version = WorkplanVersion(
-            workplan=workplan,
-            version_number=last_version_num + 1,
-            created_by_id=user.id,
-            change_comment=change_comment,
-            snapshot={
-                'animal_model_name': workplan.animal_model.name if workplan.animal_model else 'N/A',
-                'number_of_animals': workplan.planned_animal_count,
-                'events': snapshot_events
-            }
-        )
-        db.session.add(new_version)
-
-        # Update Workplan fields
+        # Update Workplan fields FIRST so the snapshot captures the new values
         workplan.notes = new_state.get('notes', "")
         
         start_date = new_state.get('study_start_date')
@@ -76,7 +51,35 @@ class WorkplanService(BaseService):
         
         # Update Planned Animal Count if provided
         if 'planned_animal_count' in new_state:
-             workplan.planned_animal_count = new_state['planned_animal_count']
+            workplan.planned_animal_count = new_state['planned_animal_count']
+
+        # Create New Version AFTER updating fields so snapshot reflects new values
+        last_version_num = db.session.query(func.max(WorkplanVersion.version_number))\
+            .filter_by(workplan_id=workplan.id).scalar() or 0
+        
+        # Snapshot creation — captures the new state being saved
+        snapshot_events = sorted([{
+            'offset_days': item.get('offset_days'),
+            'protocol_id': item.get('protocol_id'),
+            'event_name': item.get('event_name') or "",
+            'assigned_to_id': item.get('assigned_to_id')
+        } for item in new_state.get('events', [])], key=lambda x: int(x['offset_days']))
+
+        new_version = WorkplanVersion(
+            workplan=workplan,
+            version_number=last_version_num + 1,
+            created_by_id=user.id,
+            change_comment=change_comment,
+            snapshot={
+                'study_start_date': workplan.study_start_date.isoformat() if workplan.study_start_date else None,
+                'expected_dob': workplan.expected_dob.isoformat() if workplan.expected_dob else None,
+                'notes': workplan.notes or "",
+                'animal_model_name': workplan.animal_model.name if workplan.animal_model else 'N/A',
+                'planned_animal_count': workplan.planned_animal_count,
+                'events': snapshot_events
+            }
+        )
+        db.session.add(new_version)
 
         # Update Events
         # Delete existing events and recreate (simplest approach for full update)

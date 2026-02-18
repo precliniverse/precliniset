@@ -248,6 +248,27 @@ class StatisticsService:
         stat, p_val = friedmanchisquare(*data_arrays)
         res.update({'statistic': stat, 'p_value': p_val, 'n_subjects': len(df_wide)})
 
+        # Post-hoc: Wilcoxon pairwise with Bonferroni correction if significant
+        if p_val <= 0.05:
+            try:
+                ph = pg.pairwise_tests(
+                    data=df,
+                    dv='_MeasurementValue_',
+                    within='_WithinFactorLevel_',
+                    subject=subject_id,
+                    parametric=False,
+                    padjust='bonf'
+                )
+                res['posthoc_data'] = {
+                    'title': _l("Post-Hoc (Wilcoxon Pairwise, Bonferroni)"),
+                    'columns': ph.columns.tolist(),
+                    'rows': ph.to_dict('records'),
+                    'rationale': _l("Wilcoxon signed-rank pairwise tests with Bonferroni correction were applied after a significant Friedman test, as the non-parametric equivalent of pairwise t-tests for repeated measures.")
+                }
+                res['notes'].append(_l("Post-hoc Wilcoxon pairwise tests applied (Bonferroni correction)."))
+            except Exception as e:
+                res['notes'].append(f"Post-hoc failed: {e}")
+
     def _run_anova_oneway(self, df, dv, groups, subject_id, res, extra_params=None):
         group_col = self._get_single_group_col(df, groups)
         df_clean = df.copy()

@@ -1,6 +1,13 @@
+"""
+Tests de permissions granulaires (RBAC).
+Vérifie que les rôles personnalisés respectent les limites de permissions.
+"""
 import pytest
-from app.models import User, Role, Permission, UserTeamRoleLink, Team, EthicalApproval, Storage
 from datetime import date
+
+from app.models import User, Role, Permission, UserTeamRoleLink, Team, EthicalApproval, Storage
+from tests.conftest import login
+
 
 # --- Helper to create a custom role dynamically ---
 def create_custom_role(db_session, name, permissions_list, team=None):
@@ -23,8 +30,6 @@ def assign_role(db_session, user, team, role):
     db_session.add(link)
     db_session.commit()
 
-def login(client, email, password):
-    return client.post('/auth/login', data={'email': email, 'password': password}, follow_redirects=True)
 
 # ==========================================
 # TEST CASE 1: The "Submitter" (Dead Switch)

@@ -321,11 +321,344 @@ export class ConcatenationPage {
     }
 }
 
+// ═══════════════════════════════════════════════════════════
+// TAB 2 — Ethical Health Monitoring
+// ═══════════════════════════════════════════════════════════
+class HealthMonitoringTab {
+    constructor(config) {
+        this.config = config;
+        this.healthData = null;
+        this.chart = null;
+        this.bindEvents();
+        // Load available analytes for intergroup tab when health tab is first shown
+    }
+
+    bindEvents() {
+        document.getElementById('load-health-btn')?.addEventListener('click', () => this.loadHealthData());
+        document.getElementById('health-filter-status')?.addEventListener('change', () => this.renderHealthChart());
+    }
+
+    loadHealthData() {
+        const critical = document.getElementById('health-threshold-critical')?.value || 20;
+        const warning = document.getElementById('health-threshold-warning')?.value || 10;
+        const btn = document.getElementById('load-health-btn');
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
+        const url = `${this.config.urls.getHealthTracking}?threshold_critical=${critical}&threshold_warning=${warning}`;
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-sync me-1"></i> ${this.config.i18n.loading.replace('...', '')} Health Data`;
+                if (data.error) { alert(data.error); return; }
+                this.healthData = data;
+                this.renderHealthSummary();
+                this.renderHealthChart();
+                this.renderHealthAlerts();
+                document.getElementById('health-placeholder').style.display = 'none';
+                document.getElementById('health-chart-card').style.display = 'block';
+                document.getElementById('health-alerts-card').style.display = 'block';
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-sync me-1"></i> Load Health Data`;
+                console.error(err);
+            });
+    }
+
+    renderHealthSummary() {
+        const container = document.getElementById('health-summary-cards');
+        if (!container || !this.healthData) return;
+        const animals = this.healthData.animals || [];
+        const critical = animals.filter(a => a.alert_level === 'critical').length;
+        const warning = animals.filter(a => a.alert_level === 'warning').length;
+        const ok = animals.filter(a => a.alert_level === 'ok').length;
+        const analyte = this.healthData.weight_analyte || 'N/A';
+
+        container.innerHTML = `
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-secondary">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold">${animals.length}</div>
+                        <div class="small text-muted">Animals</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-danger">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-danger">${critical}</div>
+                        <div class="small text-muted">${this.config.i18n.critical}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-warning">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-warning">${warning}</div>
+                        <div class="small text-muted">${this.config.i18n.warning}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-success">
+                    <div class="card-body py-2">
+                        <div class="fs-4 fw-bold text-success">${ok}</div>
+                        <div class="small text-muted">${this.config.i18n.ok}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 mt-2">
+                <div class="alert alert-info py-1 mb-0 small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Analyte: <strong>${analyte}</strong> &nbsp;|&nbsp;
+                    Thresholds: Critical ≥${this.healthData.thresholds.critical}% vs baseline,
+                    Warning ≥${this.healthData.thresholds.warning}% vs previous
+                </div>
+            </div>
+        `;
+    }
+
+    renderHealthChart() {
+        const canvas = document.getElementById('health-chart');
+        if (!canvas || !this.healthData) return;
+        const ctx = canvas.getContext('2d');
+        if (this.chart) this.chart.destroy();
+
+        const filterStatus = document.getElementById('health-filter-status')?.value || 'all';
+        const animals = (this.healthData.animals || []).filter(a =>
+            filterStatus === 'all' || a.alert_level === filterStatus
+        );
+
+        const COLORS = {
+            critical: '#dc3545',
+            warning: '#ffc107',
+            ok: '#198754'
+        };
+        const PALETTE = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#fd7e14', '#6610f2', '#6f42c1'];
+
+        const datasets = animals.map((animal, idx) => ({
+            label: animal.id,
+            data: animal.series.filter(s => s.value !== null).map(s => ({ x: s.date, y: s.value })),
+            borderColor: COLORS[animal.alert_level] || PALETTE[idx % PALETTE.length],
+            backgroundColor: 'transparent',
+            tension: 0.2,
+            pointRadius: 4,
+            borderWidth: animal.alert_level === 'critical' ? 2.5 : 1.5,
+            borderDash: animal.alert_level === 'warning' ? [5, 3] : []
+        }));
+
+        this.chart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM dd' } }, title: { display: true, text: 'Date' } },
+                    y: { title: { display: true, text: this.healthData.weight_analyte || 'Weight' } }
+                },
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+                    title: { display: true, text: `Weight Evolution (${filterStatus === 'all' ? 'all animals' : filterStatus + ' only'})` }
+                }
+            }
+        });
+    }
+
+    renderHealthAlerts() {
+        const tbody = document.getElementById('health-alerts-body');
+        if (!tbody || !this.healthData) return;
+        tbody.innerHTML = '';
+        const animals = this.healthData.animals || [];
+        const alertAnimals = animals.filter(a => a.has_alerts);
+
+        if (alertAnimals.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-success py-3"><i class="fas fa-check-circle me-1"></i>No alerts detected.</td></tr>`;
+            return;
+        }
+
+        alertAnimals.forEach(animal => {
+            animal.alerts.forEach(alert => {
+                const badgeClass = alert.status === 'critical' ? 'bg-danger' : 'bg-warning text-dark';
+                const tr = document.createElement('tr');
+                tr.className = alert.status === 'critical' ? 'table-danger' : 'table-warning';
+                tr.innerHTML = `
+                    <td><strong>${animal.id}</strong></td>
+                    <td>${animal.treatment_group || '-'}</td>
+                    <td>${alert.date}</td>
+                    <td><span class="badge ${badgeClass}">${alert.status.toUpperCase()}</span></td>
+                    <td><small>${alert.message}</small></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB 3 — Inter-group Comparison
+// ═══════════════════════════════════════════════════════════
+class IntergroupComparisonTab {
+    constructor(config) {
+        this.config = config;
+        this.compData = null;
+        this.chart = null;
+        this.bindEvents();
+        this.loadAvailableAnalytes();
+    }
+
+    bindEvents() {
+        document.getElementById('load-intergroup-btn')?.addEventListener('click', () => this.loadComparison());
+        document.getElementById('intergroup-show-sem')?.addEventListener('change', () => {
+            if (this.compData) this.renderChart();
+        });
+    }
+
+    loadAvailableAnalytes() {
+        fetch(this.config.urls.getIntergroupComparison)
+            .then(r => r.json())
+            .then(data => {
+                const sel = document.getElementById('intergroup-analyte-select');
+                if (!sel) return;
+                sel.innerHTML = '<option value="">-- Select analyte --</option>';
+                (data.available_analytes || []).forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    sel.appendChild(opt);
+                });
+            })
+            .catch(err => console.error('Failed to load analytes for intergroup:', err));
+    }
+
+    loadComparison() {
+        const analyte = document.getElementById('intergroup-analyte-select')?.value;
+        if (!analyte) { alert('Please select an analyte.'); return; }
+
+        const btn = document.getElementById('load-intergroup-btn');
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
+        fetch(`${this.config.urls.getIntergroupComparison}?analyte=${encodeURIComponent(analyte)}`)
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-sync me-1"></i> Load Comparison`;
+                if (data.error) { alert(data.error); return; }
+                this.compData = data;
+                document.getElementById('intergroup-chart-title').textContent = `Mean ± SEM — ${analyte}`;
+                document.getElementById('intergroup-placeholder').style.display = 'none';
+                document.getElementById('intergroup-chart-card').style.display = 'block';
+                document.getElementById('intergroup-table-card').style.display = 'block';
+                this.renderChart();
+                this.renderTable();
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fas fa-sync me-1"></i> Load Comparison`;
+                console.error(err);
+            });
+    }
+
+    renderChart() {
+        const canvas = document.getElementById('intergroup-chart');
+        if (!canvas || !this.compData) return;
+        const ctx = canvas.getContext('2d');
+        if (this.chart) this.chart.destroy();
+
+        const showSem = document.getElementById('intergroup-show-sem')?.checked ?? true;
+        const PALETTE = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#fd7e14', '#6610f2', '#6f42c1'];
+        const dates = this.compData.dates || [];
+        const groups = this.compData.treatment_groups || [];
+
+        const datasets = groups.map((tg, idx) => {
+            const color = PALETTE[idx % PALETTE.length];
+            const series = this.compData.series_by_group[tg] || [];
+            const points = series.map((s, i) => ({ x: dates[i], y: s.mean }));
+            const ds = {
+                label: tg,
+                data: points,
+                borderColor: color,
+                backgroundColor: color + '33',
+                tension: 0.2,
+                pointRadius: 4,
+                fill: false
+            };
+            if (showSem) {
+                // Error bars via custom plugin or just show as tooltip
+                ds.errorBars = series.map(s => s.sem);
+            }
+            return ds;
+        });
+
+        this.chart = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'MMM dd' } }, title: { display: true, text: 'Date' } },
+                    y: { title: { display: true, text: this.compData.analyte || '' } }
+                },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: (ctx) => {
+                                const tg = ctx.dataset.label;
+                                const series = this.compData.series_by_group[tg] || [];
+                                const s = series[ctx.dataIndex];
+                                if (!s) return '';
+                                return showSem ? `SEM: ±${s.sem?.toFixed(3)} (n=${s.n})` : `n=${s.n}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    renderTable() {
+        const tbody = document.getElementById('intergroup-stats-body');
+        if (!tbody || !this.compData) return;
+        tbody.innerHTML = '';
+        const dates = this.compData.dates || [];
+        const groups = this.compData.treatment_groups || [];
+
+        dates.forEach(date => {
+            groups.forEach(tg => {
+                const series = this.compData.series_by_group[tg] || [];
+                const dateIdx = dates.indexOf(date);
+                const s = series[dateIdx];
+                if (!s || s.n === 0) return;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${date}</td>
+                    <td>${tg}</td>
+                    <td>${s.n}</td>
+                    <td>${s.mean?.toFixed(3) ?? '-'}</td>
+                    <td>${s.sem?.toFixed(3) ?? '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+
+        if (tbody.children.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">No data available.</td></tr>`;
+        }
+    }
+}
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
     const configEl = document.getElementById('page-config');
     if (configEl) {
         const config = JSON.parse(configEl.dataset.config);
         new ConcatenationPage(config);
+        new HealthMonitoringTab(config);
+        new IntergroupComparisonTab(config);
     }
 });

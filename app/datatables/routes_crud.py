@@ -553,7 +553,19 @@ def edit_data_table(id):
         d = a.to_dict()
         d['id'] = a.id
         updated_group_data.append(d)
-    template_data = prepare_template_data(updated_dict, updated_group_data, column_names)
+    all_template_data = prepare_template_data(updated_dict, updated_group_data, column_names)
+
+    # ── Pagination des lignes (performance grandes datatables) ─────────────
+    ROWS_PER_PAGE = 50
+    total_rows = len(all_template_data)
+    total_pages = max(1, math.ceil(total_rows / ROWS_PER_PAGE))
+    try:
+        current_page = max(1, min(int(request.args.get('page', 1)), total_pages))
+    except (ValueError, TypeError):
+        current_page = 1
+    page_start = (current_page - 1) * ROWS_PER_PAGE
+    page_end = page_start + ROWS_PER_PAGE
+    template_data = all_template_data[page_start:page_end]
     protocol_field_units = {a.name: a.unit for a in data_table.protocol.analytes} if data_table.protocol else {}
     date_fields = [a.name for a in data_table.protocol.analytes if a.data_type == AnalyteDataType.DATE] if data_table.protocol else []
     
@@ -592,7 +604,15 @@ def edit_data_table(id):
                            edit_form=edit_form, calculated_fields=calculated_fields,
                            controlled_molecules_data=controlled_molecules_data,
                            animals_dataset=updated_group_data,
-                           protocol_analytes_map=protocol_analytes_map)
+                           protocol_analytes_map=protocol_analytes_map,
+                           has_randomization=has_randomization,
+                           is_blinded=is_blinded,
+                           can_view_unblinded=can_view_unblinded,
+                           randomization_details=data_table.group.randomization_details,
+                           current_page=current_page,
+                           total_pages=total_pages,
+                           total_rows=total_rows,
+                           rows_per_page=ROWS_PER_PAGE)
 
 
 

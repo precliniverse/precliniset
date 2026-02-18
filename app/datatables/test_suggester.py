@@ -21,12 +21,6 @@ def suggest_statistical_tests(num_orig_group_params, num_orig_analysis_params, i
         test_list.append({'key': key, 'name': name, 'reason': reason, 'suggested': suggested})
 
     if is_repeated:
-        # ... (Existing RM logic - minimally touched logic, just indent/context)
-        # For brevity in this tool call, I will need to be careful not to delete the RM block if I don't match it all.
-        # I am replacing the WHOLE function to be safe or just the start and end?
-        # The file is 170 lines. I will replace the signature and the independent logic block.
-        # This is risky with `replace_file_content` on large blocks. Will try `multi_replace`.
-        pass 
         rm_suggestions = {'possible_tests': [], 'overall_suggestion_notes': []}
         suggestions['repeated_measures_test_suggestions'] = rm_suggestions
 

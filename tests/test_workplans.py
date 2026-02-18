@@ -1,23 +1,20 @@
+"""
+Tests fonctionnels pour les routes de workplans.
+Vérifie la sauvegarde, la mise à jour et la gestion des statuts.
+"""
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
 from app import db
 from app.models import AnimalModel, Project, Workplan, WorkplanStatus
+from tests.conftest import login, logout
 
-
-def login(client, email, password):
-    return client.post('/auth/login', data=dict(
-        email=email,
-        password=password
-    ), follow_redirects=True)
-
-def logout(client):
-    return client.get('/auth/logout', follow_redirects=True)
 
 @pytest.fixture
 def logged_in_admin_client(test_client, init_database):
+    """Client HTTP connecté en tant que team1_admin."""
     login(test_client, 'team1admin@test.com', 'password')
     yield test_client
     logout(test_client)

@@ -1,4 +1,8 @@
 # tests/test_sharing_scenarios.py
+"""
+Tests des scénarios de partage de projets entre équipes.
+Vérifie les droits d'accès selon les permissions de partage.
+"""
 import pytest
 
 from app.models import ProjectTeamShare, ProjectUserShare
@@ -153,10 +157,16 @@ def test_access_revoked_after_share_removed(team2_admin_client, db_session, init
     db_session.commit()
     db_session.expire_all()
 
-    # Verify access is now forbidden
-    response = team2_admin_client.get(f'/projects/{proj1.slug}')
-    # Should be 403 Forbidden OR if it redirects to 403/404 page with 200 OK
-    # Should be 403 Forbidden OR if it redirects to 403/404 page with 200 OK
-    assert response.status_code == 200 # Access denied handled gracefully
-    # If using flash messages/redirects
-    assert b"Audit Test Project" not in response.data or b"Permission denied" in response.data or b"Access Denied" in response.data
+    # Verify access is now forbidden — l'app retourne 403 ou redirige avec un message d'erreur
+    response = team2_admin_client.get(f'/projects/{proj1.slug}', follow_redirects=True)
+    # L'accès doit être refusé : soit 403, soit redirection avec message d'erreur
+    access_denied = (
+        response.status_code == 403
+        or b"Permission denied" in response.data
+        or b"Access Denied" in response.data
+        or b"You do not have permission" in response.data
+    )
+    assert access_denied, (
+        f"L'accès au projet partagé devrait être refusé après suppression du partage. "
+        f"Status: {response.status_code}"
+    )

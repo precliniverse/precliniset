@@ -629,10 +629,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (validateForm()) {
                 // If editing, show confirmation modal about updating datatables
                 if (CONFIG.isEditing) {
-                    $('#saveConfirmationModal').modal('show');
-                } else {
-                    // For new groups, directly trigger AJAX save
-                    performAjaxSave(false); // No 'dont-update-datatables' for new groups
+                    performAjaxSave(); // No 'dont-update-datatables' for new groups
                 }
             }
         });
@@ -642,17 +639,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const confirmSaveBtn = document.getElementById('confirm-save-group');
     if (confirmSaveBtn) {
         confirmSaveBtn.addEventListener('click', function () {
-            const dontUpdate = document.getElementById('dont-update-datatables').checked;
-            performAjaxSave(dontUpdate);
+            performAjaxSave();
         });
     }
 
-    function performAjaxSave(dontUpdateDataTables, allowNewCategories = false) {
+    function performAjaxSave(allowNewCategories = false) {
         const formData = new FormData(groupForm);
         formData.append('is_ajax', 'true');
-        if (dontUpdateDataTables) {
-            formData.append('update_data_tables', 'no');
-        }
         if (allowNewCategories) {
             formData.append('allow_new_categories', 'true');
         }

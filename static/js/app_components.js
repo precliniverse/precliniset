@@ -340,13 +340,12 @@ document.addEventListener('alpine:init', () => {
             return `${diff}d (${weeks}w)`;
         },
 
-        async saveGroup(dontUpdateDataTables = false, allowNewCategories = false) {
+        async saveGroup(allowNewCategories = false) {
             this.isLoading = true;
 
             const form = document.getElementById('group-form');
             const formData = new FormData(form);
             formData.append('is_ajax', 'true');
-            if (dontUpdateDataTables) formData.append('update_data_tables', 'no');
             if (allowNewCategories) formData.append('allow_new_categories', 'true');
             formData.append('animal_data', JSON.stringify(this.animalData));
 

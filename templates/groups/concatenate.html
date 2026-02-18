@@ -3,110 +3,225 @@
 {% block title %}{{ _('Concatenation & Analysis') }} - {{ group.name }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>
+<div class="container-fluid mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">
             <i class="fas fa-chart-line me-2"></i>{{ _('Concatenation & Analysis') }}
-            <small class="text-muted fs-5">| {{ group.name }}</small>
+            <small class="text-muted fs-6">| {{ group.name }}</small>
         </h1>
-        <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="btn btn-secondary">
+        <a href="{{ url_for('groups.edit_group', id=group.id) }}" class="btn btn-sm btn-secondary">
             <i class="fas fa-arrow-left me-1"></i> {{ _('Back to Group') }}
         </a>
     </div>
 
-    <div class="row">
-        <!-- Sidebar: Configuration -->
-        <div class="col-md-3">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">{{ _('Configuration') }}</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        {{ _('Select analytes to concatenate from all DataTables linked to this group in chronological
-                        order.') }}
-                    </p>
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" id="concatTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-concat" data-bs-toggle="tab" data-bs-target="#pane-concat"
+                type="button" role="tab">
+                <i class="fas fa-table me-1"></i> {{ _('Concatenated Data') }}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-health" data-bs-toggle="tab" data-bs-target="#pane-health" type="button"
+                role="tab">
+                <i class="fas fa-heartbeat me-1"></i> {{ _('Ethical Health Monitoring') }}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-intergroup" data-bs-toggle="tab" data-bs-target="#pane-intergroup"
+                type="button" role="tab">
+                <i class="fas fa-chart-bar me-1"></i> {{ _('Inter-group Comparison') }}
+            </button>
+        </li>
+    </ul>
 
-                    <div class="mb-3">
-                        <label for="analyte-selector" class="form-label fw-bold">{{ _('Select Analytes') }}</label>
-                        <select id="analyte-selector" class="form-select" multiple size="10">
-                            <!-- Populated by JS -->
-                        </select>
-                        <div class="form-text">{{ _('Hold Ctrl/Cmd to select multiple.') }}</div>
+    <div class="tab-content" id="concatTabContent">
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 1 — Concatenated Data (existing)
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade show active" id="pane-concat" role="tabpanel">
+            <div class="row">
+                <!-- Sidebar -->
+                <div class="col-md-3">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">{{ _('Configuration') }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-3">
+                                {{ _('Select analytes to concatenate from all DataTables linked to this group in
+                                chronological order.') }}
+                            </p>
+                            <div class="mb-3">
+                                <label for="analyte-selector" class="form-label fw-bold">{{ _('Select Analytes')
+                                    }}</label>
+                                <select id="analyte-selector" class="form-select" multiple size="10">
+                                    <!-- Populated by JS -->
+                                </select>
+                                <div class="form-text">{{ _('Hold Ctrl/Cmd to select multiple.') }}</div>
+                            </div>
+                            <button type="button" class="btn btn-primary w-100" id="load-concatenation-btn">
+                                <i class="fas fa-sync me-1"></i> {{ _('Load Data') }}
+                            </button>
+                            <hr>
+                            <button type="button" class="btn btn-outline-primary w-100 mb-2"
+                                id="export-concatenated-btn" disabled>
+                                <i class="fas fa-file-excel me-1"></i> {{ _('Export to Excel') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main content -->
+                <div class="col-md-9">
+                    <!-- Global Measurement Tools -->
+                    <div class="card mb-4" id="global-measurement-tools-card" style="display: none;">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="fas fa-ruler-combined me-2"></i>{{ _('Global Measurement Tools')
+                                }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                    <label for="global-measurement-select" class="form-label">{{ _('Measurement to Add')
+                                        }}</label>
+                                    <select id="global-measurement-select" class="form-select">
+                                        <option value="">{{ _('Select...') }}</option>
+                                        <option value="weight_change_abs">{{ _('Weight Change (Absolute)') }}</option>
+                                        <option value="weight_change_pct">{{ _('Weight Change (%%)') }}</option>
+                                        <option value="bmi">{{ _('BMI (Weight/Height²)') }}</option>
+                                        <option value="tumor_volume">{{ _('Tumor Volume (L×W²/2)') }}</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-8" id="global-tool-params"></div>
+                            </div>
+                        </div>
                     </div>
 
-                    <button type="button" class="btn btn-primary w-100" id="load-concatenation-btn">
-                        <i class="fas fa-sync me-1"></i> {{ _('Load Data') }}
-                    </button>
+                    <!-- Graph -->
+                    <div class="card mb-4" id="graph-container" style="display: none;">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">{{ _('Evolution Graph') }}</h6>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="group-by-treatment-switch" checked>
+                                <label class="form-check-label" for="group-by-treatment-switch">{{ _('Group by
+                                    Treatment') }}</label>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="evolution-chart" style="max-height: 400px;"></canvas>
+                        </div>
+                    </div>
 
-                    <hr>
+                    <!-- Data Table -->
+                    <div class="card" id="concatenated-data-container" style="display: none;">
+                        <div class="card-header">
+                            <h6 class="mb-0">{{ _('Concatenated Data') }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered table-striped" id="concatenated-data-table">
+                                    <thead>
+                                        <tr id="concatenated-table-header"></tr>
+                                    </thead>
+                                    <tbody id="concatenated-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
 
-                    <button type="button" class="btn btn-outline-primary w-100 mb-2" id="export-concatenated-btn"
-                        disabled>
-                        <i class="fas fa-file-excel me-1"></i> {{ _('Export to Excel') }}
-                    </button>
+                    <!-- Placeholder -->
+                    <div id="concatenation-placeholder" class="text-center py-5 text-muted">
+                        <i class="fas fa-chart-line fa-3x mb-3"></i>
+                        <p class="lead">{{ _('Select analytes and load data to visualize results.') }}</p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Main Content: Results -->
-        <div class="col-md-9">
-
-            <!-- Global Measurement Tools -->
-            <div class="card mb-4" id="global-measurement-tools-card" style="display: none;">
-                <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-ruler-combined me-2"></i>{{ _('Global Measurement Tools') }}</h6>
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 2 — Ethical Health Monitoring
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-health" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-sliders-h me-1"></i>{{ _('Alert Thresholds') }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-danger">
+                                    {{ _('Critical threshold (%% loss vs baseline)') }}
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" id="health-threshold-critical" class="form-control" value="20"
+                                        min="1" max="100">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-warning">
+                                    {{ _('Warning threshold (%% loss vs previous)') }}
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" id="health-threshold-warning" class="form-control" value="10"
+                                        min="1" max="100">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm w-100" id="load-health-btn">
+                                <i class="fas fa-sync me-1"></i> {{ _('Load Health Data') }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-4">
-                            <label for="global-measurement-select" class="form-label">{{ _('Measurement to Add')
-                                }}</label>
-                            <select id="global-measurement-select" class="form-select">
-                                <option value="">{{ _('Select...') }}</option>
-                                <option value="weight_change_abs">{{ _('Weight Change (Absolute)') }}</option>
-                                <option value="weight_change_pct">{{ _('Weight Change (%%)') }}</option>
-                                <option value="bmi">{{ _('BMI (Weight/Height²)') }}</option>
-                                <option value="tumor_volume">{{ _('Tumor Volume (L×W²/2)') }}</option>
-                            </select>
-                        </div>
-                        <div class="col-md-8" id="global-tool-params">
-                            <!-- Dynamic inputs for tool parameters -->
-                        </div>
+                <div class="col-md-8">
+                    <div id="health-summary-cards" class="row g-2">
+                        <!-- Populated by JS -->
                     </div>
                 </div>
             </div>
 
-
-            <!-- Graphs -->
-            <div class="card mb-4" id="graph-container" style="display: none;">
+            <!-- Health chart -->
+            <div class="card mb-3" id="health-chart-card" style="display:none;">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ _('Evolution Graph') }}</h5>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="group-by-treatment-switch" checked>
-                        <label class="form-check-label" for="group-by-treatment-switch">{{ _('Group by Treatment')
-                            }}</label>
+                    <h6 class="mb-0">{{ _('Weight Evolution by Animal') }}</h6>
+                    <div>
+                        <select id="health-filter-status" class="form-select form-select-sm d-inline-block w-auto me-2">
+                            <option value="all">{{ _('All animals') }}</option>
+                            <option value="critical">{{ _('Critical only') }}</option>
+                            <option value="warning">{{ _('Warning only') }}</option>
+                            <option value="ok">{{ _('OK only') }}</option>
+                        </select>
                     </div>
                 </div>
                 <div class="card-body">
-                    <canvas id="evolution-chart" style="max-height: 400px;"></canvas>
+                    <canvas id="health-chart" style="max-height: 400px;"></canvas>
                 </div>
             </div>
 
-            <!-- Data Table -->
-            <div class="card" id="concatenated-data-container" style="display: none;">
+            <!-- Health alerts table -->
+            <div class="card" id="health-alerts-card" style="display:none;">
                 <div class="card-header">
-                    <h5 class="mb-0">{{ _('Concatenated Data') }}</h5>
+                    <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>{{ _('Alert Details')
+                        }}</h6>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered table-striped" id="concatenated-data-table">
-                            <thead>
-                                <tr id="concatenated-table-header">
-                                    <!-- Populated by JS -->
+                        <table class="table table-sm table-hover mb-0" id="health-alerts-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ _('Animal') }}</th>
+                                    <th>{{ _('Group') }}</th>
+                                    <th>{{ _('Date') }}</th>
+                                    <th>{{ _('Status') }}</th>
+                                    <th>{{ _('Detail') }}</th>
                                 </tr>
                             </thead>
-                            <tbody id="concatenated-table-body">
+                            <tbody id="health-alerts-body">
                                 <!-- Populated by JS -->
                             </tbody>
                         </table>
@@ -114,14 +229,88 @@
                 </div>
             </div>
 
-            <!-- Placeholder State -->
-            <div id="concatenation-placeholder" class="text-center py-5 text-muted">
-                <i class="fas fa-chart-line fa-3x mb-3"></i>
-                <p class="lead">{{ _('Select analytes and load data to visualize results.') }}</p>
+            <div id="health-placeholder" class="text-center py-5 text-muted">
+                <i class="fas fa-heartbeat fa-3x mb-3"></i>
+                <p class="lead">{{ _('Click "Load Health Data" to display weight monitoring.') }}</p>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 3 — Inter-group Comparison
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-intergroup" role="tabpanel">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-cog me-1"></i>{{ _('Configuration') }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">{{ _('Analyte') }}</label>
+                                <select id="intergroup-analyte-select" class="form-select form-select-sm">
+                                    <option value="">{{ _('Loading...') }}</option>
+                                </select>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm w-100" id="load-intergroup-btn">
+                                <i class="fas fa-sync me-1"></i> {{ _('Load Comparison') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div id="intergroup-stats-cards" class="row g-2">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
             </div>
 
+            <!-- Inter-group chart -->
+            <div class="card mb-3" id="intergroup-chart-card" style="display:none;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0" id="intergroup-chart-title">{{ _('Mean ± SEM by Treatment Group') }}</h6>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="intergroup-show-sem" checked>
+                        <label class="form-check-label small" for="intergroup-show-sem">{{ _('Show SEM') }}</label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <canvas id="intergroup-chart" style="max-height: 400px;"></canvas>
+                </div>
+            </div>
+
+            <!-- Inter-group data table -->
+            <div class="card" id="intergroup-table-card" style="display:none;">
+                <div class="card-header">
+                    <h6 class="mb-0">{{ _('Summary Statistics') }}</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0" id="intergroup-stats-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ _('Date') }}</th>
+                                    <th>{{ _('Group') }}</th>
+                                    <th>{{ _('N') }}</th>
+                                    <th>{{ _('Mean') }}</th>
+                                    <th>{{ _('SEM') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody id="intergroup-stats-body">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="intergroup-placeholder" class="text-center py-5 text-muted">
+                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                <p class="lead">{{ _('Select an analyte and load data to compare treatment groups.') }}</p>
+            </div>
         </div>
-    </div>
+
+    </div><!-- /tab-content -->
 </div>
 
 {% set config_dict = {
@@ -129,12 +318,18 @@
 "csrfToken": csrf_token(),
 "urls": {
 "getConcatenatedAnalytes": url_for("groups.get_concatenated_analytes_for_group", group_id=group.id),
-"exportConcatenated": url_for("groups.export_concatenated_analytes", group_id=group.id)
+"exportConcatenated": url_for("groups.export_concatenated_analytes", group_id=group.id),
+"getHealthTracking": url_for("groups.get_health_tracking_for_group", group_id=group.id),
+"getIntergroupComparison": url_for("groups.get_intergroup_comparison", group_id=group.id)
 },
 "i18n": {
 "loading": _("Loading..."),
 "error": _("Error"),
-"noData": _("No data available")
+"noData": _("No data available"),
+"critical": _("Critical"),
+"warning": _("Warning"),
+"ok": _("OK"),
+"noWeightAnalyte": _("No weight analyte found in this group's protocols.")
 }
 } %}
 <script id="page-config" type="application/json" data-config='{{ config_dict | tojson | safe }}'></script>

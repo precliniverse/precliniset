@@ -3,7 +3,7 @@
  * Handles the multi-step import processes.
  */
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const modal = document.getElementById('importWizardModal');
     if (!modal) return;
 
@@ -41,6 +41,17 @@ document.addEventListener('DOMContentLoaded', function() {
     let templates = [];
     let pipelines = [];
 
+    // Helper to get headers with CSRF
+    function getHeaders(contentType = null) {
+        const headers = {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+        };
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrf) headers['X-CSRFToken'] = csrf;
+        if (contentType) headers['Content-Type'] = contentType;
+        return headers;
+    }
+
     // Initialize: Listen for the modal to be shown
     modal.addEventListener('show.bs.modal', () => {
         resetWizard();
@@ -65,10 +76,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert("Please select or save a template first to export it.");
                 return;
             }
-            
+
             try {
                 const resp = await fetch(`/api/v1/import_wizard/templates/${templateId}/export`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    headers: getHeaders()
                 });
                 const blob = await resp.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -101,10 +112,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const data = JSON.parse(event.target.result);
                     const resp = await fetch(`/api/v1/import_wizard/templates/import/${protocolId}`, {
                         method: 'POST',
-                        headers: { 
-                            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                            'Content-Type': 'application/json'
-                        },
+                        headers: getHeaders('application/json'),
                         body: JSON.stringify(data)
                     });
                     if (resp.ok) {
@@ -132,12 +140,12 @@ document.addEventListener('DOMContentLoaded', function() {
         goToStep(currentStep - 1);
     });
 
-    saveTemplateCheck.addEventListener('change', function() {
+    saveTemplateCheck.addEventListener('change', function () {
         templateNameContainer.classList.toggle('d-none', !this.checked);
     });
 
     if (pipelineSelect) {
-        pipelineSelect.addEventListener('change', function() {
+        pipelineSelect.addEventListener('change', function () {
             const hasPipeline = !!this.value;
             if (advancedOptions) {
                 if (hasPipeline) {
@@ -159,11 +167,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function loadTemplates() {
         try {
-            
+
             const templatesResponse = await fetch(`/api/v1/import_wizard/templates/${protocolId}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                headers: getHeaders()
             });
-            
+
             if (!templatesResponse.ok) throw new Error(`Failed to fetch templates: ${templatesResponse.statusText}`);
             templates = await templatesResponse.json();
             templateSelect.innerHTML = '<option value="">-- No template / Manual mapping --</option>';
@@ -177,7 +185,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Fetch pipelines
             if (pipelineSelect) {
                 const pipelinesResponse = await fetch(`/api/v1/import_wizard/pipelines/${protocolId}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    headers: getHeaders()
                 });
                 if (pipelinesResponse.ok) {
                     pipelines = await pipelinesResponse.json();
@@ -197,47 +205,47 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // Fetch datatable details to get protocol and animal model IDs
-            
+
             const dtResp = await fetch(`/api/v1/groups/datatables/${dataTableId}`, {
-                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                headers: getHeaders()
             });
-            
+
             if (!dtResp.ok) throw new Error(`Failed to fetch datatable details: ${dtResp.statusText}`);
             const dtData = await dtResp.json();
-            
-            
+
+
             const pId = dtData.protocol_id;
             const amId = dtData.group ? dtData.group.model_id : null;
-            
+
 
             const analytePromises = [];
             if (pId) {
                 const pUrl = `/api/v1/protocols/${pId}`;
-               
+
                 analytePromises.push(
-                    fetch(pUrl, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
-                    .then(res => res.ok ? res.json() : Promise.resolve({ analytes: [] }))
+                    fetch(pUrl, { headers: getHeaders() })
+                        .then(res => res.ok ? res.json() : Promise.resolve({ analytes: [] }))
                 );
             }
             if (amId) {
                 const amUrl = `/api/v1/animal_models/${amId}`;
-                
+
                 analytePromises.push(
-                    fetch(amUrl, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
-                    .then(res => res.ok ? res.json() : Promise.resolve({ analytes: [] }))
+                    fetch(amUrl, { headers: getHeaders() })
+                        .then(res => res.ok ? res.json() : Promise.resolve({ analytes: [] }))
                 );
             }
 
             const results = await Promise.all(analytePromises);
-            
-            
+
+
             let combinedAnalytes = [];
             results.forEach(result => {
                 if (result && result.analytes) {
                     combinedAnalytes = combinedAnalytes.concat(result.analytes);
                 }
             });
-            
+
 
             // Remove duplicates based on ID
             const uniqueAnalytes = combinedAnalytes.filter((analyte, index, self) =>
@@ -245,10 +253,10 @@ document.addEventListener('DOMContentLoaded', function() {
             );
 
             analytes = uniqueAnalytes;
-            
+
 
         } catch (e) {
-            
+
             alert("Could not load necessary data for the import wizard. Please check the console and refresh. Error: " + e.message);
         }
     }
@@ -282,19 +290,19 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch('/api/v1/import_wizard/parse', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                headers: getHeaders(),
                 body: formData
             });
-            
+
             if (!response.ok) throw new Error(await response.text());
-            
+
             fileData = await response.json();
             fileData.skip_rows = skipRows;
             fileData.anchor_text = anchorText;
             fileData.anchor_offset = anchorOffset;
             fileData.row_interval = rowInterval;
             fileData.pipeline_id = pipelineId;
-            
+
             if (pipelineId) {
                 // Pipeline Flow
                 if (!fileData.headers.includes('uid')) {
@@ -315,9 +323,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 fileData.animal_id_column = 'uid';
                 fileData.mapping = autoMapping;
                 fileData.advanced_logic = {};
-                
+
                 // Trigger Step 3 validation immediately
-                handleStep2(); 
+                handleStep2();
             } else {
                 buildMappingTable();
                 goToStep(2);
@@ -332,7 +340,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function buildMappingTable() {
         mappingTableBody.innerHTML = '';
-        
+
         // Auto-detect template if selected
         const tId = templateSelect.value;
         const template = tId ? templates.find(t => t.id == tId) : null;
@@ -349,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fileData.headers.forEach(header => {
             const row = document.createElement('tr');
-            
+
             // Header Name
             const tdHeader = document.createElement('td');
             tdHeader.innerHTML = `<strong>${header}</strong>`;
@@ -360,10 +368,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const select = document.createElement('select');
             select.className = 'form-select form-select-sm analyte-map-select';
             select.dataset.column = header;
-            
+
             // Add options: None, Animal ID, and all Analytes
             select.innerHTML = `<option value="">-- Ignore --</option>`;
-            
+
             analytes.forEach(a => {
                 const opt = document.createElement('option');
                 opt.value = a.id;
@@ -374,14 +382,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (a.name === 'uid' && (header.toLowerCase().includes('id') || header.toLowerCase().includes('uid'))) {
                     opt.selected = true;
                 }
-        
+
                 // Auto-match by name from template or header
                 if (templateMapping[header] == a.id || header.toLowerCase() === a.name.toLowerCase()) {
                     opt.selected = true;
                 }
                 select.appendChild(opt);
             });
-            
+
             tdMap.appendChild(select);
 
             // Advanced Logic Input (Formula)
@@ -389,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function() {
             logicDiv.className = 'mt-1 advanced-logic-container d-none';
             const analyteId = select.value;
             const formula = templateLogic[analyteId] || '';
-            
+
             logicDiv.innerHTML = `
                 <div class="input-group input-group-sm">
                     <span class="input-group-text">f(x)=</span>
@@ -422,7 +430,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let mapping = {};
         let advancedLogic = {};
         let animalIdCol = null;
-        
+
         if (fileData.pipeline_id) {
             // Pipeline already populated this in Step 1
             mapping = fileData.mapping;
@@ -432,12 +440,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Manual Parsing: Scrape the UI
             const idAnalyte = analytes.find(a => a.name === 'uid');
             const idAnalyteId = idAnalyte ? idAnalyte.id : null;
-            
+
             document.querySelectorAll('.analyte-map-select').forEach(sel => {
                 const val = sel.value;
                 const col = sel.dataset.column;
                 const logicInput = sel.parentElement.querySelector('.advanced-logic-input');
-                
+
                 if (val && parseInt(val) === idAnalyteId) {
                     animalIdCol = col;
                 } else if (val) {
@@ -464,12 +472,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = templateNameInput.value || `Template for ${fileInput.files[0].name}`;
             await fetch(`/api/v1/import_wizard/templates/${protocolId}`, {
                 method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    name, 
+                headers: getHeaders('application/json'),
+                body: JSON.stringify({
+                    name,
                     mapping_json: mapping,
                     skip_rows: fileData.skip_rows,
                     anchor_text: fileData.anchor_text,
@@ -487,11 +492,8 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const resp = await fetch('/api/v1/import_wizard/validate_animals', {
                 method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
+                headers: getHeaders('application/json'),
+                body: JSON.stringify({
                     file_path: fileData.file_path,
                     group_id: groupId,
                     animal_id_column: animalIdCol,
@@ -499,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
             const vData = await resp.json();
-            
+
             if (vData.valid) {
                 validationResults.innerHTML = `
                     <div class="alert alert-success">
@@ -536,10 +538,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const resp = await fetch('/api/v1/import_wizard/import', {
                 method: 'POST',
-                headers: { 
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: getHeaders('application/json'),
                 body: JSON.stringify({
                     file_path: fileData.file_path,
                     data_table_id: dataTableId,
@@ -552,9 +551,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     pipeline_id: document.getElementById('import-pipeline-select')?.value
                 })
             });
-            
+
             if (!resp.ok) throw new Error(await resp.text());
-            
+
             const result = await resp.json();
             alert(result.message);
             window.location.reload();

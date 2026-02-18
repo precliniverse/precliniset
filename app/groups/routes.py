@@ -334,8 +334,6 @@ def edit_group(id: Optional[str] = None):
                 abort(403)
                 
             is_ajax = request.form.get('is_ajax') == 'true'
-            update_dts_flag = request.form.get('update_data_tables', 'yes') == 'yes'
-            
             try:
                 # 1. Handle Group Creation/Update
                 if not group:
@@ -366,7 +364,7 @@ def edit_group(id: Optional[str] = None):
                 group_service.save_group_data(
                     group, 
                     animal_data_list, 
-                    update_datatables=update_dts_flag, 
+                    update_datatables=True, 
                     allow_new_categories=request.form.get('allow_new_categories') == 'true'
                 )
                 
@@ -1456,6 +1454,236 @@ def get_group_animal_data(group_id):
     }
 
     return jsonify(response)
+
+@groups_bp.route('/api/<string:group_id>/health_tracking', methods=['GET'])
+@login_required
+def get_health_tracking_for_group(group_id):
+    """
+    Retourne les données de suivi de poids par animal pour l'onglet Santé Éthique.
+    Cherche un analyte de type poids (weight/poids/bw) dans les datatables du groupe.
+    """
+    group = db.session.get(ExperimentalGroup, group_id)
+    if not group or not check_group_permission(group, 'read'):
+        return jsonify({'error': 'Group not found or permission denied'}), 404
+
+    # Paramètres de seuil (configurables via query string)
+    try:
+        threshold_critical = float(request.args.get('threshold_critical', 20.0))  # % perte vs J0
+        threshold_warning = float(request.args.get('threshold_warning', 10.0))    # % perte vs semaine précédente
+    except (ValueError, TypeError):
+        threshold_critical = 20.0
+        threshold_warning = 10.0
+
+    # Mots-clés pour détecter l'analyte de poids
+    WEIGHT_KEYWORDS = ['weight', 'poids', 'bw', 'body_weight', 'masse', 'mass']
+
+    # Récupérer toutes les datatables du groupe, triées par date
+    datatables = DataTable.query.filter_by(group_id=group_id).order_by(DataTable.date).all()
+
+    # Identifier l'analyte de poids dans les protocoles
+    weight_analyte_name = None
+    for dt in datatables:
+        if dt.protocol:
+            for analyte in dt.protocol.analytes:
+                if any(kw in analyte.name.lower() for kw in WEIGHT_KEYWORDS):
+                    weight_analyte_name = analyte.name
+                    break
+        if weight_analyte_name:
+            break
+
+    if not weight_analyte_name:
+        return jsonify({
+            'weight_analyte': None,
+            'animals': [],
+            'dates': [],
+            'thresholds': {'critical': threshold_critical, 'warning': threshold_warning},
+            'message': 'No weight analyte found in this group\'s protocols.'
+        })
+
+    # Construire les séries temporelles par animal
+    sorted_animals = sorted(group.animals, key=lambda a: a.id)
+    animal_id_to_idx = {a.id: i for i, a in enumerate(sorted_animals)}
+
+    # Collecter les données de poids par animal et par date
+    # Structure: {animal_id: {date_str: weight_value}}
+    weight_data = defaultdict(dict)
+    all_dates = set()
+
+    for dt in datatables:
+        if not dt.protocol:
+            continue
+        # Vérifier que ce protocole contient l'analyte de poids
+        protocol_analyte_names = [a.name for a in dt.protocol.analytes]
+        if weight_analyte_name not in protocol_analyte_names:
+            continue
+
+        date_str = dt.date if isinstance(dt.date, str) else dt.date.isoformat()
+        all_dates.add(date_str)
+
+        rows = ExperimentDataRow.query.filter_by(data_table_id=dt.id).all()
+        for row in rows:
+            if row.row_data and weight_analyte_name in row.row_data:
+                try:
+                    val = float(row.row_data[weight_analyte_name])
+                    weight_data[row.animal_id][date_str] = val
+                except (ValueError, TypeError):
+                    pass
+
+    sorted_dates = sorted(all_dates)
+
+    # Calculer les alertes par animal
+    animals_result = []
+    for animal in sorted_animals:
+        a_dict = animal.to_dict()
+        animal_weights = weight_data.get(animal.id, {})
+
+        # Série temporelle ordonnée
+        series = []
+        for d in sorted_dates:
+            series.append({'date': d, 'value': animal_weights.get(d)})
+
+        # Calcul des alertes
+        alerts = []
+        baseline_weight = None
+        prev_weight = None
+
+        for entry in series:
+            val = entry['value']
+            if val is None:
+                prev_weight = None
+                continue
+
+            if baseline_weight is None:
+                baseline_weight = val
+
+            status = 'ok'
+            alert_msg = None
+
+            # Alerte critique : perte > threshold_critical% vs J0
+            if baseline_weight and baseline_weight > 0:
+                loss_vs_baseline = (baseline_weight - val) / baseline_weight * 100
+                if loss_vs_baseline >= threshold_critical:
+                    status = 'critical'
+                    alert_msg = f"Loss {loss_vs_baseline:.1f}% vs baseline (>{threshold_critical}%)"
+
+            # Alerte warning : perte > threshold_warning% vs mesure précédente
+            if status == 'ok' and prev_weight and prev_weight > 0:
+                loss_vs_prev = (prev_weight - val) / prev_weight * 100
+                if loss_vs_prev >= threshold_warning:
+                    status = 'warning'
+                    alert_msg = f"Loss {loss_vs_prev:.1f}% vs previous (>{threshold_warning}%)"
+
+            if status != 'ok':
+                alerts.append({'date': entry['date'], 'status': status, 'message': alert_msg})
+
+            entry['status'] = status
+            prev_weight = val
+
+        animals_result.append({
+            'id': animal.display_id,
+            'uid': animal.uid,
+            'status': animal.status,
+            'treatment_group': a_dict.get('treatment_group') or a_dict.get('blinded_group', ''),
+            'series': series,
+            'alerts': alerts,
+            'has_alerts': len(alerts) > 0,
+            'alert_level': 'critical' if any(a['status'] == 'critical' for a in alerts)
+                           else ('warning' if alerts else 'ok')
+        })
+
+    return jsonify({
+        'weight_analyte': weight_analyte_name,
+        'animals': animals_result,
+        'dates': sorted_dates,
+        'thresholds': {'critical': threshold_critical, 'warning': threshold_warning}
+    })
+
+
+@groups_bp.route('/api/<string:group_id>/intergroup_comparison', methods=['GET'])
+@login_required
+def get_intergroup_comparison(group_id):
+    """
+    Retourne les données de comparaison inter-groupes (moyenne ± SEM par groupe par date)
+    pour un analyte donné.
+    """
+    group = db.session.get(ExperimentalGroup, group_id)
+    if not group or not check_group_permission(group, 'read'):
+        return jsonify({'error': 'Group not found or permission denied'}), 404
+
+    analyte_name = request.args.get('analyte')
+    if not analyte_name:
+        # Retourner la liste des analytes numériques disponibles
+        available_analytes = set()
+        datatables = DataTable.query.filter_by(group_id=group_id).all()
+        for dt in datatables:
+            if dt.protocol:
+                for a in dt.protocol.analytes:
+                    if a.data_type.value in ['integer', 'float', 'int']:
+                        available_analytes.add(a.name)
+        return jsonify({'available_analytes': sorted(available_analytes)})
+
+    # Récupérer les données pour l'analyte sélectionné
+    datatables = DataTable.query.filter_by(group_id=group_id).order_by(DataTable.date).all()
+    sorted_animals = sorted(group.animals, key=lambda a: a.id)
+
+    # Groupes de traitement
+    group_assignments = {}
+    for animal in sorted_animals:
+        a_dict = animal.to_dict()
+        tg = a_dict.get('treatment_group') or a_dict.get('blinded_group') or 'Unassigned'
+        group_assignments[animal.id] = tg
+
+    treatment_groups = sorted(set(group_assignments.values()))
+
+    # Collecter les valeurs par date et par groupe de traitement
+    # Structure: {date: {treatment_group: [values]}}
+    data_by_date = defaultdict(lambda: defaultdict(list))
+    all_dates = set()
+
+    for dt in datatables:
+        if not dt.protocol:
+            continue
+        protocol_analyte_names = [a.name for a in dt.protocol.analytes]
+        if analyte_name not in protocol_analyte_names:
+            continue
+
+        date_str = dt.date if isinstance(dt.date, str) else dt.date.isoformat()
+        all_dates.add(date_str)
+
+        rows = ExperimentDataRow.query.filter_by(data_table_id=dt.id).all()
+        for row in rows:
+            if row.row_data and analyte_name in row.row_data:
+                try:
+                    val = float(row.row_data[analyte_name])
+                    tg = group_assignments.get(row.animal_id, 'Unassigned')
+                    data_by_date[date_str][tg].append(val)
+                except (ValueError, TypeError):
+                    pass
+
+    sorted_dates = sorted(all_dates)
+
+    # Calculer moyenne ± SEM par groupe par date
+    series_by_group = {}
+    for tg in treatment_groups:
+        series = []
+        for d in sorted_dates:
+            values = data_by_date[d].get(tg, [])
+            if values:
+                n = len(values)
+                mean = float(np.mean(values))
+                sem = float(np.std(values, ddof=1) / np.sqrt(n)) if n > 1 else 0.0
+                series.append({'date': d, 'mean': mean, 'sem': sem, 'n': n})
+            else:
+                series.append({'date': d, 'mean': None, 'sem': None, 'n': 0})
+        series_by_group[tg] = series
+
+    return jsonify({
+        'analyte': analyte_name,
+        'dates': sorted_dates,
+        'treatment_groups': treatment_groups,
+        'series_by_group': series_by_group
+    })
+
 
 @groups_bp.route('/api/<string:group_id>/concatenated_analytes', methods=['GET'])
 @login_required

@@ -213,14 +213,20 @@ document.addEventListener('alpine:init', () => {
         },
 
         goToStep1() {
+            // Switch back to step 1 — Alpine x-show directives handle visibility automatically
             this.currentStage = 'initial_selection';
-            // We need to ensure the form submits or we just hide/show div?
-            // If we just hide/show, we don't save state to server yet.
-            // But since we are in Alpine, state is local.
-            // However, Step 2 is rendered by server. If we go back, we just show Step 1 div.
-            // But we must persist the fact we are "editing".
 
-            // If we are "Show Results" (Step 3), "Edit Parameters" button does the same.
+            // The results stage div is not controlled by Alpine x-show, hide it manually
+            const resultsStage = document.getElementById('show-results-stage');
+            if (resultsStage) resultsStage.style.display = 'none';
+
+            // Update the hidden stage input so next submit goes to step 2
+            const stageInput = document.getElementById('analysis_stage');
+            if (stageInput) stageInput.value = 'initial_selection';
+
+            // Scroll to top of form
+            const form = document.getElementById('analysis-form');
+            if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }));
 });

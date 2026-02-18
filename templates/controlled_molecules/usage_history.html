@@ -97,6 +97,7 @@
                             <th>{{ _('Date') }}</th>
                             <th>{{ _('Protocol') }}</th>
                             <th>{{ _('Group') }}</th>
+                            <th>{{ _('Ethical Approval') }}</th>
                             <th>{{ _('Volume') }} ({{ molecule.unit }})</th>
                             <th>{{ _('Animals') }}</th>
                             <th>{{ _('Recorded By') }}</th>
@@ -111,9 +112,20 @@
                             <td>
                                 <a href="{{ url_for('groups.edit_group', id=group.id) }}">{{ group.name }}</a>
                             </td>
+                            <td>
+                                {% if group.ethical_approval %}
+                                <a href="{{ url_for('ethical_approvals.create_edit_ethical_approval', ea_id=group.ethical_approval.id) }}"
+                                    class="text-decoration-none badge bg-secondary-subtle text-secondary-emphasis border">
+                                    <i class="fas fa-shield-alt me-1"></i>{{ group.ethical_approval.reference_number }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted small">{{ _('N/A') }}</span>
+                                {% endif %}
+                            </td>
                             <td>{{ record.volume_used }}</td>
                             <td>
-                                <span class="badge bg-info-subtle text-info-emphasis">{{ record.number_of_animals }}</span>
+                                <span class="badge bg-info-subtle text-info-emphasis">{{ record.number_of_animals
+                                    }}</span>
                                 {% if record.animal_ids %}
                                 <small class="d-block text-muted text-truncate" style="max-width: 150px;"
                                     title="{{ record.animal_ids | join(', ') }}">
@@ -121,7 +133,7 @@
                                 </small>
                                 {% endif %}
                             </td>
-                            <td>{{ record.recorded_by.username }}</td>
+                            <td>{{ record.recorded_by.username if record.recorded_by else _('Unknown') }}</td>
                             <td>{{ record.notes or '' }}</td>
                         </tr>
                         {% endfor %}

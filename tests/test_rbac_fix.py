@@ -1,6 +1,11 @@
+"""
+Tests de correction du système RBAC (Role-Based Access Control).
+Vérifie le comportement du flag allow_any_team dans user_has_permission.
+"""
 import pytest
-from app.models import User, Role, Permission, UserTeamRoleLink, Team, user_has_permission
 from flask import g
+
+from app.models import User, Role, Permission, UserTeamRoleLink, Team, user_has_permission
 
 def create_custom_role(db_session, name, permissions_list, team=None):
     """Creates a role with specific permissions."""

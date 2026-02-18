@@ -10,6 +10,7 @@
     <link rel="manifest" href="{{ url_for('static', filename='img/site.webmanifest') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
     <title>{{ _('Experiment App') }}</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
         crossorigin="anonymous">
@@ -126,6 +127,33 @@
 
                 <!-- Theme Toggle & User Menu -->
                 <ul class="navbar-nav align-items-center">
+                    {% if current_user.is_authenticated %}
+                    <!-- Notifications Bell -->
+                    <li class="nav-item me-2" id="notifications-nav-item">
+                        <div class="dropdown">
+                            <button class="btn btn-link nav-link px-2 position-relative" id="notif-bell-btn"
+                                type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                                title="{{ _('Notifications') }}">
+                                <i class="fas fa-bell"></i>
+                                <span id="notif-badge"
+                                    class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none"
+                                    style="font-size:0.6rem;">0</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow" id="notif-dropdown"
+                                style="min-width:320px;max-width:400px;" aria-labelledby="notif-bell-btn">
+                                <li class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                                    <strong>{{ _('Notifications') }}</strong>
+                                    <button class="btn btn-link btn-sm p-0 text-muted" id="notif-mark-all-read">{{
+                                        _('Mark all read') }}</button>
+                                </li>
+                                <li id="notif-list-container" style="max-height:320px;overflow-y:auto;">
+                                    <div class="text-center text-muted py-3 small" id="notif-empty-msg">{{ _('No new
+                                        notifications') }}</div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                    {% endif %}
                     <li class="nav-item me-2">
                         <button class="btn btn-link nav-link px-2" id="bd-theme" type="button" aria-expanded="false"
                             title="{{ _('Toggle Theme') }}">
@@ -286,6 +314,111 @@
             });
         });
     </script>
+
+    {% if current_user.is_authenticated %}
+    <script nonce="{{ csp_nonce }}">
+        // ── Notifications polling ──────────────────────────────────────────────
+        (function () {
+            const badge = document.getElementById('notif-badge');
+            const list = document.getElementById('notif-list-container');
+            const emptyMsg = document.getElementById('notif-empty-msg');
+
+            function typeIcon(type) {
+                const icons = {
+                    success: 'fa-check-circle text-success',
+                    error: 'fa-times-circle text-danger',
+                    warning: 'fa-exclamation-triangle text-warning',
+                    analysis_done: 'fa-chart-bar text-primary',
+                    workplan_update: 'fa-tasks text-info',
+                    email_fallback: 'fa-envelope text-secondary',
+                };
+                return icons[type] || 'fa-info-circle text-secondary';
+            }
+
+            function renderNotifications(data) {
+                const count = data.unread_count || 0;
+                if (count > 0) {
+                    badge.textContent = count > 99 ? '99+' : count;
+                    badge.classList.remove('d-none');
+                } else {
+                    badge.classList.add('d-none');
+                }
+
+                // Remove old items (keep header + empty msg)
+                list.querySelectorAll('.notif-item').forEach(el => el.remove());
+
+                if (!data.notifications || data.notifications.length === 0) {
+                    emptyMsg.classList.remove('d-none');
+                    return;
+                }
+                emptyMsg.classList.add('d-none');
+
+                data.notifications.forEach(n => {
+                    const item = document.createElement('li');
+                    item.className = 'notif-item border-bottom px-3 py-2 d-flex align-items-start gap-2';
+                    item.style.cursor = n.link ? 'pointer' : 'default';
+                    if (!n.is_read) item.style.background = 'rgba(13,110,253,0.05)';
+
+                    const ts = n.created_at ? new Date(n.created_at).toLocaleString() : '';
+                    item.innerHTML = `
+                    <i class="fas ${typeIcon(n.type)} mt-1 flex-shrink-0"></i>
+                    <div class="flex-grow-1 small">
+                        <div>${n.message}</div>
+                        <div class="text-muted" style="font-size:0.75rem;">${ts}</div>
+                    </div>
+                    <button class="btn btn-link btn-sm p-0 text-muted notif-dismiss" data-id="${n.id}" title="{{ _('Dismiss') }}">
+                        <i class="fas fa-times"></i>
+                    </button>`;
+
+                    if (n.link) {
+                        item.addEventListener('click', (e) => {
+                            if (!e.target.closest('.notif-dismiss')) {
+                                markRead(n.id).then(() => { window.location.href = n.link; });
+                            }
+                        });
+                    } else {
+                        item.addEventListener('click', (e) => {
+                            if (!e.target.closest('.notif-dismiss')) markRead(n.id);
+                        });
+                    }
+                    list.appendChild(item);
+                });
+
+                // Dismiss buttons
+                list.querySelectorAll('.notif-dismiss').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const id = btn.dataset.id;
+                        fetch(`/api/v1/notifications/${id}`, { method: 'DELETE', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } })
+                            .then(() => fetchNotifications());
+                    });
+                });
+            }
+
+            function markRead(id) {
+                return fetch(`/api/v1/notifications/${id}/read`, { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } })
+                    .then(() => fetchNotifications());
+            }
+
+            function fetchNotifications() {
+                return fetch('/api/v1/notifications?unread_only=false&limit=15')
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => { if (data) renderNotifications(data); })
+                    .catch(() => { });
+            }
+
+            // Mark all read
+            document.getElementById('notif-mark-all-read').addEventListener('click', () => {
+                fetch('/api/v1/notifications/read_all', { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } })
+                    .then(() => fetchNotifications());
+            });
+
+            // Initial fetch + poll every 60s
+            fetchNotifications();
+            setInterval(fetchNotifications, 60000);
+        })();
+    </script>
+    {% endif %}
 
     <footer class="footer mt-auto py-3 border-top">
         <div class="container text-center">

@@ -7,7 +7,7 @@
 
 document.addEventListener('DOMContentLoaded', function () {
     const containers = document.querySelectorAll('.animal-selection-container');
-    
+
     // Read from the unified config if available
     const configEl = document.getElementById('datatable-editor-config');
     const config = configEl ? JSON.parse(configEl.textContent) : {};
@@ -61,21 +61,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
         animals.forEach(animal => {
             const div = document.createElement('div');
-            div.className = 'custom-control custom-checkbox';
-            // Access animal properties safely (animal might be dict or object)
-            // The animal identifier is often stored as 'ID' (uppercase) in this project
-            const animalId = animal.id || animal.animal_id || animal.ID;
-            const animalName = animal.name || animal.ID || animal.animal_id || `Animal ${animalId}`;
+            div.className = 'custom-control custom-checkbox mb-1';
 
-            const id = `animal-${input.id}-${animalId}`; // Unique ID per form
+            // Access animal properties safely
+            const animalId = animal.id || animal.animal_id || animal.ID;
+            const displayId = animal.display_id || animal.ID || animal.animal_id || `Animal ${animalId}`;
+
+            // Build info badges
+            const sex = animal.sex || animal.Sex || '';
+            const genotype = animal.genotype || animal.Genotype || '';
+            const status = animal.status || '';
+            const isDead = status === 'dead';
+
+            // Build badge HTML
+            let badges = '';
+            if (sex) badges += `<span class="badge bg-secondary ms-1" style="font-size:0.7rem;">${sex}</span>`;
+            if (genotype) badges += `<span class="badge bg-info text-dark ms-1" style="font-size:0.7rem;">${genotype}</span>`;
+            if (isDead) badges += `<span class="badge bg-danger ms-1" style="font-size:0.7rem;">☠ Deceased</span>`;
+
+            const id = `animal-${input.id}-${animalId}`;
             const isChecked = currentIds.includes(animalId);
 
             div.innerHTML = `
-                <input type="checkbox" class="custom-control-input animal-checkbox" id="${id}" value="${animalId}" ${isChecked ? 'checked' : ''}>
-                <label class="custom-control-label" for="${id}">${animalName}</label>
+                <input type="checkbox" class="custom-control-input animal-checkbox" id="${id}" value="${animalId}" ${isChecked ? 'checked' : ''} ${isDead ? 'disabled' : ''}>
+                <label class="custom-control-label" for="${id}">
+                    <strong>${displayId}</strong>${badges}
+                </label>
             `;
             container.appendChild(div);
-            checkboxes.push(div.querySelector('input'));
+            // Only push non-dead animals to the checkboxes array (dead ones are disabled)
+            if (!isDead) checkboxes.push(div.querySelector('input'));
         });
 
         // Event listeners for individual checkboxes

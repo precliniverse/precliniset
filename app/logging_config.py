@@ -2,6 +2,11 @@ import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
+try:
+    from concurrent_log_handler import ConcurrentRotatingFileHandler
+except ImportError:
+    ConcurrentRotatingFileHandler = None
+
 from urllib.parse import urlparse, urlencode, parse_qs
 
 from flask import g, request, session
@@ -83,6 +88,21 @@ class RichFormatter(logging.Formatter):
         
         return super().format(record)
 
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """
+    A RotatingFileHandler that is safer for Windows.
+    If the file is locked (WinError 32), it will skip the rotation 
+    instead of crashing the application.
+    """
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except (PermissionError, OSError):
+            # On Windows, we often get [WinError 32] because the file is open elsewhere.
+            # We skip rotation to prevent crashing, though the file will temporarily grow.
+            if os.name != 'nt':
+                raise
+
 def configure_logging(app):
     print("--- configure_logging called ---", file=sys.stderr)
     
@@ -138,12 +158,19 @@ def configure_logging(app):
                 print(f"CRITICAL: Could not create logs directory '{log_dir}': {e}", file=sys.stderr)
         
         if os.path.exists(log_dir): # Only add file handler if directory exists/was created
-            file_handler = RotatingFileHandler(
-                os.path.join(log_dir, 'app.log'), 
-                maxBytes=2 * 1024 * 1024,  # 10MB
-                backupCount=5,
-                encoding='utf-8'
-            )
+            log_path = os.path.join(log_dir, 'app.log')
+            
+            if ConcurrentRotatingFileHandler:
+                file_handler = ConcurrentRotatingFileHandler(
+                    log_path, "a", 2 * 1024 * 1024, 5, encoding='utf-8'
+                )
+            else:
+                file_handler = SafeRotatingFileHandler(
+                    log_path, 
+                    maxBytes=2 * 1024 * 1024,
+                    backupCount=5,
+                    encoding='utf-8'
+                )
             file_handler.setLevel(log_level) 
             file_handler.setFormatter(formatter) 
             file_handler.addFilter(RequestContextFilter())

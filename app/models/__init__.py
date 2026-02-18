@@ -48,6 +48,8 @@ from .teams import (Team, TeamMembership, ethical_approval_team_share,
                     reference_range_team_share)
 # Import workplan models
 from .workplans import Workplan, WorkplanEvent, WorkplanVersion
+# Import notification model
+from .notifications import Notification, NotificationType
 
 # Backward compatibility alias
 ProjectSharedTeamPermission = ProjectTeamShare
